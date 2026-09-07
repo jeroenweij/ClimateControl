@@ -168,7 +168,7 @@ Recommended — **no SYSCFG pad remap needed**, USART1 on port B + PA12:
 
 Pins 1, 15 and 20 each bond several GPIO pads to one physical pin — configure exactly one and leave the rest at reset default (analog-in). Pins 16/17 (`PA11[PA9]`/`PA12[PA10]`) can be remapped to PA9/PA10 via `SYSCFG_CFGR1` `PA11_RMP`/`PA12_RMP`; this plan does not use that.
 
-> **Firmware follow-up:** `Hal::UartPins` applies one `alternateFunction` to TX, RX *and* DE, but on this package **no USART1 pin combination shares a single AF** (recommended plan: TX/RX are AF0, DE is AF1). `UartPins` needs a per-pin AF field (or the DE AF set separately) before bring-up.
+> **Firmware:** the pin map lives in `Software/Lib/Board/BoardPins.h` (single source of truth). `Hal::UartPins` carries a per-pin AF (`Board::BusUart` = PB6/PB7 at AF0, PA12 at AF1). Pin 15's error-LED pad is picked as **PB0** — configure only that one.
 
 ### 6.3 RS-485 transceiver
 
@@ -204,10 +204,10 @@ Per-node A/B passives, **fit only where noted, DNP elsewhere:**
 
 Driven by `NodeLib`:
 
-- `Node(ledPin, errorLedPin, buttonPin=nullopt)`.
-- **Activity LED** (`ledPin`, pin 14) — lit while the node transmits its queued messages (`Node::flushQueue`), off when idle.
-- **Error LED** (`errorLedPin`, pin 15) — handed to `NodeLib::ErrorHandler`, blinked at 1 Hz on error; if `recoverable` *and* a `buttonPin` was given, blinks until the button is pressed.
-- **User button** (`buttonPin`, pin 16) — configured `InputPullUp`, so **active-low: wire button → pin → GND**, 100 nF across it for debounce, optional 100–330 Ω series. Internal ~40 kΩ pull-up is enough for an on-board button; add an external 10 kΩ if it's on a long lead.
+`Node`/`NodeMaster` take no pin arguments — they use `Board::ActivityLed` / `Board::ErrorLed` / `Board::UserButton` directly.
+- **Activity LED** (`Board::ActivityLed`, PA7 / pin 14) — lit while the node transmits its queued messages (`Node::flushQueue`), off when idle.
+- **Error LED** (`Board::ErrorLed`, PB0 / pin 15) — driven by `NodeLib::ErrorHandler`, blinked at 1 Hz on error; if `recoverable`, blinks until the user button is pressed.
+- **User button** (`Board::UserButton`, PA11 / pin 16) — configured `InputPullUp`, so **active-low: wire button → pin → GND**, 100 nF across it for debounce, optional 100–330 Ω series. Internal ~40 kΩ pull-up is enough for an on-board button; add an external 10 kΩ if it's on a long lead.
 
 All LED GPIOs are push-pull, **active-high** (`led.Write(true)` = lit). Wire each `pin → R → LED anode, cathode → GND`.
 

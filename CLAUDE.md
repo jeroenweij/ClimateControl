@@ -16,6 +16,8 @@ ClimateControl/
     ├── cmake/              # ARM Cortex-M0+ toolchain file
     ├── Lib/
     │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL — the only place ST driver headers get included
+    │   ├── Board/           # BoardPins.h — single source of truth for the STM32G030 pin map (header-only)
+    │   ├── Tools/           # DelayTimer + Logger — shared helpers
     │   └── NodeLib/          # RS485 v2 protocol library (Node/NodeMaster/Id/Message/ChannelId/Operation)
     └── Modules/
         ├── MainController/   # RS485 bus master
@@ -24,7 +26,7 @@ ClimateControl/
         └── Thermostat/       # room UI, paired 1:1 to one ControllerNode
 ```
 
-Full rationale for this layout, including open gaps (e.g. `Lib/Tools` for `DelayTimer`/`Logger` doesn't exist yet), is in `Spec/Software-Architecture-Spec.md`.
+Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Modules/*` don't exist yet.
 
 ## System architecture
 

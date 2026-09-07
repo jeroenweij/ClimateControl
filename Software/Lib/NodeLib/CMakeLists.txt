@@ -17,4 +17,4 @@ add_library(NodeLib STATIC
 
 target_include_directories(NodeLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(NodeLib PUBLIC Hal Tools)
+target_link_libraries(NodeLib PUBLIC Hal Board Tools)

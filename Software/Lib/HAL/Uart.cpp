@@ -31,9 +31,9 @@ extern "C" void HAL_UART_MspInit(UART_HandleTypeDef*)
 {
     __HAL_RCC_USART1_CLK_ENABLE();
 
-    ConfigureAfPin(pendingPins.tx, pendingPins.alternateFunction);
-    ConfigureAfPin(pendingPins.rx, pendingPins.alternateFunction);
-    ConfigureAfPin(pendingPins.de, pendingPins.alternateFunction);
+    ConfigureAfPin(pendingPins.tx.pin, pendingPins.tx.alternateFunction);
+    ConfigureAfPin(pendingPins.rx.pin, pendingPins.rx.alternateFunction);
+    ConfigureAfPin(pendingPins.de.pin, pendingPins.de.alternateFunction);
 }
 
 Uart::Uart()

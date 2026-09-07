@@ -11,12 +11,7 @@ namespace NodeLib
     class NodeMaster : public Node
     {
       public:
-        NodeMaster(const uint8_t                 numNodes,
-                   const Hal::UartPins&          uartPins,
-                   const uint32_t                baudRate,
-                   const Hal::Pin                ledPin,
-                   const Hal::Pin                errorLedPin,
-                   const std::optional<Hal::Pin> buttonPin = std::nullopt);
+        NodeMaster(const uint8_t numNodes, const uint32_t baudRate);
 
         void Init(const uint8_t expectedNumNodes);
         void Loop();

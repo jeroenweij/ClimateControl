@@ -31,8 +31,9 @@ ClimateControl/
     ├── cmake/                 # ARM Cortex-M0+ toolchain file (arm-none-eabi-cortex-m0plus.cmake)
     ├── Lib/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
+    │   ├── Board/              # BoardPins.h — single source of truth for the STM32G030 pin map, per Node-Bus-Hardware-Design-Spec.md §6.2 (header-only INTERFACE lib, depends on HAL for Hal::Pin)
     │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger — shared helpers, MCU-agnostic
-    │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/ChannelId/Operation) — MCU-agnostic, depends only on Lib/HAL
+    │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/ChannelId/Operation) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args)
     └── Modules/
         ├── MainController/     # firmware image: RS485 bus master
         ├── ControllerNode/     # firmware image: damper/servo slave node + ControllerNode<->Thermostat link (master side)

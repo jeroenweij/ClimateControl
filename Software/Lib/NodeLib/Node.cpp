@@ -2,6 +2,7 @@
  * Created by J. Weij
  *************************************************************/
 
+#include "BoardPins.h"
 #include "Logger.h"
 #include "Tick.h"
 
@@ -13,23 +14,17 @@ using NodeLib::Message;
 using NodeLib::Node;
 using NodeLib::Operation;
 
-Node::Node(const uint8_t                 numNodes,
-           const Hal::UartPins&          uartPins,
-           const uint32_t                baudRate,
-           const Hal::Pin                ledPin,
-           const Hal::Pin                errorLedPin,
-           const std::optional<Hal::Pin> buttonPin) :
-    errorHandler(errorLedPin, buttonPin),
+Node::Node(const uint8_t numNodes, const uint32_t baudRate) :
+    errorHandler(),
     numNodes(numNodes),
     handler(nullptr),
     nodeId(99),
     messagesQueued(0),
-    uartPins(uartPins),
     baudRate(baudRate),
     uart(),
     crc(),
     frame(crc),
-    led(ledPin, Hal::Gpio::Mode::Output),
+    led(Board::ActivityLed, Hal::Gpio::Mode::Output),
     messageQueue{},
     hearthBeatTimer()
 {
@@ -44,7 +39,7 @@ void Node::WriteMessage(const Message& m)
 
 void Node::Init()
 {
-    uart.Init(baudRate, uartPins);
+    uart.Init(baudRate, Board::BusUart);
 }
 
 void Node::Loop()

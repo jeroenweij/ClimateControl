@@ -11,14 +11,23 @@
 
 namespace Hal
 {
-    // Pin assignment is board-specific and not yet fixed by any schematic, so it's
-    // supplied by the caller rather than hardcoded here.
+    // Pin assignment is board-specific -- supplied by the caller (see
+    // Lib/Board/BoardPins.h) rather than hardcoded in this HAL layer.
+    //
+    // Each line carries its own alternate-function number: on the STM32G030F6
+    // there is no single AF that covers TX/RX and DE together (TX/RX are AF0 on
+    // PB6/PB7, DE is AF1 on PA12).
+    struct UartPin
+    {
+        Pin     pin;
+        uint8_t alternateFunction;
+    };
+
     struct UartPins
     {
-        Pin     tx;
-        Pin     rx;
-        Pin     de;
-        uint8_t alternateFunction;
+        UartPin tx;
+        UartPin rx;
+        UartPin de;
     };
 
     // Wraps USART1 configured for RS485 half-duplex with hardware Driver-Enable

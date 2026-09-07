@@ -13,13 +13,8 @@ using NodeLib::Message;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
-NodeMaster::NodeMaster(const uint8_t                 numNodes,
-                       const Hal::UartPins&          uartPins,
-                       const uint32_t                baudRate,
-                       const Hal::Pin                ledPin,
-                       const Hal::Pin                errorLedPin,
-                       const std::optional<Hal::Pin> buttonPin) :
-    Node(numNodes, uartPins, baudRate, ledPin, errorLedPin, buttonPin),
+NodeMaster::NodeMaster(const uint8_t numNodes, const uint32_t baudRate) :
+    Node(numNodes, baudRate),
     activeNodes{},
     nodesFound(false)
 {

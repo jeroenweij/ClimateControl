@@ -18,7 +18,7 @@ CLANG_TIDY   ?= clang-tidy
 
 # Our own source only - never the vendored STM32 HAL/CMSIS tree or the
 # ST-templated hal_conf header.
-SRC_DIRS  := $(wildcard Lib/HAL Lib/NodeLib Lib/Tools Modules)
+SRC_DIRS  := $(wildcard Lib/HAL Lib/Board Lib/NodeLib Lib/Tools Modules)
 SOURCES   := $(shell find $(SRC_DIRS) -type f \( -name '*.h' -o -name '*.hpp' -o -name '*.c' -o -name '*.cpp' \) \
                      -not -path '*/Vendor/*' -not -name 'stm32*')
 
