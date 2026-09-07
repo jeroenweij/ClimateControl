@@ -1,5 +1,5 @@
 # Node Bus — Hardware Design Spec
-### Power + connector decisions for the STM32G030F6P6TR RS485 node network
+### Power, connector, and node-schematic decisions for the STM32G030F6P6 RS485 node network
 
 **Status:** Draft — decisions locked from design discussion, pending your final servo current numbers and cable-run distances (see §7)
 **Companion doc:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol / framing / CRC — this doc is physical layer only)
@@ -23,7 +23,7 @@
 - Cable/connector current scales as `I = P / V`. At a fixed servo power draw, 48V draws **1/4 the current of 12V** and **1/2 the current of 24V** for the same delivered power — this is what makes the RJ45 connector current budget (§4) workable at all with 20 nodes on one chain.
 - Directly comparable to established PoE practice (802.3af/at/bt operate in this voltage class for exactly this reason).
 
-**Consequence — hot-plug inrush:** higher rail voltage means more energy dumped into each node's input bulk capacitor on connection. **Each node needs inrush limiting** (NTC thermistor or soft-start MOSFET) on its 48V input to avoid connector-pitting sparks on hot-plug.
+**Consequence — hot-plug inrush:** higher rail voltage means more energy dumped into each node's input bulk capacitor on connection. Addressed by keeping that bulk cap small (47µF) rather than adding an NTC or soft-start MOSFET — see `Node-Bus-Power-Path-Spec.md` §2/§3.
 
 **Consequence — regulator selection:** the 5V rail needs a wide-input **synchronous buck** (not LDO — at 48V→5V an LDO would dissipate ~90% of input power as heat). The 3.3V rail can be a simple buck or LDO fed from the already-regulated 5V rail.
 
@@ -49,7 +49,7 @@ Decided 2026-09-07, replacing the earlier single-master-pull-up scheme (2026-09-
 | Pull-down MOSFET | master | onsemi BSS123 (N-ch) | LCSC C513249 | SOT-23, 100V Vds (margin over 48V), Vgs(th) 1.7V (full turn-on from a 3.3V GPIO), 170mA (vs. ~1mA needed) |
 | Gate series resistor | master | 330Ω | commodity | |
 | Gate pull-down resistor | master | 10kΩ | commodity | Holds the MOSFET off if the master GPIO floats at boot → line not pulled low → **bus stays enabled** |
-| ENABLE pull-up | each node | **1.5MΩ** | FOJAN FRC1206F1504TS — LCSC C2933600 (1206 thick-film, 200V working voltage, 250mW, ±1%) | To the node's local 48V, upstream of its inrush limiter. ~32µA/node; ~0.6mA / ~31mW across a full 20-node bus |
+| ENABLE pull-up | each node | **1.5MΩ** | FOJAN FRC1206F1504TS — LCSC C2933600 (1206 thick-film, 200V working voltage, 250mW, ±1%) | To the node's local 48V input. ~32µA/node; ~0.6mA / ~31mW across a full 20-node bus. Feeds the buck EN pin through a 10kΩ series + 10nF-to-GND filter (noise + EN abs-max protection). |
 
 **Pull-up value — 1.5MΩ per node.** Across 20 nodes this parallels to ~75kΩ: ~0.6mA total draw, and a ~0.75ms enable-edge RC against ~10nF of bus capacitance — fine for a slow control line. Lower values just waste power; higher values get noise-sensitive for little gain. The full 48V sits across the pull-up whenever the line is held low, so the resistor's package voltage rating (not its value) is the real constraint — the selected 1206 part is rated 200V.
 
@@ -128,16 +128,107 @@ Alternative that was on the shortlist alongside it: RCH RC01186 (JLCPCB C708619)
 
 ---
 
-## 6. USART / driver-enable (STM32G030F6P6TR)
+## 6. Node core schematic — STM32G030F6P6, transceiver, indicators
 
-- **Transceiver: MAX3485CSA-JSM (JSMSEMI)** — LCSC `C6395158`, SOP-8. 3.3V half-duplex RS-485, −40…+85 °C, 12 Mbps, ±8 kV HBM / ±15 kV IEC-air ESD. A 3.3V part is required (not just preferred): the node runs at 3.3V, so a 5V transceiver would drive its receiver output at 5V into the MCU's RX pin. Standard MAX485/MAX3485 SO-8 pinout. Second source: HTCSEMI `HT83485ARZ`, LCSC `C2960978` (same 3.3V / −40…+85 °C / ±15 kV class). On-chip ESD ratings are handling/air-discharge figures, not in-system surge immunity — add TVS diodes across A/B on the bus regardless.
-- Use **USART1's hardware Driver-Enable (DE) output** to control the transceiver's DE/RE pins, instead of a manually toggled GPIO with software delays (as the old ATmega-based design required).
-- This removes the `setEnable()`-style delay loop entirely — the peripheral handles assertion/de-assertion timing (`DEAT`/`DEDT`) automatically per transmission.
+This section is the reusable node front-end: MCU support parts, the RS-485 transceiver, status LEDs, and the reset/user buttons. Application-specific pins (servo PWM, sensor front-ends, the `ControllerNode`↔`Thermostat` link) are left to the module specs.
 
-**Common-mode range check against the ground-offset numbers in §3:** MAX3485 has the standard EIA-485 receiver common-mode input range, **-7V to +12V** (absolute max -7.5V to +12.5V). Checked against this doc's ground-offset estimates (§3, same shared-GND-return mechanism, same numbers apply here — RS485 is differential so it doesn't share ENABLE's exact failure mode, but it does share the same ground-reference-offset exposure):
-- Original single-end-fed estimate: ~3.45V (normal) / ~11.6V (worst-case stall) — the stall figure sat right at the edge of the +12V limit, not comfortably resolved.
-- **Resolved 2026-09-06 by the both-ends power injection decision in §4:** feeding both ends of the chain cuts worst-case IR drop to roughly 1/4, revising these to **~0.86V (normal) / ~2.9V (worst-case stall)** — now comfortably inside the ±12V window with better than 4x margin even in the worst case. Unlike ENABLE, RS485's common-mode range is fixed by the transceiver silicon (no "just drive it higher" option available), so reducing the underlying ground offset via §4's fix was the only real lever — and it works.
-- §7 items 1–2 (real stall current, and whether simultaneous full-stall is realistic) still matter for sizing the fuse/PTC and connector budget in §4, but are no longer signal-integrity-critical for RS485 the way they were before the both-ends decision.
+### 6.1 STM32G030F6P6 support components
+
+TSSOP20: a **single combined `VDD/VDDA` pin (4)** and **single `VSS/VSSA` (5)** — no separate analog supply, no `VREF+` pin (ADC reference is `VDD` directly).
+
+| Net | Parts | Notes |
+|---|---|---|
+| `VDD` (pin 4) | 100 nF + 1 µF at the pin, plus 4.7 µF bulk on the local 3V3 rail | Standard STM32G0 decoupling; keep the 100 nF loop tight. |
+| ADC reference | (none — it's `VDD`) | Matters for `TemperatureNode` if NTC-into-ADC is chosen: LDO ripple sets the temperature noise floor. Consider AP2112 (`C51118`) over XC6206 there. |
+| `NRST` (pin 6) | 100 nF to GND + reset button (§6.4) | Internal ~40 kΩ pull-up present — no external pull-up. |
+| `BOOT0` | nothing | Shares the `PA14`/SWCLK pad. Factory `nBOOT_SEL = 1` → boot source is the option byte, pad free as SWCLK, boots from flash. Leave default (SWD flashing means no UART-bootloader strap is needed). |
+| Clock | **HSI16 only** | HSI16 is ±0.75 % trimmed, ±1 %/0–85 °C, ±2 % at −40 °C — fine for 115200 and up to ~250–460 k node-to-node. No HSE pins are bonded on TSSOP20 unless a crystal is routed onto `PC14/PC15` (pins 2/3), which costs `PB9` + `PC15` as GPIO. Footprint an 8 MHz crystal there **DNP**, populate only if the bus is later committed to ≥1 Mbit. |
+| SWD | 5-pin header: `3V3` (Vtref), `SWDIO`=PA13 (18), `SWCLK`=PA14 (19), `NRST` (6), `GND` | No caps on SWDIO/SWCLK. Cortex-M0+ has **no SWO/ITM** — see §6.5. |
+
+### 6.2 Pin assignment (TSSOP20)
+
+Recommended — **no SYSCFG pad remap needed**, USART1 on port B + PA12:
+
+| Pin | Name | Node-core use |
+|---|---|---|
+| 1 | PB7 | **USART1_RX** (AF0) ← transceiver RO |
+| 2 | PB9/PC14 | free (HSE xtal DNP) |
+| 3 | PC15 | free (HSE xtal DNP) |
+| 4 | VDD/VDDA | 3V3 |
+| 5 | VSS/VSSA | GND |
+| 6 | NRST | reset button + 100 nF |
+| 7–13 | PA0–PA6 | **application** (servo PWM, sensors, link) |
+| 14 | PA7 | **activity LED** |
+| 15 | PB0…/PA8 mux | **error LED** |
+| 16 | PA11 | **user button** (`ErrorHandler` ack) |
+| 17 | PA12 | **USART1_DE** (AF1) → transceiver DE+/RE |
+| 18 | PA13 | SWDIO |
+| 19 | PA14 | SWCLK |
+| 20 | PB3/4/5/6 mux | **USART1_TX** = PB6 (AF0) → transceiver DI |
+
+Pins 1, 15 and 20 each bond several GPIO pads to one physical pin — configure exactly one and leave the rest at reset default (analog-in). Pins 16/17 (`PA11[PA9]`/`PA12[PA10]`) can be remapped to PA9/PA10 via `SYSCFG_CFGR1` `PA11_RMP`/`PA12_RMP`; this plan does not use that.
+
+> **Firmware follow-up:** `Hal::UartPins` applies one `alternateFunction` to TX, RX *and* DE, but on this package **no USART1 pin combination shares a single AF** (recommended plan: TX/RX are AF0, DE is AF1). `UartPins` needs a per-pin AF field (or the DE AF set separately) before bring-up.
+
+### 6.3 RS-485 transceiver
+
+**Part: MAX3485CSA-JSM (JSMSEMI)** — LCSC `C6395158`, SOP-8. 3.3 V half-duplex RS-485, −40…+85 °C, 12 Mbps, ±8 kV HBM / ±15 kV IEC-air ESD. A 3.3 V part is *required*: at 3.3 V rail, a 5 V transceiver would drive its RO output at 5 V into the MCU RX pin. Standard MAX485/MAX3485 SO-8 pinout (`1 RO · 2 /RE · 3 DE · 4 DI · 5 GND · 6 A · 7 B · 8 VCC`). Second source: HTCSEMI `HT83485ARZ`, LCSC `C2960978`.
+
+**Driver-enable:** use **USART1's hardware DE output** — tie the transceiver's `DE` (3) and `/RE` (2) together and drive from `USART1_DE` (`UART_DE_POLARITY_HIGH`: high = drive, low = listen). The peripheral handles `DEAT`/`DEDT` assertion timing per frame; no `setEnable()`/`delay()` loop (which the old ATmega design needed).
+
+```
+ PB7  USART1_RX ───────────────  1 RO
+ PB6  USART1_TX ───────────────  4 DI
+ PA12 USART1_DE ──┬────────────  3 DE
+                  └────────────  2 /RE
+                  └── 10k ── GND         (reset-safe: driver stays off while the MCU pin is Hi-Z)
+      3V3 ─ 100nF ─ GND ───────  8 VCC / 5 GND
+                                 6 A ─[10Ω]─ A ─ RJ45 pin 4 (blue)
+                                 7 B ─[10Ω]─ B ─ RJ45 pin 5 (blue)
+```
+
+The **10 kΩ pull-down on the DE/RE net is mandatory** — without it an unprogrammed or resetting node can float its driver on and fight the bus.
+
+Per-node A/B passives, **fit only where noted, DNP elsewhere:**
+
+| Part | Value | Populate |
+|---|---|---|
+| Termination | 120 Ω across A–B | only the two physical bus ends (DNP + jumper on every node) |
+| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | once on the whole bus (at MainController); MAX3485 is not true-fail-safe |
+| ESD/surge | **SM712 RS-485 TVS** (SOT-23-3): **pin 1 → A, pin 2 → B, pin 3 → GND** (verified against the Bourns CDSOT23-SM712 datasheet — pin 3 is the common). Asymmetric −7 V/+12 V per line, matching the RS-485 window. LCSC `C5199207` (ElecSuper) or `C404012` (genuine Bourns). | every node, right at the RJ45; short traces, pin-3 ground straight to the connector-side ground/shield stitch |
+| Series R | 10 Ω in each of A/B | optional, tames ringing/EMI |
+
+**Common-mode range check (§3 ground-offset):** MAX3485 has the standard EIA-485 receiver common-mode range **−7 V…+12 V** (abs. max −7.5…+12.5). Same shared-GND-return exposure as ENABLE. Single-end-fed estimate was ~3.45 V normal / ~11.6 V worst-case stall (the stall figure right at the +12 V edge); the **both-ends power feed (§4) cut worst-case IR drop to ~1/4**, revising these to **~0.86 V / ~2.9 V** — comfortably inside the window with >4× margin. RS-485's common-mode range is silicon-fixed (no "drive it higher" lever like ENABLE had), so §4's fix was the only route, and it works. §7 items 1–2 still matter for fuse/PTC and connector sizing but are no longer signal-integrity-critical.
+
+### 6.4 Status LEDs & buttons
+
+Driven by `NodeLib`:
+
+- `Node(ledPin, errorLedPin, buttonPin=nullopt)`.
+- **Activity LED** (`ledPin`, pin 14) — lit while the node transmits its queued messages (`Node::flushQueue`), off when idle.
+- **Error LED** (`errorLedPin`, pin 15) — handed to `NodeLib::ErrorHandler`, blinked at 1 Hz on error; if `recoverable` *and* a `buttonPin` was given, blinks until the button is pressed.
+- **User button** (`buttonPin`, pin 16) — configured `InputPullUp`, so **active-low: wire button → pin → GND**, 100 nF across it for debounce, optional 100–330 Ω series. Internal ~40 kΩ pull-up is enough for an on-board button; add an external 10 kΩ if it's on a long lead.
+
+All LED GPIOs are push-pull, **active-high** (`led.Write(true)` = lit). Wire each `pin → R → LED anode, cathode → GND`.
+
+| Function | LCSC | Part | Vf | notes |
+|---|---|---|---|---|
+| red (error) | `C2286` | Hubei KENTO KT-0603R | 1.8–2.4 V | 0603, JLC Basic, ~2.5 M stock |
+| green (activity) | `C916074` | TUOZHAN TZ-P2-0603YGTCS1 | 1.9–2.4 V | 0603, 570–575 nm yellow-green (works on 3.3 V, unlike a 525 nm green at ~3.1 V) |
+
+**Series resistor: 330 Ω** for every indicator LED (red / green / any orange). `R = (3.3 − ~2.0) / I` → ~3.3–4 mA, well inside the 8 mA/pin guideline; the low-mcd parts need the current to be readable. 470 Ω if a softer indicator is wanted. Avoid blue/white/525 nm-green (Vf ≈ 3.1 V) on the 3.3 V GPIO rail entirely.
+
+Node IDs come from `DETECTNODES`/`HELLOWORLD` discovery — **no DIP switch / address strap needed.**
+
+### 6.5 Easy-to-forget checklist
+
+1. **Debug output needs a UART pin** — Cortex-M0+ has no SWO; `Tools::Logger` is a weak no-op meant to be routed to a UART. Bring USART2 (PA2/PA3) to a 3-pin header on `TemperatureNode`/`MainController`. On `ControllerNode` both USARTs are used (bus + thermostat link) — plan for sharing.
+2. **RJ45 straight-through nets** — 48 V (orange 1/2), GND (brown 7/8), A/B (blue 4/5), ENABLE (green 3/6) all pass in-jack → out-jack unbuffered. ENABLE also gets the per-node **1.5 MΩ pull-up to local 48 V** (§3) and feeds the buck EN pin.
+3. **Input protection + regulators** per `Node-Bus-Power-Path-Spec.md` (PTC fuse, 48 V TVS, reverse diode, 47 µF/100 V bulk, LMR16030 buck, LDO, all caps).
+4. **100 nF at every VCC pin** — MCU, transceiver, LDO.
+5. **Reset-safe I/O** — every MCU output benign at POR; servo PWM pin externally pulled to the safe damper position.
+6. **Test points:** 48 V, 5 V, 3V3, GND, A, B, debug-UART TX, SWD header.
+7. **One solid ground pour**; for NTC-into-ADC keep the divider return near the MCU ground pin.
 
 ---
 

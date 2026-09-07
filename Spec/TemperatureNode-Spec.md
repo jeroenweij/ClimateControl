@@ -1,6 +1,6 @@
 # TemperatureNode — Design Spec
 
-**Status:** Draft — role confirmed 2026-09-06, sensor/hardware choices open (see §4)
+**Status:** Draft — role confirmed 2026-09-06, sensor chosen (§4), value encoding / report rate still open (§5)
 **Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol), `Node-Bus-Hardware-Design-Spec.md` / `Node-Bus-Power-Path-Spec.md` (shared bus power/connector), `Software-Architecture-Spec.md` (module map)
 
 ---
@@ -36,11 +36,64 @@ Mounted in ducting near the outside unit means:
 
 ---
 
-## 4. Open items — need your input before finalizing
+## 4. Sensor — DS18B20 on a 1-Wire probe lead
 
-1. **Sensor part.** No sensor has been chosen. Options to pick between (or you may already have one in mind):
-   - Digital sensor (e.g. I2C/1-Wire like an SHT3x, DS18B20) — better accuracy/noise immunity over a short board trace to the probe, simpler firmware (no ADC calibration), but adds a bus/driver dependency.
-   - Analog (NTC thermistor into the STM32's ADC) — cheapest, matches the old `ANALOG_IN` channel model almost exactly, but needs a calibration/lookup table and is more sensitive to wiring noise on a longer probe lead.
-2. **Probe/lead length** — how far is the sensor from the node PCB itself (inline in the duct vs. node mounted right at the duct wall)? Affects sensor choice above and whether shielded/twisted leads are needed.
-3. **Value encoding on the bus** — the protocol spec leaves `DATA` interpretation "per `OPERATION`/`CHANNEL` convention, not enforced by the frame" (protocol spec §3). Needs a concrete decision here: e.g. `int16` in units of 0.1 °C, signed to allow sub-zero outdoor readings.
-4. **Update/report rate** — how often does a temperature reading need to change the bus state? (Duct air temperature changes slowly compared to, say, a digital input — the existing debounce-on-change pattern may need a minimum report interval added on top, not just change-detection, so `MainController` doesn't conclude the node is dead during a long stretch of unchanged readings — though note the heartbeat/poll cycle already covers liveness independent of value changes.)
+Chosen 2026-09-07: **DS18B20**, 1-Wire, mounted in a stainless probe on a short lead.
+
+**Why DS18B20 over an NTC:**
+- **One bus, both channels.** 1-Wire is a bus — the "incoming" and "outgoing" probes sit on the *same three wires* (VDD/GND/DQ) and are read individually by their 64-bit ROM ID. An NTC would need a separate ADC channel + bias resistor + calibration table per probe.
+- No ADC calibration / Steinhart-Hart table; digital reading is immune to lead-length and analog noise.
+- −55…+125 °C, ±0.5 °C — covers hot supply air and sub-zero return/outdoor air with margin.
+- A pre-made **waterproof stainless-tube probe** (SS tube + ~0.5 m lead) handles condensation on the cooling side and gives a rugged in-airflow probe. e.g. LCSC `C843306`, or a bare DS18B20 (`C376006`, UMW, TO-92) potted on a pigtail.
+
+### 4.1 On-board front-end (TemperatureNode only — not on the shared "Base" sheet)
+
+The probes are off-board cable assemblies; the PCB adds a connector per probe, one pull-up, and light protection.
+
+| Ref | Part | Purpose |
+|---|---|---|
+| J_T1, J_T2 | 3-pos 3.5 mm screw terminal (e.g. KF128-3.5-3P), one per probe | land the bare probe leads with a screwdriver |
+| R_1W | 4.7 kΩ, 0402 | DQ → 3V3 pull-up — **one**, for the whole bus |
+| C_1W | 100 nF, 0402 | probe VDD → GND, at the connectors |
+| R_ser *(optional)* | 100 Ω, 0402 | in the DQ line between the MCU pin and the connector node — MCU-pin protection |
+| D_1W *(optional)* | single-line ESD diode to GND (e.g. PESD3V3L1BA) | DQ leaves the enclosure |
+
+```
+ +3V3 ──┬── R_1W (4.7k) ──┐
+        │                 │
+        │        ┌────────●── ONEWIRE_BUS ──┬── J_T1 pin 2 (DATA)
+ PA0 ──[R_ser]───┘                          ├── J_T2 pin 2 (DATA)
+        │                                   └── D_1W ─┴─ GND   (optional)
+ C_1W (100n) ─┴─ GND
+
+ +3V3 ── J_T1 pin 1,  J_T2 pin 1        (VDD — DS18B20 runs at 3.3 V, NOT 5 V)
+ GND  ── J_T1 pin 3,  J_T2 pin 3
+```
+
+- Both connectors sit **in parallel on one bus**; the probes are told apart by ROM ID.
+- Pull-up + ESD diode go on the connector side of R_ser; R_ser between there and the MCU pin.
+- **DQ pin: PA0** (pin 7) — free on the TemperatureNode (no servo). USART2 (PA2/PA3) stays for the debug header, so this is a plain GPIO bit-bang, not the USART-1-Wire trick.
+- Twisted/shielded lead not needed at these lengths; keep the pull-up at the board end.
+
+**Firmware:** 1-Wire bit-bang on PA0, pin as open-drain (drive low / release, R_1W pulls high), timing-critical slots with interrupts briefly masked — ~1–2 KB. Enumerate ROM IDs at startup; map them to "incoming"/"outgoing" by stored config or a one-time labelled reading. DS18B20's native `int16` in 1/16 °C is a clean bus value format.
+
+### 4.2 Probe selection checklist
+
+Any pre-made "DS18B20 waterproof stainless probe" (SS tube ~6×50 mm, 3-wire, 0.5–1 m lead) works — e.g. LCSC `C843306`, or the ubiquitous AliExpress SS-probe assemblies, or a bare `C376006` (UMW, TO-92) potted on a pigtail. Before bulk-ordering:
+
+- **Verify a sample is a working DS18B20** — ROM family code `0x28`, CRC passes, tracks a reference thermometer. "Original DS18B20" claims are often a compatible die, not Maxim/ADI; fine for duct trend monitoring, not a traceable ±0.5 °C guarantee.
+- **3-wire, not parasitic.**
+- **Don't trust the wire colours** — cheap probes' listings contradict themselves; meter each of the three wires before wiring.
+- **Cable jacket temp rating** — assume PVC (~70–80 °C) unless stated. Fine on the return-air side; use a silicone lead if a probe will sit in hot supply air.
+- Plain tube (no thread) → plan a cable-gland / grommet duct-wall mount; or buy a "DS18B20 G1/2″ thread" SKU.
+
+**NTC fallback:** if only one channel is ever needed and cost is critical, a 10 kΩ 1 % NTC into an ADC pin (10 kΩ bias + RC filter) still works and matches the old `ANALOG_IN` model — but it loses the single-bus multi-probe advantage.
+
+---
+
+## 5. Open items — need your input before finalizing
+
+1. **Number of probes / lead length** — confirmed at least two (incoming + outgoing) on one 1-Wire bus. How long is each lead, and does the node PCB sit right at the duct wall or is it a longer run? (1-Wire tolerates several metres; just size the pull-up down toward ~2.2 kΩ if leads get long.)
+2. **Value encoding on the bus** — the protocol spec leaves `DATA` interpretation "per `OPERATION`/`CHANNEL` convention, not enforced by the frame" (protocol spec §3). Needs a concrete decision here: e.g. `int16` in units of 0.1 °C, signed to allow sub-zero outdoor readings. (The DS18B20 native format is `int16` in 1/16 °C — a clean fit.)
+3. **Update/report rate** — how often does a temperature reading need to change the bus state? (Duct air temperature changes slowly compared to, say, a digital input — the existing debounce-on-change pattern may need a minimum report interval added on top, not just change-detection, so `MainController` doesn't conclude the node is dead during a long stretch of unchanged readings — though note the heartbeat/poll cycle already covers liveness independent of value changes.)
+4. **Enclosure ingress rating** — the near-outdoor-unit location may need a sealed/IP-rated enclosure; not a hardware-spec concern but flag it for the mechanical design.

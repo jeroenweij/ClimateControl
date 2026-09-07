@@ -66,9 +66,9 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | Doc | Covers |
 |---|---|
 | `RS485-Node-Protocol-Spec-STM32G030.md` | Main bus wire protocol (frame format, CRC, framing/resync, buffering) |
-| `Node-Bus-Hardware-Design-Spec.md` | Main bus physical layer (48V PoE-class power, RJ45 pinout, connector part) |
+| `Node-Bus-Hardware-Design-Spec.md` | Main bus physical layer (48V PoE-class power, RJ45 pinout, connector part) + node core schematic (§6: MCU support, transceiver, LEDs, buttons, pin plan) |
 | `Node-Bus-Power-Path-Spec.md` | Per-node 48V→5V→3.3V regulation chain |
 | `Software-Architecture-Spec.md` | Module map, directory layout, build/toolchain, code style |
-| `MainController-Spec.md` | Bus-master role; outward-facing responsibilities still open |
+| `MainController-Spec.md` | Bus-master role + 48V power input / bus injection (§3); outward-facing responsibilities still open |
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
-| `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link; protocol/physical layer still open |
+| `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
