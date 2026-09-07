@@ -8,10 +8,12 @@ See `Spec/` for the full design docs — read those before making architectural 
 
 ```
 ClimateControl/
-├── .clang-format           # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
 ├── Spec/                   # design specs — protocol, hardware, power, per-module, architecture
 ├── Hardware/                # PCB/schematic sources
 └── Software/
+    ├── .clang-format       # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
+    ├── CMakeLists.txt      # top-level CMake project — aggregates Lib/* (and Modules/* once they exist)
+    ├── cmake/              # ARM Cortex-M0+ toolchain file
     ├── Lib/
     │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL — the only place ST driver headers get included
     │   └── NodeLib/          # RS485 v2 protocol library (Node/NodeMaster/Id/Message/ChannelId/Operation)
@@ -32,7 +34,7 @@ Full rationale for this layout, including open gaps (e.g. `Lib/Tools` for `Delay
 
 ## Code style reference
 
-This project's C++ style follows `~/git/rollercoaster` and its `node` submodule (`~/git/node`) — that codebase is the AVR/Arduino predecessor this project is conceptually porting to STM32 (see `RS485-Node-Protocol-Spec-STM32G030.md`, which explicitly supersedes `~/git/node/Software/lib/NodeLib`). `.clang-format` in this repo is copied verbatim from there.
+This project's C++ style follows `~/git/rollercoaster` and its `node` submodule (`~/git/node`) — that codebase is the AVR/Arduino predecessor this project is conceptually porting to STM32 (see `RS485-Node-Protocol-Spec-STM32G030.md`, which explicitly supersedes `~/git/node/Software/lib/NodeLib`). `Software/.clang-format` is copied verbatim from there.
 
 Conventions (from that codebase, not all auto-enforced by clang-format):
 - Allman braces, 4-space indent, no tabs, `#pragma once`.
@@ -54,7 +56,7 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 ## Build & toolchain
 
 - **Compiler:** `arm-none-eabi-gcc` (installed on this machine).
-- **Build system:** CMake — one `CMakeLists.txt` per `Modules/*` producing a `.elf`, top-level `CMakeLists.txt` aggregating `Lib/*` and `Modules/*`. No STM32 CMake toolchain file exists yet in any sibling repo; it needs to be written from scratch (target triple `-mcpu=cortex-m0plus -mthumb`, linker script, startup file).
+- **Build system:** CMake — one `CMakeLists.txt` per `Modules/*` producing a `.elf`, top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` (toolchain file in `Software/cmake/`). No STM32 CMake toolchain file exists yet in any sibling repo; it needs to be written from scratch (target triple `-mcpu=cortex-m0plus -mthumb`, linker script, startup file).
 - **Driver layer:** STM32Cube HAL/LL, wrapped by `Lib/HAL` — protocol and application code never includes ST headers directly.
 - **MCU:** STM32G030F6P6TR (Cortex-M0+, 32 KB flash / 8 KB SRAM) for the main-bus nodes and (pending final confirmation) `MainController`.
 - **Flashing:** SEGGER J-Link — a CMake custom target per module shells out to `JLinkExe` with a generated commander script. **`JLinkExe`/`JLinkGDBServer` are not yet installed on this machine** — install the J-Link Software Pack before the flash target will run.

@@ -22,13 +22,16 @@ All four run on the STM32 platform. `MainController` and the main-bus slave node
 
 ```
 ClimateControl/
-├── .clang-format              # copied verbatim from ~/git/rollercoaster — same style, no project-specific tweaks
 ├── CLAUDE.md
 ├── Spec/                      # design docs (this file + protocol/hardware/power specs)
 ├── Hardware/                  # PCB/schematic sources (empty so far)
-└── Software/
+└── Software/                  # everything build-related lives under here — nothing software-side at the repo root
+    ├── .clang-format          # copied verbatim from ~/git/rollercoaster — same style, no project-specific tweaks
+    ├── CMakeLists.txt         # top-level CMake project — aggregates Lib/* and Modules/*
+    ├── cmake/                 # ARM Cortex-M0+ toolchain file (arm-none-eabi-cortex-m0plus.cmake)
     ├── Lib/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
+    │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger — shared helpers, MCU-agnostic
     │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/ChannelId/Operation) — MCU-agnostic, depends only on Lib/HAL
     └── Modules/
         ├── MainController/     # firmware image: RS485 bus master
@@ -39,7 +42,7 @@ ClimateControl/
 
 Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/node` and `rollercoaster` itself each produce one executable from a shared `NodeLib`/`libtools`). `Lib/NodeLib` and `Lib/HAL` are static libraries linked into whichever modules need them.
 
-**Open item:** the old AVR project depended on a `tools/` library (`DelayTimer`, `Logger`, `SStream`) that `NodeLib` and `Channel` code used directly (see `RS485-Node-Protocol-Spec-STM32G030.md` §8, which explicitly says to "reuse the existing `DelayTimer` pattern"). That has no home yet in the current directory structure. Proposed addition: `Software/Lib/Tools/` — `DelayTimer` re-implemented on `HAL_GetTick()` instead of `millis()`, and a `Logger` that writes to a debug UART. Since `arm-none-eabi-gcc` ships a real C++ standard library (unlike the AVR toolchain), `Logger` can most likely use real `<sstream>`/`std::string` directly instead of the old hand-rolled `SStream` shim — worth confirming against the STM32G030's 8 KB SRAM budget before committing, since `std::stringstream` is not free. **Needs your confirmation before I create it.**
+**Resolved:** `Software/Lib/Tools/` now exists — `DelayTimer` re-implemented on `HAL_GetTick()` instead of `millis()`, plus a `Logger` for a debug UART. Since `arm-none-eabi-gcc` ships a real C++ standard library (unlike the AVR toolchain), `Logger` can use real `<sstream>`/`std::string` directly instead of the old hand-rolled `SStream` shim — still worth watching against the STM32G030's 8 KB SRAM budget, since `std::stringstream` is not free.
 
 ---
 
@@ -48,18 +51,18 @@ Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/nod
 | Item | Choice |
 |---|---|
 | Compiler | `arm-none-eabi-gcc` (already installed on this machine, confirmed) |
-| Build system | CMake, one `CMakeLists.txt` per `Modules/*` producing a `.elf`, plus a top-level `CMakeLists.txt` aggregating `Lib/*` and `Modules/*` — same shape as `rollercoaster/CMakeLists.txt` → `src/CMakeLists.txt` → `NodeLib`/`libtools`, just swapping the AVR toolchain file for an ARM Cortex-M0+ one |
+| Build system | CMake, one `CMakeLists.txt` per `Modules/*` producing a `.elf`, plus a top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` — same shape as `rollercoaster/CMakeLists.txt` → `src/CMakeLists.txt` → `NodeLib`/`libtools`, just swapping the AVR toolchain file for an ARM Cortex-M0+ one. Configure from `Software/` (`cmake -S Software -B build`) |
 | Low-level driver layer | STM32Cube HAL/LL (ST's official driver library), wrapped by `Lib/HAL` so `NodeLib`/`Modules` code never includes ST headers directly |
 | MCU target | STM32G030F6P6TR (Cortex-M0+, 32 KB flash / 8 KB SRAM) for the main-bus nodes and, per your confirmation, `MainController` too |
 | Flashing | SEGGER J-Link. A CMake custom target (e.g. `flash`) per module shells out to `JLinkExe` with a generated commander script — same shape as the old `flashNode.sh`, adapted for J-Link instead of `avrdude`/`make burnWithEeprom`. **Note: `JLinkExe`/`JLinkGDBServer` are not currently installed on this machine — you'll need the J-Link Software Pack installed before the flash target can actually run.** |
 
-**Open item:** no STM32-family CMake toolchain file exists yet anywhere in `~/git` (the only precedent, `ArduinoToolchain.cmake`, is AVR-specific) — this will need to be written from scratch (target triple, `-mcpu=cortex-m0plus -mthumb`, linker script, startup file — either hand-written or pulled from CMSIS device pack).
+**Resolved:** the STM32 CMake toolchain file was written from scratch (no precedent in `~/git` — `ArduinoToolchain.cmake` is AVR-specific) and lives at `Software/cmake/arm-none-eabi-cortex-m0plus.cmake` (target triple, `-mcpu=cortex-m0plus -mthumb`). Linker script / startup file wiring per module still to come.
 
 ---
 
 ## 4. Code style
 
-Same C++ style as `~/git/rollercoaster` (and its `node` submodule at `~/git/node`), which this project's `.clang-format` (copied verbatim) formats automatically. Conventions observed in that codebase, not all of which `clang-format` enforces on its own:
+Same C++ style as `~/git/rollercoaster` (and its `node` submodule at `~/git/node`), which this project's `Software/.clang-format` (copied verbatim) formats automatically. Conventions observed in that codebase, not all of which `clang-format` enforces on its own:
 
 - Allman braces, 4-space indent, no tabs, `#pragma once` (no include guards).
 - `PascalCase` for classes, methods, and enum values; `camelCase` for member variables and locals; no `m_`/`_` prefixes.
