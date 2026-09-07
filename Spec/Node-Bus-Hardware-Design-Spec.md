@@ -130,7 +130,7 @@ Alternative that was on the shortlist alongside it: RCH RC01186 (JLCPCB C708619)
 
 ## 6. USART / driver-enable (STM32G030F6P6TR)
 
-- **Transceiver: Maxim/ADI MAX3485CSA** — LCSC `C2687394`, SO-8. Recorded 2026-09-06, found in `~/git/node/Hardware/Production/bom.csv` (U1) — the actual part used in the prior-generation node's real production build, not just its schematic. Resolves a gap no spec had answered until now (the protocol spec's §2 table only said "existing RS485 transceiver (reuse)" without naming one).
+- **Transceiver: MAX3485CSA-JSM (JSMSEMI)** — LCSC `C6395158`, SOP-8. 3.3V half-duplex RS-485, −40…+85 °C, 12 Mbps, ±8 kV HBM / ±15 kV IEC-air ESD. A 3.3V part is required (not just preferred): the node runs at 3.3V, so a 5V transceiver would drive its receiver output at 5V into the MCU's RX pin. Standard MAX485/MAX3485 SO-8 pinout. Second source: HTCSEMI `HT83485ARZ`, LCSC `C2960978` (same 3.3V / −40…+85 °C / ±15 kV class). On-chip ESD ratings are handling/air-discharge figures, not in-system surge immunity — add TVS diodes across A/B on the bus regardless.
 - Use **USART1's hardware Driver-Enable (DE) output** to control the transceiver's DE/RE pins, instead of a manually toggled GPIO with software delays (as the old ATmega-based design required).
 - This removes the `setEnable()`-style delay loop entirely — the peripheral handles assertion/de-assertion timing (`DEAT`/`DEDT`) automatically per transmission.
 

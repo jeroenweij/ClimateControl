@@ -28,7 +28,7 @@
 |---|---|---|
 | MCU | STM32G030F6P6TR | Cortex-M0+, 64 MHz max, 32 KB flash, 8 KB SRAM, TSSOP20 |
 | UART | USART1 | Supports **hardware Driver-Enable (DE)** output — no manual GPIO toggle + `delay()` needed |
-| Transceiver | Maxim/ADI MAX3485CSA (LCSC `C2687394`) | Recorded 2026-09-06 — confirmed from the prior-generation node's real production BOM. DE/RE tied together, driven by USART1's DE pin. Standard EIA-485 common-mode range (-7V to +12V) — see `Node-Bus-Hardware-Design-Spec.md` §6 for a margin check against this bus's ground-offset estimates, currently marginal under a worst-case stall assumption. |
+| Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. Standard EIA-485 common-mode range (-7V to +12V) — margin against this bus's ground-offset estimates checked in `Node-Bus-Hardware-Design-Spec.md` §6, comfortable after the both-ends power feed. |
 | Baud rate | 115200 (keep, for continuity) — reassess to 250k–1M if bus length/noise allows | STM32G0 USART can run well above 1 Mbps; ATmega was the limiting factor before. Bus length now known (~100m total, see hardware spec §7) — comfortably within range for elevated baud rates. |
 | CRC engine | Hardware CRC peripheral (`CRC` block) | Offloads CRC calc from CPU, frees it for polling/servo timing |
 
