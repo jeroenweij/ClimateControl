@@ -136,38 +136,41 @@ Bootloader entry (0x08000000)
 A hand-written minimal slave loop — **framing layer only**, no `NodeMaster`, no `std::stringstream` `Logger` (too big for 8 KB):
 
 - Reads its bus address from `ConfigStore` (§6.3) — same `NodeId` the app uses, so addressing is stable across the app↔bootloader transition.
-- Responds to `DETECTNODES` with `HELLOWORLD` (so the master sees it and knows it is alive).
-- Serves one channel, `ChannelId::FIRMWARE` (new enum value), plus `INTERNAL_MSG` for the `DETECTNODES`/poll plumbing.
-- Transmits only when polled (`SENDQ`) — identical bus discipline to a normal slave, so the master's round-robin is undisturbed and other nodes keep running while one updates.
+- Responds to `Discover` with `Announce` (so the master sees it and knows it is in the bootloader).
+- Serves one endpoint, `Endpoint::Firmware` (`Node-Message-Model-Spec.md` §3), plus the `Transport` plumbing.
+- Transmits only when polled (`Poll`) — identical bus discipline to a normal slave, so the master's round-robin is undisturbed and other nodes keep running while one updates.
 
-This requires `Lib/NodeLib` to be split as `Software-Architecture-Spec.md` §1 already calls for: a framing sub-library (`Frame`/`Crc`/`Id`/`Message`/`EChannelId`/`EOperation`, logging compiled out) that the bootloader links, plus the `Node`/`NodeMaster` layer on top for the apps.
+This requires `Lib/NodeLib` to be split as `Software-Architecture-Spec.md` §1 already calls for: a framing sub-library (`Frame`/`Crc`/`Id`/`Message`/`EEndpoint`/`EOperation`, logging compiled out) that the bootloader links, plus the `Node`/`NodeMaster` layer on top for the apps.
 
 ### 6.2 Transfer protocol
 
-All OTA messages use `ChannelId::FIRMWARE`. `data[0]` is a sub-opcode; the transfer is **strictly sequential** (no out-of-order buffering, no bitmap) so the bootloader needs only **one 2 KB page buffer** in RAM.
+All OTA messages target `Endpoint::Firmware`. `data[0]` is a `FirmwareOp` sub-opcode; the transfer is **strictly sequential** (no out-of-order buffering, no bitmap) so the bootloader needs only **one 2 KB page buffer** in RAM. This is the "richer command set expressed as one endpoint acted on with `Set`/`Report`" pattern from `Node-Message-Model-Spec.md` §4 — the `Operation` verb set does not grow for OTA.
 
-**Master → node** (`Operation::SET`):
+**Master → node** (`Operation::Set`, `data[0]` = `FirmwareOp`):
 
-| op | name | payload (`data[1..]`) | node action |
+| `FirmwareOp` | name | payload (`data[1..]`) | node action |
 |---|---|---|---|
 | `0x01` | `Begin` | `module`(1) · `imageSize`(4 LE) · `imageCrc32`(4 LE) · `fwVersion`(2) | Confirm in bootloader; sanity-check size; **erase all 26 app pages**; reset write pointer to 0. |
 | `0x02` | `Write` | `byteOffset`(4 LE) · `bytes`(≤ 27) | If `byteOffset == expectedOffset`: append to page buffer; on crossing a 2 KB boundary, program that page (double-words) and advance. Else: drop silently (master will rewind). |
 | `0x03` | `End` | — | Program the final partial page; verify trailing CRC32 over `[base, base+imageSize-4)`; set status to `bl-valid` or `bl-crcfail`. |
 | `0x04` | `Activate` | — | Ensure `BKP0R` is clear; `NVIC_SystemReset()` → boots the new app (now valid by its CRC32, §4). |
 | `0x05` | `Abort` | — | Discard; status back to `bl-idle` (app region left erased/invalid — master must retry). |
-| `0x06` | `EnterBootloader` | — | **Handled by the running app**: write `ENTER_BL_MAGIC` to `BKP0R`, `NVIC_SystemReset()`. |
+| `0x06` | `EnterBootloader` | — | **Handled by the running app** (via the `NodeLib` `Firmware` interceptor + `INodeHandler::PrepareForReset()`): park outputs, write `ENTER_BL_MAGIC` to `BKP0R`, `NVIC_SystemReset()`. |
 
-**Node → master** (`Operation::VALUE`, queued, sent on the next `SENDQ`):
+**Node → master** (`Operation::Report`, `data[0]` = `FirmwareOp::Status` `0x07`, queued, sent on the next `Poll`):
 
-| op | name | payload |
+| field | bytes | |
 |---|---|---|
-| `0x81` | `Status` | `state`(1: 0=app 1=bl-idle 2=bl-erasing 3=bl-receiving 4=bl-valid 5=bl-error) · `expectedOffset`(4 LE) · `lastError`(1) · `runningFwVersion`(2) |
+| `state` | 1 | 0=app · 1=bl-idle · 2=bl-erasing · 3=bl-receiving · 4=bl-valid · 5=bl-error |
+| `expectedOffset` | 4 LE | next byte offset the node wants |
+| `lastError` | 1 | |
+| `runningFwVersion` | 2 | |
 
 **Flow:** `Begin` → poll until `state==bl-receiving` → stream a batch of `Write` frames (roughly a page's worth, then poll) → on each `Status`, if `expectedOffset` didn't advance as far as sent, **rewind and resend from `expectedOffset`** → repeat to `imageSize` → `End` → poll for `bl-valid` → `Activate`.
 
-**Sizing:** 52 KB ÷ 27 B/frame ≈ 1975 `Write` frames; a full-size update is ~10–20 s at 115200 baud (faster if §8 item 6 bumps the OTA baud). The rest of the bus keeps polling normally throughout.
+**Sizing:** 52 KB ÷ 27 B/frame ≈ 1975 `Write` frames; a full-size update is ~10–20 s at 115200 baud (faster if §8 item 3 bumps the OTA baud). The rest of the bus keeps polling normally throughout.
 
-`MAX_DATA` stays **32** (`RS485-Node-Protocol-Spec-STM32G030.md` §9 default) — no node's RX buffer grows. The 27-byte `Write` payload is `32 − 1 (op) − 4 (offset)`.
+`MAX_DATA` stays **32** (`RS485-Node-Protocol-Spec-STM32G030.md` §9 default) — no node's RX buffer grows. The 27-byte `Write` payload is `32 − 1 (FirmwareOp) − 4 (offset)`.
 
 ### 6.3 Persistent identity — `ConfigStore` (read-only at runtime)
 
@@ -207,7 +210,7 @@ class ConfigStore
 
 - **Unprovisioned / corrupt record** (blank `0xFF` page, bad magic, bad CRC): the node does **not** join the bus. `NodeLib::Node::Init()` raises a non-recoverable `ErrorHandler::Error(false)` (error LED solid) — a board that reached the field un-provisioned is a manufacturing escape, not something to paper over with a default address.
 - **Provisioning:** a CMake `provision` target generates the 32-byte `ConfigRecord` blob (given `nodeId` + `module` + optional settings) and `JLinkExe` writes it to `0x0800_F000` — same tool and bench step as flashing the bootloader. The bootloader and app are then identical across units; only this one page differs.
-- **`NodeLib` changes are minimal:** add `ChannelId::FIRMWARE`; `Node` reads `nodeId` from `ConfigStore` at `Init()` instead of the current hard-coded `nodeId(99)` + external `SetId()`. No new `Operation` values, no discovery changes — a provisioned node answers `DETECTNODES` with its stored id exactly as today.
+- **`NodeLib` changes are minimal:** `Node` reads `nodeId` from `ConfigStore` at `Init()` instead of the current hard-coded `nodeId(99)` + external `SetId()`. No discovery changes — a provisioned node answers `Discover` with its stored id (in the `Announce` payload) exactly as before. (`Endpoint::Firmware` and the redesigned `Operation` verbs come from `Node-Message-Model-Spec.md`, not this spec.)
 
 ---
 

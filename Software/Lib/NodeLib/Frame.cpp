@@ -30,7 +30,8 @@ Frame::Frame(Hal::Crc& crc) :
     headerAndData{},
     headerIndex(0),
     receivedCrc(0),
-    interByteTimer()
+    interByteTimer(),
+    counters{}
 {
 }
 
@@ -45,6 +46,7 @@ void Frame::Update()
     if (state != State::Sync0 && interByteTimer.Finished())
     {
         LOG_DEBUG("Frame inter-byte timeout, resync");
+        counters.interByteTimeouts++;
         ResetToSync();
     }
 }
@@ -81,6 +83,7 @@ bool Frame::FeedByte(const uint8_t byte, Message& message)
             if (byte > MAX_DATA)
             {
                 // Max-frame guard (spec §5 point 3) -- LEN can't be trusted, abandon.
+                counters.resyncs++;
                 ResetToSync();
                 break;
             }
@@ -125,11 +128,12 @@ bool Frame::FeedByte(const uint8_t byte, Message& message)
             if (computedCrc != receivedCrc)
             {
                 LOG_DEBUG("Frame CRC mismatch, dropped");
+                counters.crcErrors++;
                 return false;
             }
 
             message.id.node      = headerAndData[0];
-            message.id.channel   = static_cast<ChannelId>(headerAndData[1]);
+            message.id.endpoint  = static_cast<Endpoint>(headerAndData[1]);
             message.id.operation = static_cast<Operation>(headerAndData[2]);
             message.len          = len;
             for (uint8_t i = 0; i < len; i++)
@@ -137,6 +141,7 @@ bool Frame::FeedByte(const uint8_t byte, Message& message)
                 message.data[i] = headerAndData[3 + i];
             }
 
+            counters.frames++;
             return true;
         }
     }
@@ -148,7 +153,7 @@ void Frame::Write(Hal::Uart& uart, const Message& message) const
 {
     uint8_t headerAndDataBuffer[3 + MAX_DATA];
     headerAndDataBuffer[0] = message.id.node;
-    headerAndDataBuffer[1] = static_cast<uint8_t>(message.id.channel);
+    headerAndDataBuffer[1] = static_cast<uint8_t>(message.id.endpoint);
     headerAndDataBuffer[2] = static_cast<uint8_t>(message.id.operation);
     for (uint8_t i = 0; i < message.len; i++)
     {

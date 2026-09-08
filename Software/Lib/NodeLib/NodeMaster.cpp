@@ -7,8 +7,7 @@
 #include "Id.h"
 #include "NodeMaster.h"
 
-using NodeLib::ChannelId;
-using NodeLib::IVariableHandler;
+using NodeLib::Endpoint;
 using NodeLib::Message;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
@@ -66,7 +65,7 @@ void NodeMaster::StartPollingNodes()
 void NodeMaster::DetectNodes()
 {
     LOG_INFO("Detecting Nodes");
-    const Message poll(0, Operation::DETECTNODES);
+    const Message poll(BROADCAST_NODE, Operation::Discover);
     WriteMessage(poll);
 
     Tools::DelayTimer timeout(static_cast<Tools::time_a>(nodeSpacing * (numNodes + 1)));
@@ -110,7 +109,7 @@ void NodeMaster::PollNextNode(const int prevNodeId)
 
         } while (!activeNodes[nodeId - 1]);
 
-        const Message poll(static_cast<uint8_t>(nodeId), Operation::SENDQ);
+        const Message poll(static_cast<uint8_t>(nodeId), Operation::Poll);
         WriteMessage(poll);
     }
 }
@@ -119,12 +118,12 @@ void NodeMaster::HandleInternalOperation(const Message& m)
 {
     switch (m.id.operation)
     {
-        case Operation::HELLOWORLD:
+        case Operation::Announce:
         {
             NodeHello(m.id.node);
             break;
         }
-        case Operation::ENDOFQ:
+        case Operation::Done:
         {
             PollNextNode(m.id.node);
             ResetHearthBeat();
@@ -137,7 +136,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
 
 void NodeMaster::HandleMasterMessage(const Message& m)
 {
-    if (m.id.channel == ChannelId::INTERNAL_MSG)
+    if (m.id.endpoint == Endpoint::Transport)
     {
         HandleInternalOperation(m);
     }

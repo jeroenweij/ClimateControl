@@ -1,8 +1,7 @@
 add_library(NodeLib STATIC
-    EChannelId.h
+    EEndpoint.h
     EOperation.h
-    EPinMode.h
-    IVariableHandler.h
+    INodeHandler.h
     Id.h
     Id.cpp
     ConfigStore.h

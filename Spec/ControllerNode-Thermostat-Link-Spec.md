@@ -18,7 +18,7 @@ MainController ──(main RS485 bus, many nodes)── ControllerNode ──(de
 
 - `ControllerNode` is on the main bus as a normal `NodeLib` slave (node ID `1..N`, per the protocol spec).
 - `Thermostat` is **not** addressable on the main bus at all — it only ever talks to its own `ControllerNode`.
-- Because the link has exactly two fixed endpoints, the main protocol's round-robin arbitration (`DETECTNODES`/`HELLOWORLD`/`SENDQ`/`ENDOFQ`, protocol spec §6) exists to let one master poll an unknown number of slaves fairly — that problem doesn't exist here. A full port of the main-bus state machine would be solving a problem this link doesn't have.
+- Because the link has exactly two fixed endpoints, the main protocol's round-robin arbitration (`Discover`/`Announce`/`Poll`/`Done`, protocol spec §6) exists to let one master poll an unknown number of slaves fairly — that problem doesn't exist here. A full port of the main-bus state machine would be solving a problem this link doesn't have.
 
 ---
 
@@ -27,10 +27,10 @@ MainController ──(main RS485 bus, many nodes)── ControllerNode ──(de
 | Protocol-spec concept | Carries over? | Why |
 |---|---|---|
 | `Id`/`Message` framing, CRC16, sync/resync (protocol spec §3–§5) | **Yes** | Still useful for a clean, corruption-detected frame even on a 2-endpoint link — no reason to invent a different frame format just because there's no arbitration. |
-| `ChannelId`/`Operation` enums | **Partially** | The *concept* (typed channel + operation) still fits (e.g. `SETPOINT`, `ROOM_TEMP`, `MODE`), but the specific values (`DIGITAL_1`, `SERVO_1`, `DETECTNODES`, ...) are main-bus-specific and don't apply here. |
-| `DETECTNODES`/`HELLOWORLD` discovery | **No** | Fixed 1:1 pairing — nothing to discover. |
-| `SENDQ`/`ENDOFQ` round-robin polling | **No** | No arbitration needed between exactly two endpoints; a simpler request/response or periodic-push exchange is sufficient. |
-| Heartbeat/`ConnectionLost()` | **Yes, conceptually** | Still want to detect a dead/disconnected `Thermostat` (or vice versa) — just doesn't need the full poll-cycle machinery to drive it, a simple periodic ping/ack works. |
+| `Endpoint`/`Operation` enums (`Node-Message-Model-Spec.md`) | **Yes — a subset** | Resolved 2026-09-08: the link uses the **named-endpoint** blocks `System*`, `Room*` (`RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`), and `DamperActual`/`DamperMode` — the same values as the main bus, just a subset. Never the `Transport` endpoint. Verbs: `Get`/`Set`/`Report`/`Ack`/`Nack`. On this link the **`Thermostat` is the source of truth for `Room*`** and pushes `Report`s; the `ControllerNode` pushes `DamperActual`/`DamperMode` for the display. See `Node-Message-Model-Spec.md` §7. |
+| `Discover`/`Announce` discovery | **No** | Fixed 1:1 pairing — nothing to discover. |
+| `Poll`/`Done` round-robin polling | **No** | No arbitration needed between exactly two endpoints; a simple periodic-push + ping/ack exchange is sufficient. |
+| Heartbeat/`ConnectionLost()` | **Yes, conceptually** | Still want to detect a dead/disconnected `Thermostat` (or vice versa) — just doesn't need the full poll-cycle machinery to drive it, a simple periodic ping/ack works. Surfaced on the main bus as `RoomLink` (0 down / 1 up). |
 
 **Confirmed:** don't reuse `NodeLib::Node`/`NodeMaster` as-is for this link. Instead, factor the reusable parts (`Id`/`Message`/CRC framing) into something shared — a candidate for `Software/Lib/NodeLib` itself, split so the framing layer doesn't drag in the round-robin master/slave state machine — and write a much smaller point-to-point exchange (simple request/response or periodic push + ping/ack for liveness) specifically for this link, rather than adapting `NodeMaster`'s arbitration to a degenerate 2-node case.
 

@@ -8,11 +8,20 @@
 
 #include "ErrorHandler.h"
 #include "Frame.h"
-#include "IVariableHandler.h"
+#include "INodeHandler.h"
 #include "Id.h"
 
 namespace NodeLib
 {
+    // Bus-health snapshot surfaced on Endpoint::DiagRxCounters / DiagTxCounters
+    // (Spec/Node-Message-Model-Spec.md §3).
+    struct DiagCounters
+    {
+        RxCounters rx;
+        uint32_t   txFrames;
+        uint32_t   queueDrops;
+    };
+
     class Node
     {
       public:
@@ -30,7 +39,7 @@ namespace NodeLib
         // the original AVR version deferred Serial1.begin() there too.
         Node(const uint8_t numNodes, const uint32_t baudRate);
 
-        void RegisterHandler(IVariableHandler* handler);
+        void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
         void QueueMessage(const Id& id, const uint8_t* const data, const uint8_t len);
         void QueueMessage(const Id& id, const uint8_t value);
@@ -39,6 +48,8 @@ namespace NodeLib
         // flash in Init() (ControllerNode / TemperatureNode); it is not settable
         // at runtime. NodeMaster overrides it to the reserved master id 0.
         uint8_t GetId();
+
+        DiagCounters Counters() const;
 
         void Init();
         void Loop();
@@ -59,9 +70,9 @@ namespace NodeLib
         const uint8_t        numNodes;
         static const int     queueSize = 25;
 
-        IVariableHandler* handler;
-        uint8_t           nodeId;
-        int               messagesQueued;
+        INodeHandler* handler;
+        uint8_t       nodeId;
+        int           messagesQueued;
 
       private:
         void HandlePollRequest();
@@ -69,6 +80,9 @@ namespace NodeLib
         void HandleInternalMessage(const Message& m);
 
         uint32_t baudRate;
+
+        uint32_t txFrames;
+        uint32_t queueDrops;
 
         Hal::Uart         uart;
         Hal::Crc          crc;

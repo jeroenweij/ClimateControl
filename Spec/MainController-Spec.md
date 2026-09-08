@@ -9,8 +9,8 @@
 
 `MainController` is the RS485 bus master for the main node bus, running the same STM32G0-family MCU as the slave nodes (`ControllerNode`, `TemperatureNode`). It owns node ID `0` (reserved per protocol spec §6) and implements the `NodeMaster` side of `NodeLib`:
 
-- Discovery: broadcasts `DETECTNODES`, collects staggered `HELLOWORLD` replies (protocol spec §6).
-- Poll cycle: round-robins active nodes with `SENDQ` → node dumps queue → `ENDOFQ` → poll next (protocol spec §6, `PollNextNode`/`ActiveNodeCount`/`activeNodes[]`).
+- Discovery: broadcasts `Discover`, collects staggered `Announce` replies (each carrying the node's module type + 96-bit UID) and builds the `UID→NodeId` roster (protocol spec §6, `Node-Message-Model-Spec.md` §4).
+- Poll cycle: round-robins active nodes with `Poll` → node dumps its queued `Report`s → `Done` → poll next (protocol spec §6, `PollNextNode`/`ActiveNodeCount`/`activeNodes[]`).
 - Heartbeat: resets a timer each full poll round; declares `ConnectionLost()` on lapse.
 
 This is a direct port of `NodeMaster` from `~/git/node/Software/lib/NodeLib/NodeMaster.{h,cpp}`, re-targeted to the v2 variable-length/CRC framing instead of the fixed-size AVR frame.

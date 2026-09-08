@@ -11,9 +11,9 @@
 // Lightweight, fixed-buffer, no-heap std::stringstream workalike -- real
 // <sstream> is available via arm-none-eabi's libstdc++ but is too heavy for an
 // 8KB-RAM part. Matches just enough of the real interface (chainable
-// operator<<, str()) for NodeLib's logging headers (EChannelId.h, EOperation.h,
-// EPinMode.h, id.h), which each define their own
-// operator<<(std::stringstream&, ...) for their enum types.
+// operator<<, str()) for NodeLib's logging headers (EEndpoint.h, EOperation.h,
+// Id.h), which each define their own operator<<(std::stringstream&, ...) for
+// their enum types.
 namespace std
 {
     struct stringstream

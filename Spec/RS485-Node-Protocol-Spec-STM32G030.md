@@ -12,7 +12,7 @@
 **Goals**
 - Variable-length data field per message (no longer locked to a single `uint8_t` value).
 - CRC-protected frames, so corruption is *detected*, not silently accepted.
-- Reuse the existing round-robin master/slave state machine (`DETECTNODES` → `HELLOWORLD` → `SENDQ` → `ENDOFQ` → heartbeat), since that part works and isn't hardware-specific.
+- Reuse the existing round-robin master/slave state machine (`Discover` → `Announce` → `Poll` → `Done` → heartbeat; ops renamed from v1's `DETECTNODES`/`HELLOWORLD`/`SENDQ`/`ENDOFQ` in `Node-Message-Model-Spec.md` §4), since that part works and isn't hardware-specific.
 - Take advantage of STM32G0 peripherals (hardware CRC unit, USART auto-direction-control) that the ATmega/Arduino stack didn't have.
 
 **Non-goals (for v2, call out explicitly if you want these later)**
@@ -41,7 +41,7 @@ The old code hand-manages the enable pin (`setEnable()` with 10–15 ms settle d
 
 ```
 ┌─────────┬─────────┬────────┬─────────┬───────────┬──────────┬─────────┐
-│  SYNC   │  SYNC   │  LEN   │ NODE_ID │  CHANNEL  │ OPERATION│  DATA   │  CRC16
+│  SYNC   │  SYNC   │  LEN   │ NODE_ID │  ENDPOINT │ OPERATION│  DATA   │  CRC16
 │  0xEE   │  0x42   │ 1 byte │ 1 byte  │  1 byte   │  1 byte  │ N bytes │ 2 bytes
 └─────────┴─────────┴────────┴─────────┴───────────┴──────────┴─────────┘
   byte 0     byte 1    byte 2   byte 3     byte 4      byte 5   byte 6..(6+N-1)   last 2 bytes
@@ -50,11 +50,11 @@ The old code hand-manages the enable pin (`setEnable()` with 10–15 ms settle d
 | Field | Size | Description |
 |---|---|---|
 | `SYNC` | 2 bytes | Keep `0xEE 0x42` from v1 for continuity. Only scanned for while the receiver is *not* mid-frame. |
-| `LEN` | 1 byte | Length of `DATA` **only** (0–255). Header (`NODE_ID`/`CHANNEL`/`OPERATION`) is fixed size and not counted. Cap enforced in firmware at e.g. 32 bytes (see §7) even though the field allows 255 — keeps buffers small and bounds worst-case bus occupancy. |
-| `NODE_ID` | 1 byte | Target/source node address, same semantics as v1 (`0` = master). |
-| `CHANNEL` | 1 byte | Same role as `ChannelId` enum — logical channel/endpoint on the node. |
-| `OPERATION` | 1 byte | Same role as `Operation` enum (`GET`, `SET`, `VALUE`, `DETECTNODES`, `SENDQ`, `ENDOFQ`, …). |
-| `DATA` | `LEN` bytes | Payload — was a single `uint8_t Value` in v1, now arbitrary bytes (int16/float/string/blob — interpretation is per-`OPERATION`/`CHANNEL` convention, not enforced by the frame). |
+| `LEN` | 1 byte | Length of `DATA` **only** (0–255). Header (`NODE_ID`/`ENDPOINT`/`OPERATION`) is fixed size and not counted. Cap enforced in firmware at e.g. 32 bytes (see §7) even though the field allows 255 — keeps buffers small and bounds worst-case bus occupancy. |
+| `NODE_ID` | 1 byte | Target/source node address. `0` = master (reserved); `1..MAX_NODES-1` = slaves; `0xFF` = broadcast (`Set`-only, no reply) — see `Node-Message-Model-Spec.md` §2. |
+| `ENDPOINT` | 1 byte | The addressable thing on the node — `NodeLib::Endpoint` enum. Was `CHANNEL`/`ChannelId` (an IO-pin selector); redefined as a flat named-endpoint enum in `Node-Message-Model-Spec.md` §3. |
+| `OPERATION` | 1 byte | `NodeLib::Operation` — `Get`/`Set`/`Report`/`Ack`/`Nack` for endpoint access, plus the transport verbs `Discover`/`Announce`/`Poll`/`Done`. Full table in `Node-Message-Model-Spec.md` §4. |
+| `DATA` | `LEN` bytes | Payload — arbitrary bytes (int16/float/string/blob), interpreted per `ENDPOINT` (+ `OPERATION`) convention per `Node-Message-Model-Spec.md` §5, not enforced by the frame. |
 | `CRC16` | 2 bytes | Computed over `NODE_ID..DATA` inclusive (**not** over `SYNC` or `LEN`—see §4 rationale), little-endian on the wire. |
 
 Total frame overhead is 7 bytes (2 sync + 1 len + 4 header/crc-adjacent... see table) vs. payload; for a 1-byte payload that's a larger relative overhead than v1's fixed 6-byte frame, but you get arbitrary payload sizes in return.
@@ -85,16 +85,19 @@ Chosen mitigation (deliberately not full byte-stuffing/COBS — see rationale be
 
 ---
 
-## 6. Addressing, topology, operations (unchanged from v1 in spirit)
+## 6. Addressing, topology, operations
+
+The round-robin transport (discovery / poll cycle / heartbeat) carries over from v1 almost line-for-line — it is wire-format-agnostic. The *message semantics* on top of it (endpoints, operation verbs, reporting model) are specified in `Node-Message-Model-Spec.md`; this section covers only the transport-level items.
 
 | Item | v1 | v2 |
 |---|---|---|
-| Master ID | `0`, hardcoded constant | `0`, still reserved — keep for continuity |
-| Node ID range | 1–10 (`numNodes = 10`, compile-time) | Recommend making `maxNodes` a config value (still a `uint8_t` field, so up to 254 slaves addressable) rather than a hardcoded `10` — cheap to generalize now while you're rewriting anyway |
-| Discovery | Broadcast `DETECTNODES`, staggered `HELLOWORLD` replies by `(nodeId-1) * nodeSpacing` ms | Same mechanism — still appropriate, no arbitration needed since replies are time-sliced |
-| Poll cycle | Master → `SENDQ` → node dumps queue → `ENDOFQ` → master polls next active node | Same — this state machine is transport-format-agnostic and should carry over almost line-for-line |
+| Master ID | `0`, hardcoded constant | `0`, still reserved |
+| Node ID range | 1–10 (`numNodes = 10`, compile-time) | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 25). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
+| Broadcast | — (none; `DETECTNODES` recognised by op only) | `NODE_ID = 0xFF`, valid with `Operation::Set` only (fire-and-forget, no reply) — `Node-Message-Model-Spec.md` §2 |
+| Discovery | Broadcast `DETECTNODES`, staggered `HELLOWORLD` replies by `(nodeId-1) * nodeSpacing` ms | Same mechanism; ops renamed `Discover` / `Announce`. `Announce` payload carries module type + 96-bit UID for the master's roster. |
+| Poll cycle | Master → `SENDQ` → node dumps queue → `ENDOFQ` → master polls next active node | Same; ops renamed `Poll` / `Done`. A polled node dumps its queued `Report`s (on-change + keepalive, `Node-Message-Model-Spec.md` §6.1). |
 | Heartbeat | Master-side timer reset each full poll round; `ConnectionLost()` on lapse | Same |
-| `Operation` enum | `GET/SET/SETPWM/VALUE/ERROR/SETMODE/DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ` | Keep as-is; variable `DATA` means `SET`/`VALUE` can now carry multi-byte values (e.g. 16-bit ADC readings, floats) instead of being capped at one `uint8_t` |
+| `Operation` enum | `GET/SET/SETPWM/VALUE/ERROR/SETMODE/DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ` | Redesigned — `Get/Set/Report/Ack/Nack` + `Discover/Announce/Poll/Done`. Full table: `Node-Message-Model-Spec.md` §4. |
 
 ---
 
@@ -106,7 +109,7 @@ Chosen mitigation (deliberately not full byte-stuffing/COBS — see rationale be
 | TX queue | Same struct as v1 (`messageQueue[queueSize]`), but each entry now needs to own/reference a variable-length payload | Simplest approach: fixed-size queue slots sized at `MAX_DATA` (wastes some RAM per slot but avoids dynamic allocation — appropriate on an 8 KB-RAM MCU). `queueSize = 25` from v1 × 40 bytes/slot ≈ 1 KB — fine. |
 | Avoid heap allocation | — | No `malloc`/`new` for frame data; fixed-size slots only, matching v1's existing no-heap style. |
 
-This keeps total protocol RAM usage well under 2 KB, leaving headroom for application state (channel values, timers) on the 8 KB part.
+This keeps total protocol RAM usage well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. Add the small `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, ~384 B) to this budget.
 
 ---
 
@@ -114,12 +117,15 @@ This keeps total protocol RAM usage well under 2 KB, leaving headroom for applic
 
 **Carries over almost unchanged (conceptually):**
 - `Node` / `NodeMaster` class split and their `HandleMasterMessage` override pattern.
-- Poll → flush → `ENDOFQ` → advance round-robin state machine (`PollNextNode`, `ActiveNodeCount`, `activeNodes[]`).
+- Poll → flush → `Done` → advance round-robin state machine (`PollNextNode`, `ActiveNodeCount`, `activeNodes[]`).
 - Discovery/staggered-reply mechanism.
-- Heartbeat/`ConnectionLost()` contract via `IVariableHandler`.
+- Heartbeat/`ConnectionLost()` contract (via `INodeHandler`, renamed from `IVariableHandler` — `Node-Message-Model-Spec.md` §6.2).
 
 **Needs rework:**
-- `Message`/`Id` structs: `Value` (single `uint8_t`) → variable-length `DATA` buffer + explicit `LEN`. This is the core breaking change — anywhere code does `message.value`, it now needs `message.data`/`message.len` (or equivalent), and anything serializing/deserializing typed values (int16, float) out of that buffer needs explicit pack/unpack helpers per channel/operation convention.
+- `Message`/`Id` structs: `Value` (single `uint8_t`) → variable-length `DATA` buffer + explicit `LEN`. Anywhere code does `message.value`, it now needs `message.data`/`message.len`, and typed values (int16, float) out of that buffer need explicit pack/unpack helpers per the `Node-Message-Model-Spec.md` §5 conventions.
+- `Id.channel` (`ChannelId`, IO-pin selector) → `Id.endpoint` (`Endpoint`, flat named-endpoint enum) — `Node-Message-Model-Spec.md` §3.
+- `Operation` enum redesigned (§6 above); the transport ops rename `DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ` → `Discover/Announce/Poll/Done`.
+- Dispatch: `NodeLib` now intercepts the `System*` / `Firmware` / `Diagnostics*` endpoints itself; the module handler sees only its own endpoints (`Node-Message-Model-Spec.md` §6.2).
 - `Node::WriteMessage`/`Node::Loop()`: replace the fixed-size `Frame` struct + raw `Serial1.write((uint8_t*)&m, sizeof(m))` with a byte-stream framer/deframer that computes and appends/verifies CRC16 and handles the variable length + timeout-resync logic from §5.
 - `setEnable()`: remove; replace with USART1 hardware DE configuration (one-time init, no per-message delay code).
 - `numNodes`/`masterNodeId`/`nodeSpacing`: move from `static const int` compile-time constants to constructor/init parameters if you want this new firmware to support a different node count without recompiling the library itself (optional, but cheap to do now).

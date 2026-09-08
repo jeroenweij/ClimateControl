@@ -234,7 +234,7 @@ All LED GPIOs are push-pull, **active-high** (`led.Write(true)` = lit). Wire eac
 
 **Series resistor: 330 Ω** for every indicator LED (red / green / any orange). `R = (3.3 − ~2.0) / I` → ~3.3–4 mA, well inside the 8 mA/pin guideline; the low-mcd parts need the current to be readable. 470 Ω if a softer indicator is wanted. Avoid blue/white/525 nm-green (Vf ≈ 3.1 V) on the 3.3 V GPIO rail entirely.
 
-Node IDs come from `DETECTNODES`/`HELLOWORLD` discovery — **no DIP switch / address strap needed.**
+Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.3) and reported to the master in the `Announce` reply during discovery — **no DIP switch / address strap needed.**
 
 ### 6.5 Easy-to-forget checklist
 

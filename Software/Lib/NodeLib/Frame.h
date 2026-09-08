@@ -12,9 +12,19 @@
 
 namespace NodeLib
 {
+    // Bus-health tallies surfaced on Endpoint::DiagRxCounters
+    // (Spec/Node-Message-Model-Spec.md §3).
+    struct RxCounters
+    {
+        uint32_t frames; // CRC-valid frames decoded
+        uint32_t crcErrors; // frames dropped on CRC mismatch
+        uint32_t resyncs; // partial frame abandoned (bad LEN / spurious sync)
+        uint32_t interByteTimeouts; // mid-frame gap exceeded the resync timeout (§5)
+    };
+
     // Byte-stream framer/deframer for the v2 wire format
     // (RS485-Node-Protocol-Spec-STM32G030.md §3): SYNC(2) LEN(1) NODE_ID(1)
-    // CHANNEL(1) OPERATION(1) DATA(LEN) CRC16(2, little-endian). Replaces v1's
+    // ENDPOINT(1) OPERATION(1) DATA(LEN) CRC16(2, little-endian). Replaces v1's
     // fixed-size Frame struct + raw Serial1.write((uint8_t*)&m, sizeof(m)), per
     // the protocol spec's migration notes §8.
     class Frame
@@ -33,6 +43,11 @@ namespace NodeLib
         void Update();
 
         void Write(Hal::Uart& uart, const Message& message) const;
+
+        const RxCounters& Counters() const
+        {
+            return counters;
+        }
 
       private:
         enum class State
@@ -58,5 +73,6 @@ namespace NodeLib
         uint8_t           headerIndex;
         uint16_t          receivedCrc;
         Tools::DelayTimer interByteTimer;
+        RxCounters        counters;
     };
 } // namespace NodeLib

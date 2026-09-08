@@ -31,9 +31,9 @@ ClimateControl/
     ├── cmake/                 # ARM Cortex-M0+ toolchain file (arm-none-eabi-cortex-m0plus.cmake)
     ├── Lib/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
-    │   ├── Board/              # BoardPins.h — single source of truth for the STM32G031F8P6 pin map (all 3 board types), per Node-Bus-Hardware-Design-Spec.md §6.2 (header-only INTERFACE lib, depends on HAL for Hal::Pin)
-    │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger — shared helpers, MCU-agnostic
-    │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/ChannelId/Operation) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args)
+    │   ├── Board/              # BoardPins.h + MemoryMap.h — single source of truth for the STM32G031F8P6 pin map (all 3 board types, per Node-Bus-Hardware-Design-Spec.md §6.2) and flash partition map (Node-Flash-Layout-and-Bootloader-Spec.md §3). Header-only INTERFACE lib, depends on HAL for Hal::Pin
+    │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger (UART + Diagnostics log-ring sink) — shared helpers, MCU-agnostic
+    │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore (factory node identity) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args). Message model: Node-Message-Model-Spec.md
     └── Modules/
         ├── MainController/     # firmware image: RS485 bus master
         ├── ControllerNode/     # firmware image: damper/servo slave node + ControllerNode<->Thermostat link (master side)
@@ -67,11 +67,11 @@ Same C++ style as `~/git/rollercoaster` (and its `node` submodule at `~/git/node
 
 - Allman braces, 4-space indent, no tabs, `#pragma once` (no include guards).
 - `PascalCase` for classes, methods, and enum values; `camelCase` for member variables and locals; no `m_`/`_` prefixes.
-- `enum class` everywhere (`ChannelId`, `Operation`, `PinMode`), each paired with an `operator<<(std::stringstream&, ...)` for logging.
+- `enum class` everywhere (`Endpoint`, `Operation`, `PinMode`), each paired with an `operator<<(std::stringstream&, ...)` for logging.
 - Constructors use member-initializer lists, one member per line, colon-aligned (`clang-format`'s `BreakConstructorInitializers: AfterColon` handles the wrapping).
 - `namespace NodeLib { ... } // namespace NodeLib` — closing-brace comment on every namespace.
 - `.cpp` files pull in the specific symbols they need via `using NodeLib::Foo;` near the top, rather than `using namespace`.
-- No heap allocation in the protocol/channel code (`NodeLib`, `Channel`) — fixed-size buffers/queues throughout, consistent with the RS485 spec's buffering section (§7).
+- No heap allocation in the protocol / endpoint-handler code (`NodeLib` and the modules' handlers) — fixed-size buffers/queues throughout, consistent with the RS485 spec's buffering section (§7).
 - Header comment block on every file:
   ```cpp
   /*************************************************************

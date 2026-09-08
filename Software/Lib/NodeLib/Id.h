@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include "EChannelId.h"
+#include "EEndpoint.h"
 #include "EOperation.h"
 
 namespace NodeLib
@@ -19,29 +19,33 @@ namespace NodeLib
     // aliases this so there is one definition.
     static const uint8_t MAX_NODES = 25;
 
+    // Broadcast address -- valid only with Operation::Set (fire-and-forget, no
+    // reply). See Spec/Node-Message-Model-Spec.md §2.
+    static const uint8_t BROADCAST_NODE = 0xFF;
+
     struct __attribute__((packed)) Id
     {
         uint8_t   node;
-        ChannelId channel;
+        Endpoint  endpoint;
         Operation operation;
 
         Id() :
             node(0),
-            channel(ChannelId::INTERNAL_MSG),
-            operation(Operation::GET)
+            endpoint(Endpoint::Transport),
+            operation(Operation::Get)
         {
         }
 
-        Id(const uint8_t node, const ChannelId channel) :
+        Id(const uint8_t node, const Endpoint endpoint) :
             node(node),
-            channel(channel),
-            operation(Operation::GET)
+            endpoint(endpoint),
+            operation(Operation::Get)
         {
         }
 
-        Id(const uint8_t node, const ChannelId channel, const Operation operation) :
+        Id(const uint8_t node, const Endpoint endpoint, const Operation operation) :
             node(node),
-            channel(channel),
+            endpoint(endpoint),
             operation(operation)
         {
         }
@@ -57,7 +61,7 @@ namespace NodeLib
 
     inline std::stringstream& operator<<(std::stringstream& oStrStream, const NodeLib::Id id)
     {
-        oStrStream << " Node: " << id.node << " Channel: " << id.channel << " Operation: " << id.operation;
+        oStrStream << " Node: " << id.node << " Endpoint: " << id.endpoint << " Operation: " << id.operation;
 
         return oStrStream;
     }
@@ -72,14 +76,15 @@ namespace NodeLib
         uint8_t len;
 
         Message() :
-            id(0, ChannelId::INTERNAL_MSG, Operation::GET),
+            id(0, Endpoint::Transport, Operation::Get),
             data{},
             len(0)
         {
         }
 
+        // Transport-level messages (Discover / Announce / Poll / Done).
         Message(const uint8_t node, const Operation op) :
-            id(node, ChannelId::INTERNAL_MSG, op),
+            id(node, Endpoint::Transport, op),
             data{},
             len(0)
         {
@@ -92,10 +97,9 @@ namespace NodeLib
         {
         }
 
-        // Convenience for the common single-byte-value case (matches v1's Value
-        // semantics -- most channels still only ever send one byte).
-        Message(const uint8_t node, const ChannelId channel, const Operation operation, const uint8_t value) :
-            id(node, channel, operation),
+        // Convenience for the common single-byte-value case.
+        Message(const uint8_t node, const Endpoint endpoint, const Operation operation, const uint8_t value) :
+            id(node, endpoint, operation),
             data{value},
             len(1)
         {

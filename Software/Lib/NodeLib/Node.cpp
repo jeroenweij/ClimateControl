@@ -9,9 +9,10 @@
 #include "ConfigStore.h"
 #include "Node.h"
 
-using NodeLib::ChannelId;
 using NodeLib::ConfigStore;
+using NodeLib::Endpoint;
 using NodeLib::Id;
+using NodeLib::INodeHandler;
 using NodeLib::Message;
 using NodeLib::Node;
 using NodeLib::Operation;
@@ -23,6 +24,8 @@ Node::Node(const uint8_t numNodes, const uint32_t baudRate) :
     nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
     messagesQueued(0),
     baudRate(baudRate),
+    txFrames(0),
+    queueDrops(0),
     uart(),
     crc(),
     frame(crc),
@@ -35,8 +38,10 @@ Node::Node(const uint8_t numNodes, const uint32_t baudRate) :
 
 void Node::WriteMessage(const Message& m)
 {
-    LOG_DEBUG("WRITE Node: " << m.id.node << " Chan: " << m.id.channel << " Op: " << m.id.operation << " Len: " << m.len);
+    LOG_DEBUG("WRITE Node: " << m.id.node << " Endpoint: " << m.id.endpoint << " Op: " << m.id.operation
+                             << " Len: " << m.len);
     frame.Write(uart, m);
+    txFrames++;
 }
 
 void Node::Init()
@@ -90,7 +95,8 @@ void Node::ResetHearthBeat()
 
 bool Node::ReadMessage(const Message& m)
 {
-    LOG_DEBUG("READ  Node: " << m.id.node << " Chan: " << m.id.channel << " Op: " << m.id.operation << " Len: " << m.len);
+    LOG_DEBUG("READ  Node: " << m.id.node << " Endpoint: " << m.id.endpoint << " Op: " << m.id.operation
+                             << " Len: " << m.len);
 
     if (nodeId != masterNodeId)
     {
@@ -106,24 +112,30 @@ bool Node::ReadMessage(const Message& m)
 
 void Node::HandleMessage(const Message& m)
 {
-    if (m.id.node == nodeId)
-    {
-        if (m.id.channel == ChannelId::INTERNAL_MSG)
-        {
-            HandleInternalMessage(m);
-        }
-        else
-        {
-            if (handler)
-            {
-                handler->ReceivedMessage(m);
-            }
-        }
-    }
-    // Poll request from master node
-    else if (m.id.node == masterNodeId && m.id.operation == Operation::DETECTNODES)
+    // Discovery is a broadcast (node == BROADCAST_NODE) -- recognised by its
+    // operation, before the address match.
+    if (m.id.operation == Operation::Discover)
     {
         HandlePollRequest();
+        return;
+    }
+
+    const bool addressedToUs = (m.id.node == nodeId);
+    // Broadcast is Set-only and never answered (Spec/Node-Message-Model-Spec.md §2).
+    const bool broadcastSet = (m.id.node == BROADCAST_NODE && m.id.operation == Operation::Set);
+
+    if (!addressedToUs && !broadcastSet)
+    {
+        return;
+    }
+
+    if (m.id.endpoint == Endpoint::Transport)
+    {
+        HandleInternalMessage(m);
+    }
+    else if (handler)
+    {
+        handler->ReceivedMessage(m);
     }
 }
 
@@ -132,7 +144,7 @@ void Node::HandleInternalMessage(const Message& m)
     LOG_DEBUG("Handle internal operation: " << m.id.operation);
     switch (m.id.operation)
     {
-        case Operation::SENDQ:
+        case Operation::Poll:
         {
             flushQueue();
             ResetHearthBeat();
@@ -161,7 +173,7 @@ void Node::flushQueue()
 
     if (nodeId != masterNodeId)
     {
-        const Message end(nodeId, Operation::ENDOFQ);
+        const Message end(nodeId, Operation::Done);
         WriteMessage(end);
     }
     led.Write(false);
@@ -172,14 +184,16 @@ void Node::HandlePollRequest()
     LOG_INFO("Handle poll request");
     if (nodeId != masterNodeId)
     {
-        const Message m(nodeId, Operation::HELLOWORLD);
+        // TODO: Announce should carry module type + 96-bit UID for the master's
+        // roster (Spec/Node-Message-Model-Spec.md §4) -- payload deferred.
+        const Message m(nodeId, Operation::Announce);
         Hal::Tick::DelayMs(static_cast<uint32_t>((nodeId - 1) * nodeSpacing));
-        LOG_INFO("Return Hello world");
+        LOG_INFO("Return Announce");
         WriteMessage(m);
     }
 }
 
-void Node::RegisterHandler(IVariableHandler* handler)
+void Node::RegisterHandler(INodeHandler* handler)
 {
     this->handler = handler;
 }
@@ -212,4 +226,17 @@ void Node::QueueMessage(const NodeLib::Message& m)
         messageQueue[messagesQueued] = m;
         messagesQueued++;
     }
+    else
+    {
+        queueDrops++;
+    }
+}
+
+NodeLib::DiagCounters Node::Counters() const
+{
+    return {
+        frame.Counters(),
+        txFrames,
+        queueDrops,
+    };
 }

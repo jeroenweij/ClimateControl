@@ -15,9 +15,9 @@ bool Id::operator<(const Id& other) const
     {
         return (this->node < other.node);
     }
-    if (this->channel != other.channel)
+    if (this->endpoint != other.endpoint)
     {
-        return (this->channel < other.channel);
+        return (this->endpoint < other.endpoint);
     }
     if (this->operation != other.operation)
     {
@@ -35,7 +35,7 @@ bool Id::operator==(const Id& other) const
     {
         return false;
     }
-    if (this->channel != other.channel)
+    if (this->endpoint != other.endpoint)
     {
         return false;
     }
