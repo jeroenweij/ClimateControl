@@ -68,15 +68,18 @@ u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, 
 
 | NINA pin | To | Notes |
 |---|---|---|
-| VCC (10) + VCC_IO (9) | dedicated 3V3 LDO | own regulator off the 5 V buck — see `Node-Bus-Power-Path-Spec.md` §4. ~120 mA avg / ~350 mA peak; 22 µF + 10 µF + 100 nF local |
+| VCC (10) + VCC_IO (9) | `+3v3 P` rail — dedicated RT9080-33GJ5 LDO off the 5 V buck | see `Node-Bus-Power-Path-Spec.md` §4.1. ~120 mA avg / ~350 mA peak. **Bulk: 22 µF at the LDO + ≥10 µF right at the NINA VCC pins** (NINA is in the opposite board corner) + 100 nF. RT9080 populated on both Main-board build variants. |
 | GND + centre pad | solid ground pour | |
-| RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull |
+| RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull. Add a 10 kΩ pull-up to `+3v3 P` + a test point (defensive; `Hal::Gpio::Mode` needs an open-drain option added). |
 | UART_RXD (23) | STM32 `PA2` (USART2_TX, AF1) | |
 | UART_TXD (22) | STM32 `PA3` (USART2_RX, AF1) | |
 | UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control (on by default in u-connectXpress) |
 | UART_RTS (20) | STM32 `PA0` (USART2_CTS, AF1) | freed by moving RESET_NODES to `PB9` |
 | boot pins 27/32/36 | leave unconnected | internally strapped; pin 36 must not be pulled low |
-| SWITCH_1 (7) / SWITCH_2 (18), UART_TXD/RXD | test points / header | firmware update + UART-default recovery |
-| ANT (13) | leave open (or to GND) | W152 = internal antenna; corner placement, GND under module, ≥10 mm metal keep-out, plastic enclosure only |
+| SWITCH_1 (7), SWITCH_2 (18) | 2 test pads each (or 0 Ω-DNP to GND) | SWITCH_1 low at boot = restore UART defaults; SWITCH_1+2 low = enter serial bootloader. Recovery path if FW/baud is lost |
+| UART_TXD/RXD | header H1 (shared with USART2) | firmware update via AT or bootloader; hold the STM32 in reset (NRST on the Tag-Connect) to drive H1 from a PC adapter |
+| ANT (13) | leave open (or to GND) | W152 = internal antenna. Module in a board corner, antenna edge to the board edge, **no copper on any layer under the antenna keep-out**, ≥10 mm from P1 / RJ45 / electrolytics / the buck node, plastic enclosure only |
 
 **Consequence:** both USARTs are now committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.
+
+**Board-rev review (2026-09-08, `Hardware/Main/*_PCB1_1_2026-09-08`):** pin map and NINA/RT9080 wiring verified correct. Open before fab: (1) confirm the NINA antenna keep-out and clearances above; (2) move ≥10 µF of the NINA bulk to the module's VCC pins; (3) add the SWITCH_1/2 and RESET_N pads above; (4) commit a schematic PDF alongside the layout; (5) confirm the orderable NINA-W152 variant (BOM shows `-04B`; datasheet current production is `-06B`).

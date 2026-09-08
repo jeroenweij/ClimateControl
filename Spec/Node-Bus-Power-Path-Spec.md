@@ -79,7 +79,16 @@ Order from the RJ45: **fuse → TVS → reverse-polarity diode → bulk cap → 
 
 **Alternative if independent gating is wanted:** AP2112K-3.3TRG1 — JLC **C51118**, same footprint class, adds an EN pin (see §5).
 
-**MainController board only — the NINA-W152 does NOT share this rail.** It draws ~120 mA average (Wi-Fi TX, datasheet Table 13) with ~250–350 mA ms-peaks — far past the XC6206's "tens of mA" range, and sagging a shared rail would brown out the MCU. Give the NINA its own 3V3 LDO off the 5 V buck (≥500 mA, in a package that sheds ~0.3–0.5 W — MIC5504 / TLV75533 / AP7361C / RT9080), with a local 22 µF + 10 µF + 100 nF at its VCC pins. Populate on the MainController build, DNP on the TemperatureNode build (mutually exclusive with the 1-Wire front-end).
+### 4.1 Second 3V3 rail — `+3v3 P` (peripheral rail, Main board)
+
+The Main board carries a **second 3.3 V regulator** feeding a separate `+3v3 P` net for the board's heavy / noisy peripheral, keeping it off the MCU's XC6206 rail (whose sag would brown out the MCU):
+
+- **MainController build:** `+3v3 P` powers the NINA-W152 (`VCC` + `VCC_IO`). Wi-Fi TX draws ~120 mA average (datasheet Table 13) with ~250–350 mA ms-peaks — far past the XC6206's "tens of mA" range.
+- **TemperatureNode build:** `+3v3 P` powers the DS18B20 1-Wire front-end (connectors + 4.7 kΩ pull-ups).
+
+**Decided 2026-09-08: the second regulator (`RT9080-33GJ5`) is populated on both build variants** — driving the ~3 mA 1-Wire load with a 600 mA LDO is harmless (no LDO minimum-load issue) and it avoids a DNP `+3v3 ↔ +3v3 P` bridge link. NINA and the 1-Wire front-end are never populated together.
+
+**Part: RT9080-33GJ5** — LCSC `C841192`, TSOT-23-5, ~€0.09. 600 mA (margin over the ~350 mA NINA TX peak), 75 dB PSRR @ 1 kHz (holds ~55 dB to 100 kHz — matters for the RF load), 2 µA Iq, stable with ceramics. Fed from the 5 V buck. Tie `EN` to VIN (always on) → BOM is a 1 µF input cap plus the output bulk. **Output bulk: 22 µF near the LDO + ≥10 µF within a few mm of the NINA `VCC` pins** (the NINA sits in the opposite board corner from the LDO). Runners-up: TLV75533PDBVR (`C404027`, 500 mA, weaker 46 dB@100 kHz PSRR); AP7361C-33E (`C500795`, 1 A SOT-223) only if the enclosure runs hot. Not MIC5504 (`C4134807`) — 300 mA is under the TX peak.
 
 ---
 

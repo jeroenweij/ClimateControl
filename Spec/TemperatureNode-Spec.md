@@ -32,7 +32,7 @@ Mounted in ducting near the outside unit means:
 
 - Likely more thermally extreme / less climate-controlled environment than an indoor `ControllerNode` — sensor and enclosure need a wider operating range than a typical indoor part.
 - Depending on duct material and insertion method, may need a probe-style sensor (inserted through the duct wall) rather than an ambient/board-mounted sensor.
-- Shares the same 48V-in/RJ45 power and RS485 physical layer as every other node on the bus (`Node-Bus-Hardware-Design-Spec.md` §2–§6) — no separate power design needed unless the outdoor/near-duct location demands different ingress protection on the enclosure (not a hardware-spec concern, but worth flagging for the mechanical/enclosure design).
+- Shares the same 48V-in/RJ45 power and RS485 physical layer as every other node on the bus (`Node-Bus-Hardware-Design-Spec.md` §2–§6). It is a **populate variant of the Main board** (shared with `MainController`): the 48 V-injection front-end and the NINA-W152 are DNP, the DS18B20 front-end (§4.1) is populated, and the second `+3v3 P` LDO (RT9080) is populated on both variants (`Node-Bus-Power-Path-Spec.md` §4.1). No separate power design needed unless the near-duct location demands a different enclosure ingress rating (mechanical concern, flagged for that design).
 
 ---
 
@@ -46,36 +46,32 @@ Chosen 2026-09-07: **DS18B20**, 1-Wire, mounted in a stainless probe on a short 
 - −55…+125 °C, ±0.5 °C — covers hot supply air and sub-zero return/outdoor air with margin.
 - A pre-made **waterproof stainless-tube probe** (SS tube + ~0.5 m lead) handles condensation on the cooling side and gives a rugged in-airflow probe. e.g. LCSC `C843306`, or a bare DS18B20 (`C376006`, UMW, TO-92) potted on a pigtail.
 
-### 4.1 On-board front-end (TemperatureNode only — not on the shared "Base" sheet)
+### 4.1 On-board front-end (TemperatureNode populate variant of the Main board)
 
-The probes are off-board cable assemblies; the PCB adds a connector per probe, one pull-up, and light protection.
+The probes are off-board cable assemblies. As built (`Hardware/Main/*_PCB1_1_2026-09-08`), each probe gets its **own single-drop 1-Wire line** rather than sharing one bus — costs a second GPIO + pull-up, buys simpler firmware (one device per line, no ROM search, Skip-ROM reads).
 
-| Ref | Part | Purpose |
+| Ref (board) | Part | Purpose |
 |---|---|---|
-| J_T1, J_T2 | 3-pos 3.5 mm screw terminal (e.g. KF128-3.5-3P), one per probe | land the bare probe leads with a screwdriver |
-| R_1W | 4.7 kΩ, 0402 | DQ → 3V3 pull-up — **one**, for the whole bus |
-| C_1W | 100 nF, 0402 | probe VDD → GND, at the connectors |
-| R_ser *(optional)* | 100 Ω, 0402 | in the DQ line between the MCU pin and the connector node — MCU-pin protection |
-| D_1W *(optional)* | single-line ESD diode to GND (e.g. PESD3V3L1BA) | DQ leaves the enclosure |
+| U5, U12 | 3-pos 5.0 mm screw terminal (BX-DG01V-5.0-3P5), one per probe | land the bare probe leads |
+| R10, R15 | 4.7 kΩ, 0402 | DQ → `+3v3 P` pull-up — **one per line** |
+| R16, R17 | 100 Ω, 0402 | series in each DQ line, MCU-pin ↔ connector — pin protection |
+| D7, D8 | PESD3V3L1BA single-line ESD diode to GND | DQ leaves the enclosure |
 
 ```
- +3V3 ──┬── R_1W (4.7k) ──┐
-        │                 │
-        │        ┌────────●── ONEWIRE_BUS ──┬── J_T1 pin 2 (DATA)
- PA0 ──[R_ser]───┘                          ├── J_T2 pin 2 (DATA)
-        │                                   └── D_1W ─┴─ GND   (optional)
- C_1W (100n) ─┴─ GND
+ +3v3 P ──┬── R10 (4.7k) ──┐                 +3v3 P ──┬── R15 (4.7k) ──┐
+          │                │                          │                │
+ PA5 ──[R16 100R]──────────●── ONEWIRE ── U5-2         PA4 ──[R17 100R]─●── ONEWIRE2 ── U12-2
+                           └── D7 ─┴─ GND                               └── D8 ─┴─ GND
 
- +3V3 ── J_T1 pin 1,  J_T2 pin 1        (VDD — DS18B20 runs at 3.3 V, NOT 5 V)
- GND  ── J_T1 pin 3,  J_T2 pin 3
+ +3v3 P ── U5-1, U12-1     (probe VDD — DS18B20 at 3.3 V, NOT 5 V)
+ GND    ── U5-3, U12-3
 ```
 
-- Both connectors sit **in parallel on one bus**; the probes are told apart by ROM ID.
-- Pull-up + ESD diode go on the connector side of R_ser; R_ser between there and the MCU pin.
-- **DQ pin: PA0** (pin 7) — free on the TemperatureNode (no servo). USART2 (PA2/PA3) stays for the debug header, so this is a plain GPIO bit-bang, not the USART-1-Wire trick.
-- Twisted/shielded lead not needed at these lengths; keep the pull-up at the board end.
+- **DQ pins: PA5 (`Board::OneWire1`, pin 12) and PA4 (`Board::OneWire2`, pin 11).** Plain GPIO bit-bang, pin as open-drain (drive low / release, the 4.7 kΩ pulls high). *(Not PA0 — that is now the NINA `USART2_CTS` on the MainController variant of this shared board.)*
+- Probe VDD comes from **`+3v3 P`** (the RT9080 peripheral rail, always populated — `Node-Bus-Power-Path-Spec.md` §4.1), not the MCU's XC6206 rail.
+- Pull-up + ESD diode on the connector side of the 100 Ω series R.
 
-**Firmware:** 1-Wire bit-bang on PA0, pin as open-drain (drive low / release, R_1W pulls high), timing-critical slots with interrupts briefly masked — ~1–2 KB. Enumerate ROM IDs at startup; map them to "incoming"/"outgoing" by stored config or a one-time labelled reading. DS18B20's native `int16` in 1/16 °C is a clean bus value format.
+**Firmware:** 1-Wire bit-bang on PA4 and PA5 independently, open-drain, timing-critical slots with interrupts briefly masked — ~1–2 KB. One device per line → Skip-ROM `CONVERT`/`READ SCRATCHPAD`, no ROM search; the "incoming"/"outgoing" mapping is just which connector (PA5 = incoming, PA4 = outgoing, or per stored config). DS18B20's native `int16` in 1/16 °C is a clean bus value format.
 
 ### 4.2 Probe selection checklist
 
@@ -93,7 +89,7 @@ Any pre-made "DS18B20 waterproof stainless probe" (SS tube ~6×50 mm, 3-wire, 0.
 
 ## 5. Open items — need your input before finalizing
 
-1. **Number of probes / lead length** — confirmed at least two (incoming + outgoing) on one 1-Wire bus. How long is each lead, and does the node PCB sit right at the duct wall or is it a longer run? (1-Wire tolerates several metres; just size the pull-up down toward ~2.2 kΩ if leads get long.)
+1. **Number of probes / lead length** — two (incoming + outgoing), each on its own single-drop 1-Wire line (§4.1). How long is each lead, and does the node PCB sit right at the duct wall or is it a longer run? (1-Wire tolerates several metres; size the per-line pull-up down toward ~2.2 kΩ if leads get long.)
 2. **Value encoding on the bus** — the protocol spec leaves `DATA` interpretation "per `OPERATION`/`CHANNEL` convention, not enforced by the frame" (protocol spec §3). Needs a concrete decision here: e.g. `int16` in units of 0.1 °C, signed to allow sub-zero outdoor readings. (The DS18B20 native format is `int16` in 1/16 °C — a clean fit.)
 3. **Update/report rate** — how often does a temperature reading need to change the bus state? (Duct air temperature changes slowly compared to, say, a digital input — the existing debounce-on-change pattern may need a minimum report interval added on top, not just change-detection, so `MainController` doesn't conclude the node is dead during a long stretch of unchanged readings — though note the heartbeat/poll cycle already covers liveness independent of value changes.)
 4. **Enclosure ingress rating** — the near-outdoor-unit location may need a sealed/IP-rated enclosure; not a hardware-spec concern but flag it for the mechanical design.
