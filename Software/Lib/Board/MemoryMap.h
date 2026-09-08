@@ -38,4 +38,9 @@ namespace Board
         constexpr uint32_t ConfigReservedBase = 0x0800F800;
         constexpr uint32_t ConfigReservedSize = 2 * 1024;
     } // namespace Flash
+
+    // Written to Hal::Backup::Reg::Boot by a running app to ask the bootloader to
+    // stay resident after the next warm reset (Node-Flash-Layout-and-Bootloader-
+    // Spec.md §5). Bootloader consumes and clears it.
+    constexpr uint32_t EnterBootloaderMagic = 0xB007C0DE;
 } // namespace Board

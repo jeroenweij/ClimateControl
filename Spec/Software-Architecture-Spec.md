@@ -33,15 +33,17 @@ ClimateControl/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
     │   ├── Board/              # BoardPins.h + MemoryMap.h — single source of truth for the STM32G031F8P6 pin map (all 3 board types, per Node-Bus-Hardware-Design-Spec.md §6.2) and flash partition map (Node-Flash-Layout-and-Bootloader-Spec.md §3). Header-only INTERFACE lib, depends on HAL for Hal::Pin
     │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger (UART + Diagnostics log-ring sink) — shared helpers, MCU-agnostic
+    │   ├── Startup/            # shared startup_stm32g031xx.s + syscalls.c (OBJECT lib "Startup", linked into every image)
     │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore (factory node identity) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args). Message model: Node-Message-Model-Spec.md
     └── Modules/
-        ├── MainController/     # firmware image: RS485 bus master
-        ├── ControllerNode/     # firmware image: damper/servo slave node + ControllerNode<->Thermostat link (master side)
-        ├── TemperatureNode/    # firmware image: duct temperature slave node
-        └── Thermostat/         # firmware image: room UI, paired to one ControllerNode
+        ├── Bootloader/         # firmware image: bus-resident OTA bootloader, one binary for all boards (base skeleton exists — Node-Flash-Layout-and-Bootloader-Spec.md)
+        ├── MainController/     # firmware image: RS485 bus master (base skeleton exists)
+        ├── ControllerNode/     # firmware image: damper/servo slave node + ControllerNode<->Thermostat link (master side) — not built yet
+        ├── TemperatureNode/    # firmware image: duct temperature slave node — not built yet
+        └── Thermostat/         # firmware image: room UI, paired to one ControllerNode — not built yet
 ```
 
-Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/node` and `rollercoaster` itself each produce one executable from a shared `NodeLib`/`libtools`). `Lib/NodeLib` and `Lib/HAL` are static libraries linked into whichever modules need them.
+Each `Modules/*` directory builds its own `.elf` via `add_stm32_executable()` (`cmake/stm32.cmake`) — linked against a per-module `.ld`, the shared `Startup` object, and whichever `Lib/*` static libs it needs — with post-build `.bin`/`.hex`/size and a `flash-<name>` J-Link target.
 
 **Resolved:** `Software/Lib/Tools/` now exists — `DelayTimer` re-implemented on `HAL_GetTick()` instead of `millis()`, plus a `Logger` for a debug UART. Since `arm-none-eabi-gcc` ships a real C++ standard library (unlike the AVR toolchain), `Logger` can use real `<sstream>`/`std::string` directly instead of the old hand-rolled `SStream` shim — still worth watching against the STM32G031's 8 KB SRAM budget (unchanged from the G030), since `std::stringstream` is not free.
 
@@ -55,9 +57,9 @@ Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/nod
 | Build system | CMake, one `CMakeLists.txt` per `Modules/*` producing a `.elf`, plus a top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` — same shape as `rollercoaster/CMakeLists.txt` → `src/CMakeLists.txt` → `NodeLib`/`libtools`, just swapping the AVR toolchain file for an ARM Cortex-M0+ one. Configure from `Software/` (`cmake -S Software -B build`) |
 | Low-level driver layer | STM32Cube HAL/LL (ST's official driver library), wrapped by `Lib/HAL` so `NodeLib`/`Modules` code never includes ST headers directly |
 | MCU target | STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) for all four boards — locked in 2026-09-08. Drop-in for the earlier STM32G030F6P6TR (same pinout/core/RAM); +32 KB flash for a bus-resident DFU bootloader + the NINA driver, plus LPUART1 / RTC+backup-registers / TIM2. HAL device define `STM32G031xx`. |
-| Flashing | SEGGER J-Link. A CMake custom target (e.g. `flash`) per module shells out to `JLinkExe` with a generated commander script — same shape as the old `flashNode.sh`, adapted for J-Link instead of `avrdude`/`make burnWithEeprom`. **Note: `JLinkExe`/`JLinkGDBServer` are not currently installed on this machine — you'll need the J-Link Software Pack installed before the flash target can actually run.** |
+| Flashing | SEGGER J-Link. `add_stm32_executable()` adds a `flash-<name>` target per module that generates a commander script (`cmake/gen_jlink_script.cmake`) and runs `JLinkExe -device STM32G031F8`. **Note: `JLinkExe` is not installed on this machine — the target configures but won't run until the J-Link Software Pack is installed.** |
 
-**Resolved:** the STM32 CMake toolchain file was written from scratch (no precedent in `~/git` — `ArduinoToolchain.cmake` is AVR-specific) and lives at `Software/cmake/arm-none-eabi-cortex-m0plus.cmake` (target triple, `-mcpu=cortex-m0plus -mthumb`). Linker script / startup file wiring per module still to come.
+**Resolved:** the STM32 CMake toolchain file (`Software/cmake/arm-none-eabi-cortex-m0plus.cmake`, `-mcpu=cortex-m0plus -mthumb`, newlib-nano + `nosys`, `-fno-exceptions/-fno-rtti`). Startup + linker wiring done: shared `Lib/Startup/startup_stm32g031xx.s` + `syscalls.c`, per-module `.ld` scripts, and `cmake/stm32.cmake` (`add_stm32_executable()` → `.elf` + `.bin`/`.hex` + `--print-memory-usage` + `flash-<name>`). `Bootloader` and `MainController` build today (~5.3 KB / ~17.6 KB flash).
 
 ---
 

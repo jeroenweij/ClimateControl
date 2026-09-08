@@ -12,21 +12,23 @@ ClimateControl/
 ├── Hardware/                # PCB/schematic sources
 └── Software/
     ├── .clang-format       # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
-    ├── CMakeLists.txt      # top-level CMake project — aggregates Lib/* (and Modules/* once they exist)
-    ├── cmake/              # ARM Cortex-M0+ toolchain file
+    ├── CMakeLists.txt      # top-level CMake project — aggregates Lib/* and Modules/*
+    ├── cmake/              # ARM Cortex-M0+ toolchain file + stm32.cmake (add_stm32_executable)
     ├── Lib/
     │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL — the only place ST driver headers get included
-    │   ├── Board/           # BoardPins.h — single source of truth for the STM32G030 pin map (header-only)
+    │   ├── Board/           # BoardPins.h (pin map) + MemoryMap.h / ImageDescriptor.h (flash layout) — header-only
     │   ├── Tools/           # DelayTimer + Logger — shared helpers
-    │   └── NodeLib/          # RS485 v2 protocol library (Node/NodeMaster/Id/Message/ChannelId/Operation)
+    │   ├── Startup/         # shared startup_stm32g031xx.s + syscalls.c
+    │   └── NodeLib/          # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore
     └── Modules/
-        ├── MainController/   # RS485 bus master
-        ├── ControllerNode/   # damper/servo slave node + ControllerNode<->Thermostat link
-        ├── TemperatureNode/  # duct temperature slave node
-        └── Thermostat/       # room UI, paired 1:1 to one ControllerNode
+        ├── Bootloader/       # bus-resident OTA bootloader — one binary for all boards (base skeleton)
+        ├── MainController/   # RS485 bus master (base skeleton)
+        ├── ControllerNode/   # damper/servo slave node + ControllerNode<->Thermostat link — not built yet
+        ├── TemperatureNode/  # duct temperature slave node — not built yet
+        └── Thermostat/       # room UI, paired 1:1 to one ControllerNode — not built yet
 ```
 
-Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Modules/*` don't exist yet.
+Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Bootloader` + `MainController` build today (`make -C Software build`); the three slave modules are still empty. The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
 
 ## System architecture
 
@@ -58,7 +60,7 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 ## Build & toolchain
 
 - **Compiler:** `arm-none-eabi-gcc` (installed on this machine).
-- **Build system:** CMake — one `CMakeLists.txt` per `Modules/*` producing a `.elf`, top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` (toolchain file in `Software/cmake/`). No STM32 CMake toolchain file exists yet in any sibling repo; it needs to be written from scratch (target triple `-mcpu=cortex-m0plus -mthumb`, linker script, startup file).
+- **Build system:** CMake — `add_stm32_executable()` (`Software/cmake/stm32.cmake`) builds each `Modules/*` into a `.elf` (+ `.bin`/`.hex`/size + `flash-<name>`), top-level `Software/CMakeLists.txt` aggregates `Lib/*` and `Modules/*`. Toolchain `Software/cmake/arm-none-eabi-cortex-m0plus.cmake` (`-mcpu=cortex-m0plus -mthumb`, newlib-nano). Shared startup + per-module `.ld` are in place. `make -C Software build`.
 - **Driver layer:** STM32Cube HAL/LL, wrapped by `Lib/HAL` — protocol and application code never includes ST headers directly.
 - **MCU:** STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) — locked in 2026-09-08 for all four boards (MainController, ControllerNode, TemperatureNode, Thermostat). Drop-in replacement for the earlier STM32G030F6P6TR: identical pinout, +32 KB flash (bus-resident DFU bootloader + NINA driver headroom), plus LPUART1 / RTC+backup-registers / TIM2. HAL device define is `STM32G031xx`.
 - **Flashing:** SEGGER J-Link — a CMake custom target per module shells out to `JLinkExe` with a generated commander script. **`JLinkExe`/`JLinkGDBServer` are not yet installed on this machine** — install the J-Link Software Pack before the flash target will run.

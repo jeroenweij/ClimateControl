@@ -12,6 +12,8 @@ add_library(Hal STATIC
     Tick.cpp
     System.h
     System.cpp
+    Backup.h
+    Backup.cpp
 
     ${VENDOR_DIR}/CMSIS/Device/ST/STM32G0xx/Source/Templates/system_stm32g0xx.c
 

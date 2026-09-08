@@ -133,7 +133,7 @@ Bootloader entry (0x08000000)
 
 ### 6.1 What the bootloader implements
 
-A hand-written minimal slave loop — **framing layer only**, no `NodeMaster`, no `std::stringstream` `Logger` (too big for 8 KB):
+Only entered when `ConfigStore::Valid()` (a provisioned node — see §7). A hand-written minimal slave loop — **framing layer only**, no `NodeMaster`, no `std::stringstream` `Logger` (too big for 8 KB):
 
 - Reads its bus address from `ConfigStore` (§6.3) — same `NodeId` the app uses, so addressing is stable across the app↔bootloader transition.
 - Responds to `Discover` with `Announce` (so the master sees it and knows it is in the bootloader).
@@ -216,6 +216,16 @@ class ConfigStore
 
 ## 7. Per-board notes
 
+**One bootloader binary, all four boards** (confirmed 2026-09-08). The master and the nodes are updated by different mechanisms, but that does **not** split the bootloader — it branches at runtime on `ConfigStore::Valid()`:
+
+| bootloader is running on | `ConfigStore::Valid()` | stay-resident behaviour |
+|---|---|---|
+| a provisioned `ControllerNode` / `TemperatureNode` | true (has a `NodeId`) | run the RS485 OTA slave loop (§6), addressed at `ConfigStore::NodeId()` |
+| `MainController` | false — the master has no node identity, so no `ConfigRecord` is written for it | passive wait; it updates itself app-assisted over NINA (§7.1), recovery is SWD |
+| an unprovisioned node | false | passive wait; needs the bench (can't do addressed OTA without an address) |
+
+The same check that decides *"can I be a bus node"* decides *"can I receive OTA over the bus"* — no board-specific code, no compile switch. `main.cpp` is identical on every unit; only the factory `ConfigRecord` (or its absence, on the master) differs. Base skeleton implements this branch today; the RS485 slave loop itself is still stubbed.
+
 | Board | OTA path |
 |---|---|
 | `ControllerNode`, `TemperatureNode` | Main bus, exactly as §6. |
@@ -243,16 +253,17 @@ The RAM-resident flash helper lives in `Lib/HAL/Flash` as a `.RamFunc` variant a
 2. **MainController Wi-Fi image source (§7.1 step 1)** — MQTT / HTTP GET / push from its own backend? Belongs in `MainController-Spec.md` §4 item 1, flagged here because it shapes the app-side updater.
 3. **OTA baud rate** — run the transfer at 115200 (bus default) or negotiate up (250k–1M, `RS485-Node-Protocol-Spec-STM32G030.md` §9 item 2) for the duration of an update? A 10–20 s update at 115200 is already tolerable — leaning "leave it at 115200".
 4. **Boot-fail counter** (§5) — include the watchdog-style "app resets N times without going healthy → stay in bootloader" fallback in v1, or leave it out? Adds one backup register and a bit of app-side "I'm healthy" bookkeeping.
-5. **Bootloader size** — 8 KB (4 pages) reserved. Confirm once it builds; if it comes in well under we *could* hand a page back to the app, but page alignment makes 8 KB the clean number and the flash isn't tight.
+5. **Bootloader size** — 8 KB reserved; the base skeleton (boot decision + validate + jump, no OTA loop yet) links at **~5.3 KB**, so there is headroom for the NodeLib-framing slave loop. Confirm again once that lands.
 6. **Flash RDP level 1** in production (blocks SWD image readout; reversible only via full mass-erase)? Default: no — revisit only if the image is considered sensitive.
-7. **New module / lib layout** this implies:
-    - ✅ `Lib/Board/MemoryMap.h` (partition constants) — done 2026-09-08
-    - ✅ `Lib/NodeLib/ConfigStore.{h,cpp}` (read-only identity accessor) + `Node` wiring — done 2026-09-08
-    - `Modules/Bootloader/` (one `.elf`, linked `0x0800_0000`, shared by all boards) + `bootloader.ld`
-    - `Lib/HAL/Flash.{h,cpp}` (erase/program wrapper over `HAL_FLASHEx_Erase` / `HAL_FLASH_Program`, plus a `.RamFunc` variant for §7.1) and a CRC32 entry point on `Hal::Crc`
-    - `Lib/NodeLib` split into a framing sub-lib + the bus layer (`Software-Architecture-Spec.md` §1 already wants this) — so the bootloader links the framer without `Node`/`NodeMaster`
-    - per-app linker scripts with `FLASH ORIGIN = 0x0800_2000, LENGTH = 52K`
-    - `startup_stm32g031xx.s` + G031 linker script still need adding (noted in `Software-Architecture-Spec.md` §3 as outstanding regardless)
+7. **New module / lib layout** — mostly built 2026-09-08:
+    - ✅ `Lib/Board/MemoryMap.h` (partition constants) + `Board::EnterBootloaderMagic`
+    - ✅ `Lib/Board/ImageDescriptor.h` — the §4 descriptor + `CC_IMAGE_DESCRIPTOR(...)` macro
+    - ✅ `Lib/NodeLib/ConfigStore.{h,cpp}` (read-only identity accessor) + `Node` wiring
+    - ✅ `Lib/HAL/Backup.{h,cpp}` (TAMP backup registers), `Hal::System::SetVectorTable` / `JumpToApplication`, `Hal::Crc::Poly::Ieee32` + `Compute32`
+    - ✅ `Lib/Startup/` — shared `startup_stm32g031xx.s` + `syscalls.c`; `Modules/*/*.ld` (bootloader 8 KB @ `0x0800_0000`, app 52 KB @ `0x0800_2000` with the descriptor at `0xC0`); `cmake/stm32.cmake` `add_stm32_executable()` (elf→bin/hex, size, `flash-<name>` J-Link target)
+    - ✅ `Modules/Bootloader/` — base skeleton (`main.cpp` + `AppImage.{h,cpp}`); ✅ `Modules/MainController/` — base firmware (`main.cpp` runs `NodeMaster`, `ImageInfo.cpp` embeds the descriptor)
+    - **still to build:** `Lib/HAL/Flash.{h,cpp}` (erase/program, `.RamFunc` variant for §7.1); the `Lib/NodeLib` framing/bus split so the bootloader can link the framer without `Node`/`NodeMaster`; the bootloader's OTA slave loop (§6); the post-build image-finalize step (patch `imageSize` + append CRC32 + set `FlagCrcPresent`)
+8. **Image-descriptor CRC gating** — the base accepts an app on `magic` alone when `FlagCrcPresent` is clear (raw SWD-flashed dev image). Confirm that's the right default, and that the finalize step (which sets the flag) is only ever run for OTA-distributed images.
 
 ---
 
