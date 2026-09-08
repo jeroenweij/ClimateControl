@@ -31,7 +31,7 @@ ClimateControl/
     ├── cmake/                 # ARM Cortex-M0+ toolchain file (arm-none-eabi-cortex-m0plus.cmake)
     ├── Lib/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
-    │   ├── Board/              # BoardPins.h — single source of truth for the STM32G030 pin map, per Node-Bus-Hardware-Design-Spec.md §6.2 (header-only INTERFACE lib, depends on HAL for Hal::Pin)
+    │   ├── Board/              # BoardPins.h — single source of truth for the STM32G031F8P6 pin map (all 3 board types), per Node-Bus-Hardware-Design-Spec.md §6.2 (header-only INTERFACE lib, depends on HAL for Hal::Pin)
     │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger — shared helpers, MCU-agnostic
     │   └── NodeLib/            # ported RS485 v2 protocol (Node/NodeMaster/Id/Message/ChannelId/Operation) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args)
     └── Modules/
@@ -43,7 +43,7 @@ ClimateControl/
 
 Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/node` and `rollercoaster` itself each produce one executable from a shared `NodeLib`/`libtools`). `Lib/NodeLib` and `Lib/HAL` are static libraries linked into whichever modules need them.
 
-**Resolved:** `Software/Lib/Tools/` now exists — `DelayTimer` re-implemented on `HAL_GetTick()` instead of `millis()`, plus a `Logger` for a debug UART. Since `arm-none-eabi-gcc` ships a real C++ standard library (unlike the AVR toolchain), `Logger` can use real `<sstream>`/`std::string` directly instead of the old hand-rolled `SStream` shim — still worth watching against the STM32G030's 8 KB SRAM budget, since `std::stringstream` is not free.
+**Resolved:** `Software/Lib/Tools/` now exists — `DelayTimer` re-implemented on `HAL_GetTick()` instead of `millis()`, plus a `Logger` for a debug UART. Since `arm-none-eabi-gcc` ships a real C++ standard library (unlike the AVR toolchain), `Logger` can use real `<sstream>`/`std::string` directly instead of the old hand-rolled `SStream` shim — still worth watching against the STM32G031's 8 KB SRAM budget (unchanged from the G030), since `std::stringstream` is not free.
 
 ---
 
@@ -54,7 +54,7 @@ Each `Modules/*` directory builds its own `.elf` (mirrors how `rollercoaster/nod
 | Compiler | `arm-none-eabi-gcc` (already installed on this machine, confirmed) |
 | Build system | CMake, one `CMakeLists.txt` per `Modules/*` producing a `.elf`, plus a top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` — same shape as `rollercoaster/CMakeLists.txt` → `src/CMakeLists.txt` → `NodeLib`/`libtools`, just swapping the AVR toolchain file for an ARM Cortex-M0+ one. Configure from `Software/` (`cmake -S Software -B build`) |
 | Low-level driver layer | STM32Cube HAL/LL (ST's official driver library), wrapped by `Lib/HAL` so `NodeLib`/`Modules` code never includes ST headers directly |
-| MCU target | STM32G030F6P6TR (Cortex-M0+, 32 KB flash / 8 KB SRAM) for the main-bus nodes and, per your confirmation, `MainController` too |
+| MCU target | STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) for all four boards — locked in 2026-09-08. Drop-in for the earlier STM32G030F6P6TR (same pinout/core/RAM); +32 KB flash for a bus-resident DFU bootloader + the NINA driver, plus LPUART1 / RTC+backup-registers / TIM2. HAL device define `STM32G031xx`. |
 | Flashing | SEGGER J-Link. A CMake custom target (e.g. `flash`) per module shells out to `JLinkExe` with a generated commander script — same shape as the old `flashNode.sh`, adapted for J-Link instead of `avrdude`/`make burnWithEeprom`. **Note: `JLinkExe`/`JLinkGDBServer` are not currently installed on this machine — you'll need the J-Link Software Pack installed before the flash target can actually run.** |
 
 **Resolved:** the STM32 CMake toolchain file was written from scratch (no precedent in `~/git` — `ArduinoToolchain.cmake` is AVR-specific) and lives at `Software/cmake/arm-none-eabi-cortex-m0plus.cmake` (target triple, `-mcpu=cortex-m0plus -mthumb`). Linker script / startup file wiring per module still to come.

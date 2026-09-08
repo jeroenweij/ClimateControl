@@ -36,6 +36,6 @@ target_include_directories(Hal PUBLIC
 )
 
 target_compile_definitions(Hal PUBLIC
-    STM32G030xx
+    STM32G031xx
     USE_HAL_DRIVER
 )

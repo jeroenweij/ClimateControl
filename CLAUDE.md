@@ -60,7 +60,7 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 - **Compiler:** `arm-none-eabi-gcc` (installed on this machine).
 - **Build system:** CMake — one `CMakeLists.txt` per `Modules/*` producing a `.elf`, top-level `Software/CMakeLists.txt` aggregating `Lib/*` and `Modules/*` (toolchain file in `Software/cmake/`). No STM32 CMake toolchain file exists yet in any sibling repo; it needs to be written from scratch (target triple `-mcpu=cortex-m0plus -mthumb`, linker script, startup file).
 - **Driver layer:** STM32Cube HAL/LL, wrapped by `Lib/HAL` — protocol and application code never includes ST headers directly.
-- **MCU:** STM32G030F6P6TR (Cortex-M0+, 32 KB flash / 8 KB SRAM) for the main-bus nodes and (pending final confirmation) `MainController`.
+- **MCU:** STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) — locked in 2026-09-08 for all four boards (MainController, ControllerNode, TemperatureNode, Thermostat). Drop-in replacement for the earlier STM32G030F6P6TR: identical pinout, +32 KB flash (bus-resident DFU bootloader + NINA driver headroom), plus LPUART1 / RTC+backup-registers / TIM2. HAL device define is `STM32G031xx`.
 - **Flashing:** SEGGER J-Link — a CMake custom target per module shells out to `JLinkExe` with a generated commander script. **`JLinkExe`/`JLinkGDBServer` are not yet installed on this machine** — install the J-Link Software Pack before the flash target will run.
 
 ## Specs index
@@ -71,6 +71,6 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `Node-Bus-Hardware-Design-Spec.md` | Main bus physical layer (48V PoE-class power, RJ45 pinout, connector part) + node core schematic (§6: MCU support, transceiver, LEDs, buttons, pin plan) |
 | `Node-Bus-Power-Path-Spec.md` | Per-node 48V→5V→3.3V regulation chain |
 | `Software-Architecture-Spec.md` | Module map, directory layout, build/toolchain, code style |
-| `MainController-Spec.md` | Bus-master role + 48V power input / bus injection (§3); outward-facing responsibilities still open |
+| `MainController-Spec.md` | Bus-master role + 48V power input / bus injection (§3); NINA-W152 Wi-Fi connectivity (§5); what it does with the data still open |
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |

@@ -1,6 +1,6 @@
 # MainController — Design Spec
 
-**Status:** Draft — bus-master role confirmed 2026-09-06; power input defined (§3); outward-facing responsibilities are open (see §4)
+**Status:** Draft — bus-master role confirmed 2026-09-06; power input defined (§3); internet connectivity = NINA-W152 (§5, 2026-09-08); what it does with the data still open (see §4)
 **Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol this module implements as master), `Node-Bus-Hardware-Design-Spec.md` §6 (shared node core schematic this board reuses), `Node-Bus-Power-Path-Spec.md` §4 (both-ends feed decision), `Software-Architecture-Spec.md` (module map)
 
 ---
@@ -52,8 +52,31 @@ Order fuse (T4 A ceramic 5×20, both-ends feed): ESKA 522.523 — <https://www.a
 
 ## 4. Open items — need your input before finalizing
 
-1. **User/network interface.** Nothing in the Specs so far describes how a person or another system observes or configures `MainController` — no display, buttons, Ethernet/Wi-Fi, serial console, or home-automation integration (e.g. MQTT, Home Assistant) has been mentioned. If there is one, it drives peripheral choices (does the STM32G030's 32 KB flash / 8 KB SRAM even fit a network stack, or does this need a bigger part / a companion SBC?).
+1. **User/network interface.** *Partially resolved 2026-09-08:* internet connectivity is a **u-blox NINA-W152** (Wi-Fi + BT, internal antenna) on USART2, running u-connectXpress AT firmware — the TCP/IP + TLS stack lives on the module, so the STM32 only needs a UART. Minimal connections and the power/flow-control decisions are in §5 (below). Still open: what the MainController *does* with that connectivity (MQTT? local REST? Home Assistant?) and whether there is also a local display/buttons.
 2. **Control loop ownership.** Per §2 above: does `MainController` make any climate-control decisions itself, or is it purely a bus master + data logger while each `ControllerNode`/`Thermostat` pair handles its own room's control loop locally?
 3. **Feed topology (§3):** two PSUs (one per bus end) or one PSU at the master feeding both ends via a return cable? Decides the master fuse rating (T4 A vs T6.3 A) and the +48 V copper sizing.
 4. **Persistence.** Does `MainController` need to remember anything across power cycles (schedules, setpoints, node roster) — and if so, where (internal flash, external EEPROM/flash chip)?
-5. **Same MCU as slave nodes, confirmed** — but does `MainController` need more flash/RAM than the 32 KB/8 KB STM32G030F6P6TR once its actual responsibilities (§1–4) are known? Flagging now since the answer to #1 will likely force this decision.
+5. **Same MCU as slave nodes — resolved 2026-09-08: STM32G031F8P6** (64 KB flash / 8 KB SRAM, drop-in for the STM32G030F6P6TR). The +32 KB flash covers a bus-resident DFU bootloader plus the NINA AT-driver; RAM is unchanged at 8 KB, so the §7 memory discipline in `RS485-Node-Protocol-Spec-STM32G030.md` still applies. Footprint also fits STM32G031F6P6 (32 KB) as a cost-down fallback for the slave nodes.
+
+---
+
+## 5. Internet connectivity — NINA-W152 (decided 2026-09-08)
+
+u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, running the pre-flashed **u-connectXpress AT firmware** — TCP/IP + TLS run on the module, the STM32 only drives a UART at 115200 8N1.
+
+**Minimal connections:**
+
+| NINA pin | To | Notes |
+|---|---|---|
+| VCC (10) + VCC_IO (9) | dedicated 3V3 LDO | own regulator off the 5 V buck — see `Node-Bus-Power-Path-Spec.md` §4. ~120 mA avg / ~350 mA peak; 22 µF + 10 µF + 100 nF local |
+| GND + centre pad | solid ground pour | |
+| RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull |
+| UART_RXD (23) | STM32 `PA2` (USART2_TX, AF1) | |
+| UART_TXD (22) | STM32 `PA3` (USART2_RX, AF1) | |
+| UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control (on by default in u-connectXpress) |
+| UART_RTS (20) | STM32 `PA0` (USART2_CTS, AF1) | freed by moving RESET_NODES to `PB9` |
+| boot pins 27/32/36 | leave unconnected | internally strapped; pin 36 must not be pulled low |
+| SWITCH_1 (7) / SWITCH_2 (18), UART_TXD/RXD | test points / header | firmware update + UART-default recovery |
+| ANT (13) | leave open (or to GND) | W152 = internal antenna; corner placement, GND under module, ≥10 mm metal keep-out, plastic enclosure only |
+
+**Consequence:** both USARTs are now committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.

@@ -1,5 +1,5 @@
 # Node Bus — Hardware Design Spec
-### Power, connector, and node-schematic decisions for the STM32G030F6P6 RS485 node network
+### Power, connector, and node-schematic decisions for the STM32G031F8P6 RS485 node network
 
 **Status:** Draft — decisions locked from design discussion, pending your final servo current numbers and cable-run distances (see §7)
 **Companion doc:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol / framing / CRC — this doc is physical layer only)
@@ -128,11 +128,13 @@ Alternative that was on the shortlist alongside it: RCH RC01186 (JLCPCB C708619)
 
 ---
 
-## 6. Node core schematic — STM32G030F6P6, transceiver, indicators
+## 6. Node core schematic — STM32G031F8P6, transceiver, indicators
 
 This section is the reusable node front-end: MCU support parts, the RS-485 transceiver, status LEDs, and the reset/user buttons. Application-specific pins (servo PWM, sensor front-ends, the `ControllerNode`↔`Thermostat` link) are left to the module specs.
 
-### 6.1 STM32G030F6P6 support components
+**MCU locked in 2026-09-08: STM32G031F8P6.** Drop-in for the earlier STM32G030F6P6 — identical TSSOP20 pinout, same 64 MHz Cortex-M0+ / 8 KB SRAM, wider 1.7–3.6 V range. Gains: 64 KB flash (was 32 KB — room for a bus-resident DFU bootloader + the MainController's NINA-W152 driver), `LPUART1`, `RTC` + backup registers (a wear-free "enter bootloader" flag, and an optional wall-clock if an LSE crystal is fitted), `TIM2` (32-bit), 7 DMA channels. No board/layout change; schematic symbol + BOM line + HAL device define (`STM32G031xx`) + the future linker script (64 KB flash, G031 vector table) are the only follow-ups. Footprint stays compatible with STM32G031F6P6 (32 KB) as a cost-down fallback.
+
+### 6.1 STM32G031F8P6 support components
 
 TSSOP20: a **single combined `VDD/VDDA` pin (4)** and **single `VSS/VSSA` (5)** — no separate analog supply, no `VREF+` pin (ADC reference is `VDD` directly).
 
@@ -142,7 +144,7 @@ TSSOP20: a **single combined `VDD/VDDA` pin (4)** and **single `VSS/VSSA` (5)** 
 | ADC reference | (none — it's `VDD`) | Matters for `TemperatureNode` if NTC-into-ADC is chosen: LDO ripple sets the temperature noise floor. Consider AP2112 (`C51118`) over XC6206 there. |
 | `NRST` (pin 6) | 100 nF to GND + reset button (§6.4) | Internal ~40 kΩ pull-up present — no external pull-up. |
 | `BOOT0` | nothing | Shares the `PA14`/SWCLK pad. Factory `nBOOT_SEL = 1` → boot source is the option byte, pad free as SWCLK, boots from flash. Leave default (SWD flashing means no UART-bootloader strap is needed). |
-| Clock | **HSI16 only** | HSI16 is ±0.75 % trimmed, ±1 %/0–85 °C, ±2 % at −40 °C — fine for 115200 and up to ~250–460 k node-to-node. No HSE pins are bonded on TSSOP20 unless a crystal is routed onto `PC14/PC15` (pins 2/3), which costs `PB9` + `PC15` as GPIO. Footprint an 8 MHz crystal there **DNP**, populate only if the bus is later committed to ≥1 Mbit. |
+| Clock | **HSI16 only** | HSI16 is ±0.75 % trimmed, ±1 %/0–85 °C, ±2 % at −40 °C — fine for 115200 and up to ~250–460 k node-to-node. Pins 2/3 (`PB9/PC14-OSC32_IN`, `PC15-OSC32_OUT`) can instead take a **32.768 kHz LSE crystal** for the G031 RTC (wall-clock for MainController schedules). On the MainController board `PB9` is the bus-disable output (`RESET_NODES`), so LSE there would need it relocated; on Node/Thermostat boards pins 2/3 are free. Footprint LSE **DNP** on all boards for now. |
 | SWD | 5-pin header: `3V3` (Vtref), `SWDIO`=PA13 (18), `SWCLK`=PA14 (19), `NRST` (6), `GND` | No caps on SWDIO/SWCLK. Cortex-M0+ has **no SWO/ITM** — see §6.5. |
 
 ### 6.2 Pin assignment (TSSOP20)
@@ -151,22 +153,36 @@ Recommended — **no SYSCFG pad remap needed**, USART1 on port B + PA12:
 
 | Pin | Name | Node-core use |
 |---|---|---|
-| 1 | PB7 | **USART1_RX** (AF0) ← transceiver RO |
-| 2 | PB9/PC14 | free (HSE xtal DNP) |
-| 3 | PC15 | free (HSE xtal DNP) |
+| 1 | PB7 | **USART1_RX** (AF0) ← transceiver RO  (Thermostat: **I2C1_SDA** AF6) |
+| 2 | PB9/PC14 | free — or **RESET_NODES** bus-disable output (MainController); LSE xtal DNP |
+| 3 | PC15 | free (LSE xtal DNP) |
 | 4 | VDD/VDDA | 3V3 |
 | 5 | VSS/VSSA | GND |
 | 6 | NRST | reset button + 100 nF |
-| 7–13 | PA0–PA6 | **application** (servo PWM, sensors, link) |
+| 7–13 | PA0–PA6 | **application** — see per-board split below |
 | 14 | PA7 | **activity LED** |
 | 15 | PB0…/PA8 mux | **error LED** |
 | 16 | PA11 | **user button** (`ErrorHandler` ack) |
 | 17 | PA12 | **USART1_DE** (AF1) → transceiver DE+/RE |
 | 18 | PA13 | SWDIO |
 | 19 | PA14 | SWCLK |
-| 20 | PB3/4/5/6 mux | **USART1_TX** = PB6 (AF0) → transceiver DI |
+| 20 | PB3/4/5/6 mux | **USART1_TX** = PB6 (AF0) → transceiver DI  (Thermostat: **I2C1_SCL** AF6) |
 
 Pins 1, 15 and 20 each bond several GPIO pads to one physical pin — configure exactly one and leave the rest at reset default (analog-in). Pins 16/17 (`PA11[PA9]`/`PA12[PA10]`) can be remapped to PA9/PA10 via `SYSCFG_CFGR1` `PA11_RMP`/`PA12_RMP`; this plan does not use that.
+
+**Per-board use of pins 7–13 (PA0–PA6):**
+
+| Pin | MainController | ControllerNode ("Node" board) | TemperatureNode | Thermostat |
+|---|---|---|---|---|
+| 7  PA0  | USART2_CTS (AF1) ← NINA RTS | — | — | — |
+| 8  PA1  | USART2_RTS (AF1) → NINA CTS | link DE (AF1) | — | link DE (AF1) |
+| 9  PA2  | USART2_TX (AF1) → NINA | link TX (USART2, AF1) | — | link TX (USART2, AF1) |
+| 10 PA3  | USART2_RX (AF1) ← NINA | link RX (USART2, AF1) | — | link RX (USART2, AF1) |
+| 11 PA4  | — | — | 1-Wire #2 | — |
+| 12 PA5  | — | — | 1-Wire #1 | — |
+| 13 PA6  | NINA RESET_N (open-drain out) | servo PWM (TIM3_CH1, AF1) | — | — |
+
+MainController + TemperatureNode are two populate variants of one PCB (the 48 V injection front-end and NINA are DNP on the TemperatureNode build, the 1-Wire front-end DNP on the MainController build). MainController has no spare hardware UART for a debug console (USART1 = bus, USART2 = NINA). The G031's `LPUART1` does not help: on TSSOP20 its TX/RX only reach PA2/PA3 (the PB10/PB11 and PC0/PC1 options are not bonded), i.e. the same pins as USART2. Bit-bang `Tools::Logger` on a free pin (PC15, PA4, PA5) or drop the console — **verify the LPUART1 AF map against DS12992 before relying on this.**
 
 > **Firmware:** the pin map lives in `Software/Lib/Board/BoardPins.h` (single source of truth). `Hal::UartPins` carries a per-pin AF (`Board::BusUart` = PB6/PB7 at AF0, PA12 at AF1). Pin 15's error-LED pad is picked as **PB0** — configure only that one.
 

@@ -1,5 +1,5 @@
 # RS485 Node Bus — Protocol Design Spec (v2)
-### Target MCU: STM32G030F6P6TR — replaces Arduino/ATmega NodeLib
+### Target MCU: STM32G031F8P6 (was STM32G030F6P6TR) — replaces Arduino/ATmega NodeLib
 
 **Status:** Draft for review
 **Supersedes:** `NodeLib` fixed-frame protocol (magic bytes + packed struct, no CRC)
@@ -13,7 +13,7 @@
 - Variable-length data field per message (no longer locked to a single `uint8_t` value).
 - CRC-protected frames, so corruption is *detected*, not silently accepted.
 - Reuse the existing round-robin master/slave state machine (`DETECTNODES` → `HELLOWORLD` → `SENDQ` → `ENDOFQ` → heartbeat), since that part works and isn't hardware-specific.
-- Take advantage of STM32G030 peripherals (hardware CRC unit, USART auto-direction-control) that the ATmega/Arduino stack didn't have.
+- Take advantage of STM32G0 peripherals (hardware CRC unit, USART auto-direction-control) that the ATmega/Arduino stack didn't have.
 
 **Non-goals (for v2, call out explicitly if you want these later)**
 - Multi-master arbitration — still single master, polled bus.
@@ -26,7 +26,7 @@
 
 | Item | Choice | Notes |
 |---|---|---|
-| MCU | STM32G030F6P6TR | Cortex-M0+, 64 MHz max, 32 KB flash, 8 KB SRAM, TSSOP20 |
+| MCU | STM32G031F8P6 | Cortex-M0+, 64 MHz max, 64 KB flash, 8 KB SRAM, TSSOP20 (locked in 2026-09-08; was STM32G030F6P6TR — drop-in, +32 KB flash, adds LPUART1 / RTC / TIM2). §7 SRAM budget unchanged. |
 | UART | USART1 | Supports **hardware Driver-Enable (DE)** output — no manual GPIO toggle + `delay()` needed |
 | Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. Standard EIA-485 common-mode range (-7V to +12V) — margin against this bus's ground-offset estimates checked in `Node-Bus-Hardware-Design-Spec.md` §6, comfortable after the both-ends power feed. |
 | Baud rate | 115200 (keep, for continuity) — reassess to 250k–1M if bus length/noise allows | STM32G0 USART can run well above 1 Mbps; ATmega was the limiting factor before. Bus length now known (~100m total, see hardware spec §7) — comfortably within range for elevated baud rates. |
@@ -98,7 +98,7 @@ Chosen mitigation (deliberately not full byte-stuffing/COBS — see rationale be
 
 ---
 
-## 7. Buffering / memory budget (STM32G030F6: 8 KB SRAM total)
+## 7. Buffering / memory budget (STM32G031F8: 8 KB SRAM total — same as the G030)
 
 | Buffer | Size | Notes |
 |---|---|---|

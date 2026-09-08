@@ -44,7 +44,7 @@ You noted this is "possibly also a RS485 bus with just 2 endpoints" — RS485's 
 
 ## 4. Thermostat hardware
 
-Direction set 2026-09-07. The `Thermostat` reuses the **STM32G030F6P6** and the node-core schematic from `Node-Bus-Hardware-Design-Spec.md` §6 (MCU support parts, reset button, SWD, indicator LED, the `InputPullUp` user-button pattern) — it just swaps the main-bus RS-485 front-end for the point-to-point link (§3) and adds a display + a second button.
+Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project MCU, locked in 2026-09-08) and the node-core schematic from `Node-Bus-Hardware-Design-Spec.md` §6 (MCU support parts, reset button, SWD, indicator LED, the `InputPullUp` user-button pattern) — it just swaps the main-bus RS-485 front-end for the point-to-point link (§3) and adds a display + a second button.
 
 ### 4.1 Display — I²C OLED
 
@@ -77,7 +77,7 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G030F6P6** and the 
   - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDO/MCU/OLED; mill isolation slots around it (Sensirion app-note "thermal decoupling"); vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
   - This part has no protective membrane — keep flux/outgassing away from it (clean assembly, no conformal coat over the sensor).
 
-### 4.4 Example pin map (STM32G030F6P6, TSSOP20)
+### 4.4 Example pin map (STM32G031F8P6, TSSOP20)
 
 | Pin | Signal |
 |---|---|

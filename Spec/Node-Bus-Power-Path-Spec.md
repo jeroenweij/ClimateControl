@@ -1,5 +1,5 @@
 # Node Bus — Power Path Design Spec
-### 48V → 5V (servo) → 3.3V (STM32G030F6P6TR) regulation chain
+### 48V → 5V (servo) → 3.3V (STM32G031F8P6) regulation chain
 
 **Status:** Draft — component selection locked; RT resistor value and exact input-cap stock pending datasheet/BOM-time verification (see open items)
 **Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol), `Node-Bus-Hardware-Design-Spec.md` (connector, pin assignment, 48V bus rationale)
@@ -17,7 +17,7 @@ RJ45 (48V, RS485) → [Input protection] → [Buck 48V→5V] → 5V servo rail
 
 Two regulation stages per node:
 1. **48V → 5V** synchronous-looking but actually **non-synchronous** buck (single integrated high-side FET + external catch diode) — feeds the servo.
-2. **5V → 3.3V** linear regulator (LDO) — feeds the STM32G030F6P6TR.
+2. **5V → 3.3V** linear regulator (LDO) — feeds the STM32G031F8P6.
 
 The shared **ENABLE** control line (carried on the RJ45 green pair per the hardware spec) is wired into the buck's **EN pin**. See §5 for what this decision does and doesn't cover.
 
@@ -74,10 +74,12 @@ Order from the RJ45: **fuse → TVS → reverse-polarity diode → bulk cap → 
 | Spec | Value |
 |---|---|
 | Output | Fixed 3.3V |
-| Application | STM32G030F6P6TR draws tens of mA — well within this part's range |
+| Application | STM32G031F8P6 draws tens of mA — well within this part's range |
 | Support components | ~1µF ceramic in and out (0603, commodity) |
 
 **Alternative if independent gating is wanted:** AP2112K-3.3TRG1 — JLC **C51118**, same footprint class, adds an EN pin (see §5).
+
+**MainController board only — the NINA-W152 does NOT share this rail.** It draws ~120 mA average (Wi-Fi TX, datasheet Table 13) with ~250–350 mA ms-peaks — far past the XC6206's "tens of mA" range, and sagging a shared rail would brown out the MCU. Give the NINA its own 3V3 LDO off the 5 V buck (≥500 mA, in a package that sheds ~0.3–0.5 W — MIC5504 / TLV75533 / AP7361C / RT9080), with a local 22 µF + 10 µF + 100 nF at its VCC pins. Populate on the MainController build, DNP on the TemperatureNode build (mutually exclusive with the 1-Wire front-end).
 
 ---
 
