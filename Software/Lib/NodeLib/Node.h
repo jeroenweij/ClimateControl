@@ -35,7 +35,9 @@ namespace NodeLib
         void QueueMessage(const Id& id, const uint8_t* const data, const uint8_t len);
         void QueueMessage(const Id& id, const uint8_t value);
 
-        void    SetId(const uint8_t newId);
+        // The node's bus address is fixed at factory provisioning and read from
+        // flash in Init() (ControllerNode / TemperatureNode); it is not settable
+        // at runtime. NodeMaster overrides it to the reserved master id 0.
         uint8_t GetId();
 
         void Init();
@@ -51,8 +53,9 @@ namespace NodeLib
         ErrorHandler         errorHandler;
         static const uint8_t masterNodeId = 0;
         static const int     nodeSpacing  = 25;
-        // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes)
-        static const uint8_t maxNodes = 25;
+        // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes) -- one
+        // definition, in Id.h, shared with ConfigStore.
+        static const uint8_t maxNodes = MAX_NODES;
         const uint8_t        numNodes;
         static const int     queueSize = 25;
 

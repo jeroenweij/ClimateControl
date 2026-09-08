@@ -6,9 +6,11 @@
 #include "Logger.h"
 #include "Tick.h"
 
+#include "ConfigStore.h"
 #include "Node.h"
 
 using NodeLib::ChannelId;
+using NodeLib::ConfigStore;
 using NodeLib::Id;
 using NodeLib::Message;
 using NodeLib::Node;
@@ -18,7 +20,7 @@ Node::Node(const uint8_t numNodes, const uint32_t baudRate) :
     errorHandler(),
     numNodes(numNodes),
     handler(nullptr),
-    nodeId(99),
+    nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
     messagesQueued(0),
     baudRate(baudRate),
     uart(),
@@ -39,6 +41,27 @@ void Node::WriteMessage(const Message& m)
 
 void Node::Init()
 {
+    // Master keeps the reserved id 0 (set in NodeMaster's constructor). A slave
+    // takes its permanent bus address from the factory-provisioned flash record
+    // -- see Node-Flash-Layout-and-Bootloader-Spec.md Sec6.3.
+    if (nodeId != masterNodeId)
+    {
+        if (!ConfigStore::Valid())
+        {
+            LOG_ERROR("No valid node identity in flash -- node not provisioned");
+            errorHandler.Error(false); // never returns
+        }
+
+        nodeId = ConfigStore::NodeId();
+        LOG_INFO("Node identity from flash: " << nodeId);
+
+        if (nodeId == masterNodeId || nodeId > numNodes)
+        {
+            LOG_ERROR("Provisioned Node Id out of range: " << nodeId);
+            errorHandler.Error(false); // never returns
+        }
+    }
+
     uart.Init(baudRate, Board::BusUart);
 }
 
@@ -159,16 +182,6 @@ void Node::HandlePollRequest()
 void Node::RegisterHandler(IVariableHandler* handler)
 {
     this->handler = handler;
-}
-
-void NodeLib::Node::SetId(const uint8_t newId)
-{
-    nodeId = newId;
-    if (nodeId == masterNodeId || nodeId > numNodes)
-    {
-        LOG_ERROR("Invalid Node Id: " << nodeId);
-        errorHandler.Error(false);
-    }
 }
 
 uint8_t Node::GetId()

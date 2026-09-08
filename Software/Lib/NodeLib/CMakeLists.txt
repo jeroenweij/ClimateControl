@@ -5,6 +5,8 @@ add_library(NodeLib STATIC
     IVariableHandler.h
     Id.h
     Id.cpp
+    ConfigStore.h
+    ConfigStore.cpp
     Frame.h
     Frame.cpp
     ErrorHandler.h

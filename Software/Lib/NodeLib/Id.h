@@ -14,6 +14,11 @@ namespace NodeLib
     // MAX_DATA=32, see RS485-Node-Protocol-Spec-STM32G030.md §9 (open item, defaulted)
     static const uint8_t MAX_DATA = 32;
 
+    // Hard cap on the slave-node count -- sizes NodeMaster's fixed activeNodes[]
+    // array and bounds a provisioned NodeId (ConfigStore::Valid()). Node::maxNodes
+    // aliases this so there is one definition.
+    static const uint8_t MAX_NODES = 25;
+
     struct __attribute__((packed)) Id
     {
         uint8_t   node;

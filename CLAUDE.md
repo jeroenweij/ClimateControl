@@ -68,6 +68,7 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | Doc | Covers |
 |---|---|
 | `RS485-Node-Protocol-Spec-STM32G030.md` | Main bus wire protocol (frame format, CRC, framing/resync, buffering) |
+| `Node-Flash-Layout-and-Bootloader-Spec.md` | Flash partition map, bus-resident OTA bootloader (speaks NodeLib), app image format, persistent `NodeId`/config store |
 | `Node-Bus-Hardware-Design-Spec.md` | Main bus physical layer (48V PoE-class power, RJ45 pinout, connector part) + node core schematic (§6: MCU support, transceiver, LEDs, buttons, pin plan) |
 | `Node-Bus-Power-Path-Spec.md` | Per-node 48V→5V→3.3V regulation chain |
 | `Software-Architecture-Spec.md` | Module map, directory layout, build/toolchain, code style |
