@@ -12,35 +12,19 @@ using NodeLib::Message;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
-NodeMaster::NodeMaster(const uint8_t numNodes, const uint32_t baudRate) :
-    Node(numNodes, baudRate),
+NodeMaster::NodeMaster(const uint32_t baudRate) :
+    Node(baudRate),
     activeNodes{},
     nodesFound(false)
 {
     nodeId = masterNodeId;
-
-    if (numNodes > maxNodes)
-    {
-        LOG_ERROR("numNodes exceeds maxNodes cap: " << numNodes);
-        errorHandler.Error(false);
-    }
 }
 
-void NodeMaster::Init(const uint8_t expectedNumNodes)
+void NodeMaster::Init()
 {
     Node::Init();
 
-    bool nodesOk = false;
-    while (!nodesOk)
-    {
-        DetectNodes();
-        nodesOk = ActiveNodeCount() >= expectedNumNodes;
-
-        if (!nodesOk)
-        {
-            errorHandler.Error(true);
-        }
-    }
+    DetectNodes();
 }
 
 void NodeMaster::Loop()
@@ -68,7 +52,7 @@ void NodeMaster::DetectNodes()
     const Message poll(BROADCAST_NODE, Operation::Discover);
     WriteMessage(poll);
 
-    Tools::DelayTimer timeout(static_cast<Tools::time_a>(nodeSpacing * (numNodes + 1)));
+    Tools::DelayTimer timeout(static_cast<Tools::time_a>(nodeSpacing * (maxNodes + 1)));
     while (timeout.IsRunning() && !timeout.Finished())
     {
         Node::Loop();
@@ -102,7 +86,7 @@ void NodeMaster::PollNextNode(const int prevNodeId)
         do
         {
             nodeId++;
-            if (nodeId > numNodes)
+            if (nodeId > maxNodes)
             {
                 nodeId = 1;
             }
@@ -151,7 +135,7 @@ void NodeMaster::HandleMasterMessage(const Message& m)
 
 void NodeMaster::NodeHello(int nodeId)
 {
-    if (nodeId > 0 && nodeId <= numNodes)
+    if (nodeId > 0 && nodeId <= maxNodes)
     {
         LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId));
         activeNodes[nodeId - 1] = true;

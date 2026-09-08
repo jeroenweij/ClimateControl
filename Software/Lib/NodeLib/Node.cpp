@@ -17,9 +17,8 @@ using NodeLib::Message;
 using NodeLib::Node;
 using NodeLib::Operation;
 
-Node::Node(const uint8_t numNodes, const uint32_t baudRate) :
+Node::Node(const uint32_t baudRate) :
     errorHandler(),
-    numNodes(numNodes),
     handler(nullptr),
     nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
     messagesQueued(0),
@@ -60,7 +59,7 @@ void Node::Init()
         nodeId = ConfigStore::NodeId();
         LOG_INFO("Node identity from flash: " << nodeId);
 
-        if (nodeId == masterNodeId || nodeId > numNodes)
+        if (nodeId == masterNodeId || nodeId > maxNodes)
         {
             LOG_ERROR("Provisioned Node Id out of range: " << nodeId);
             errorHandler.Error(false); // never returns

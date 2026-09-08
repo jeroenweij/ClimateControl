@@ -37,7 +37,7 @@ namespace NodeLib
         // file-scope global (C++ static-init order isn't guaranteed relative to
         // HAL bring-up). UART itself is deferred to Init() below, matching how
         // the original AVR version deferred Serial1.begin() there too.
-        Node(const uint8_t numNodes, const uint32_t baudRate);
+        Node(const uint32_t baudRate);
 
         void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
@@ -67,7 +67,6 @@ namespace NodeLib
         // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes) -- one
         // definition, in Id.h, shared with ConfigStore.
         static const uint8_t maxNodes = MAX_NODES;
-        const uint8_t        numNodes;
         static const int     queueSize = 25;
 
         INodeHandler* handler;

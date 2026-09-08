@@ -11,9 +11,9 @@ namespace NodeLib
     class NodeMaster : public Node
     {
       public:
-        NodeMaster(const uint8_t numNodes, const uint32_t baudRate);
+        NodeMaster(const uint32_t baudRate);
 
-        void Init(const uint8_t expectedNumNodes);
+        void Init();
         void Loop();
         void FlushNow(const bool force = false);
         void StartPollingNodes();
