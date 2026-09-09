@@ -1,6 +1,6 @@
 # MainController — Design Spec
 
-**Status:** Draft — bus-master role confirmed 2026-09-06; power input defined (§3); internet connectivity = NINA-W152 (§5, 2026-09-08); what it does with the data still open (see §4)
+**Status:** Draft — bus-master role confirmed 2026-09-06; power input defined (§3); internet connectivity = NINA-W152 (§5, 2026-09-08); outward interface = relay node frames to a server (2026-09-09, `MainController-Server-Link-Spec.md`); feed topology + persistence still open (see §4)
 **Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol this module implements as master), `Node-Bus-Hardware-Design-Spec.md` §6 (shared node core schematic this board reuses), `Node-Bus-Power-Path-Spec.md` §4 (both-ends feed decision), `Software-Architecture-Spec.md` (module map)
 
 ---
@@ -52,8 +52,8 @@ Order fuse (T4 A ceramic 5×20, both-ends feed): ESKA 522.523 — <https://www.a
 
 ## 4. Open items — need your input before finalizing
 
-1. **User/network interface.** *Partially resolved 2026-09-08:* internet connectivity is a **u-blox NINA-W152** (Wi-Fi + BT, internal antenna) on USART2, running u-connectXpress AT firmware — the TCP/IP + TLS stack lives on the module, so the STM32 only needs a UART. Minimal connections and the power/flow-control decisions are in §5 (below). Still open: what the MainController *does* with that connectivity (MQTT? local REST? Home Assistant?) and whether there is also a local display/buttons.
-2. **Control loop ownership.** Per §2 above: does `MainController` make any climate-control decisions itself, or is it purely a bus master + data logger while each `ControllerNode`/`Thermostat` pair handles its own room's control loop locally?
+1. **User/network interface.** *Resolved 2026-09-08 (hardware) + 2026-09-09 (protocol):* connectivity is a **u-blox NINA-W152** on USART2 running u-connectXpress AT firmware (§5). The outward interface **relays `NodeLib` v2 frames verbatim over one plaintext TCP socket to a LAN server** (Go daemon + SQLite) that decodes, stores, and serves the web UI — full design + parameter decisions in `MainController-Server-Link-Spec.md`. No TLS (LAN-only), no time sync, `+UUSORD` polling, token auth. Local display/buttons: none planned.
+2. **Control loop ownership.** *Resolved 2026-09-09:* `MainController` is a bus master + **supervisory bridge/logger**, not a closed-loop controller — each `ControllerNode`/`Thermostat` pair runs its room loop locally and the bus keeps working with the uplink down (`MainController-Server-Link-Spec.md` §1). Reopen only if some cross-node behaviour must survive an uplink outage (that doc §12 item 6).
 3. **Feed topology (§3):** two PSUs (one per bus end) or one PSU at the master feeding both ends via a return cable? Decides the master fuse rating (T4 A vs T6.3 A) and the +48 V copper sizing.
 4. **Persistence.** Does `MainController` need to remember anything across power cycles (schedules, setpoints, node roster) — and if so, where (internal flash, external EEPROM/flash chip)?
 5. **Same MCU as slave nodes — resolved 2026-09-08: STM32G031F8P6** (64 KB flash / 8 KB SRAM, drop-in for the STM32G030F6P6TR). The +32 KB flash covers a bus-resident DFU bootloader plus the NINA AT-driver; RAM is unchanged at 8 KB, so the §7 memory discipline in `RS485-Node-Protocol-Spec-STM32G030.md` still applies. Footprint also fits STM32G031F6P6 (32 KB) as a cost-down fallback for the slave nodes.

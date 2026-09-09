@@ -82,7 +82,8 @@ enum class Endpoint : uint8_t
 | Application | `0x30`–`0x3F` | `ControllerNode`, `TemperatureNode` | the node's own function; per-module, non-overlapping within the block. |
 | Room | `0x40`–`0x4F` | `ControllerNode` | last-known Thermostat state; `Thermostat` itself stays non-addressable (`ControllerNode-Thermostat-Link-Spec.md`). |
 | Diagnostics | `0x50`–`0x5F` | all | bus/queue counters, last-error detail, log strings pulled over the bus. `NodeLib`-owned (§6); the app only feeds log lines. Confirmed in v1 2026-09-08. |
-| reserved | `0x60`–`0x7F` | | |
+| Uplink | `0x60`–`0x6F` | `MainController` ↔ server only | roster / presence / time / OTA-relay on the MainController's server link — **never on the RS485 bus**. Reuses the shared `Endpoint` enum + frame format so one decoder covers both. `MainController-Server-Link-Spec.md` §5. Claimed 2026-09-09. |
+| reserved | `0x70`–`0x7F` | | |
 | vendor / experimental | `0x80`–`0xFF` | | |
 
 `Endpoint` keeps the house pattern: `enum class Endpoint : uint8_t` with an `operator<<(std::stringstream&, Endpoint)` for logging.
