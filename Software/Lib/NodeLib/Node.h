@@ -66,7 +66,7 @@ namespace NodeLib
         static const int     nodeSpacing  = 25;
         // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes) -- one
         // definition, in Id.h, shared with ConfigStore.
-        static const uint8_t maxNodes = MAX_NODES;
+        static const uint8_t maxNodes  = MAX_NODES;
         static const int     queueSize = 25;
 
         INodeHandler* handler;
