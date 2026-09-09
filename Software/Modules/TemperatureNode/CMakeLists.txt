@@ -11,4 +11,5 @@ add_stm32_executable(temperatureNode
         Board
         Tools
         NodeLib
+    BOOTLOADER bootloader
 )

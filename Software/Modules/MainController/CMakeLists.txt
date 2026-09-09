@@ -8,4 +8,5 @@ add_stm32_executable(mainController
         Board
         Tools
         NodeLib
+    BOOTLOADER bootloader
 )
