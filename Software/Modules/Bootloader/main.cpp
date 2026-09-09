@@ -29,12 +29,17 @@
 #include "Tick.h"
 
 #include "AppImage.h"
+#include "FirmwareSlave.h"
 
 namespace Backup = Hal::Backup;
 using NodeLib::ConfigStore;
 
 namespace
 {
+    // OTA runs at the same rate as the application bus (RS485 spec §8 item 3
+    // leaves an OTA-specific baud open).
+    constexpr uint32_t BusBaud = 115200;
+
     bool EnterBootloaderRequested()
     {
         if (Backup::Read(Backup::Reg::Boot) != Board::EnterBootloaderMagic)
@@ -61,12 +66,14 @@ namespace
     {
         if (ConfigStore::Valid())
         {
-            // Provisioned node: receive a firmware image over RS485 addressed at
-            // ConfigStore::NodeId().
-            // TODO: minimal NodeLib-framing slave -- respond to Discover with
-            // Announce, serve Endpoint::Firmware (Node-Flash spec §6). Needs the
-            // NodeLib framing/bus split first.
-            BlinkForever(150, 850);
+            // Provisioned node: serve a firmware image over RS485 at
+            // ConfigStore::NodeId() (Node-Flash spec §6).
+            Boot::FirmwareSlave slave(BusBaud, ConfigStore::NodeId(), static_cast<uint8_t>(ConfigStore::GetModule()));
+            slave.Init();
+            while (true)
+            {
+                slave.Loop();
+            }
         }
 
         // MainController (no ConfigRecord) or an unprovisioned node: no bus

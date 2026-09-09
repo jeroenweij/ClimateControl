@@ -8,6 +8,8 @@ add_library(Hal STATIC
     Uart.cpp
     OneWire.h
     OneWire.cpp
+    Flash.h
+    Flash.cpp
     Crc.h
     Crc.cpp
     Tick.h
