@@ -17,6 +17,19 @@ void Hal::System::SetVectorTable(const uint32_t flashBase)
     __DSB();
 }
 
+void Hal::System::Reset()
+{
+    NVIC_SystemReset();
+    while (true)
+    {
+    }
+}
+
+uint8_t Hal::System::ResetCause()
+{
+    return static_cast<uint8_t>(RCC->CSR >> 24U);
+}
+
 void Hal::System::JumpToApplication(const uint32_t flashBase)
 {
     const uint32_t stackPointer = *reinterpret_cast<const volatile uint32_t*>(flashBase);

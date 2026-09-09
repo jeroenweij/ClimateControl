@@ -78,10 +78,29 @@ namespace NodeLib
         void HandleMessage(const Message& m);
         void HandleInternalMessage(const Message& m);
 
+        // NodeLib-owned endpoint blocks -- serviced here, never handed to the
+        // application handler (Node-Message-Model-Spec.md §3/§6).
+        void HandleSystemMessage(const Message& m);
+        void HandleFirmwareMessage(const Message& m);
+        void HandleDiagnosticsMessage(const Message& m);
+
+        void SendReport(const Endpoint endpoint, const uint8_t* const data, const uint8_t len);
+        void SendAck(const Message& m);
+        void SendNack(const Message& m);
+
+        void              RequestReset(const bool toBootloader);
+        [[noreturn]] void PerformPendingReset();
+        void              StartIdentify(uint8_t seconds);
+        void              ServiceIdentify();
+
         uint32_t baudRate;
 
         uint32_t txFrames;
         uint32_t queueDrops;
+
+        bool resetPending;
+        bool resetToBootloader;
+        bool identifyLedOn;
 
         Hal::Uart         uart;
         Hal::Crc          crc;
@@ -89,5 +108,7 @@ namespace NodeLib
         Hal::Gpio         led;
         Message           messageQueue[queueSize];
         Tools::DelayTimer hearthBeatTimer;
+        Tools::DelayTimer identifyUntil;
+        Tools::DelayTimer identifyToggle;
     };
 } // namespace NodeLib

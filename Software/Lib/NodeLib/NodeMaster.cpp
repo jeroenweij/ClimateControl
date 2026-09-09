@@ -15,9 +15,19 @@ using NodeLib::Operation;
 NodeMaster::NodeMaster(const uint32_t baudRate) :
     Node(baudRate),
     activeNodes{},
+    nodeModules{},
     nodesFound(false)
 {
     nodeId = masterNodeId;
+}
+
+uint8_t NodeMaster::NodeModule(const uint8_t nodeId) const
+{
+    if (nodeId < 1 || nodeId > maxNodes)
+    {
+        return 0;
+    }
+    return nodeModules[nodeId - 1];
 }
 
 void NodeMaster::Init()
@@ -104,7 +114,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
     {
         case Operation::Announce:
         {
-            NodeHello(m.id.node);
+            NodeHello(m.id.node, m.len >= 1 ? m.data[0] : 0);
             break;
         }
         case Operation::Done:
@@ -133,12 +143,13 @@ void NodeMaster::HandleMasterMessage(const Message& m)
     }
 }
 
-void NodeMaster::NodeHello(int nodeId)
+void NodeMaster::NodeHello(int nodeId, uint8_t module)
 {
     if (nodeId > 0 && nodeId <= maxNodes)
     {
-        LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId));
+        LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " module " << module);
         activeNodes[nodeId - 1] = true;
+        nodeModules[nodeId - 1] = module;
         nodesFound              = true;
     }
 }

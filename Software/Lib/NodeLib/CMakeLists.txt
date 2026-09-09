@@ -1,6 +1,7 @@
 add_library(NodeLib STATIC
     EEndpoint.h
     EOperation.h
+    EFirmware.h
     INodeHandler.h
     Id.h
     Id.cpp

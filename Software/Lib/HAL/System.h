@@ -24,5 +24,13 @@ namespace Hal
         // 'flashBase' (loads its MSP from [base], jumps to [base+4]). Never
         // returns. Used by the bootloader.
         [[noreturn]] void JumpToApplication(uint32_t flashBase);
+
+        // Warm-reset the MCU (NVIC_SystemReset). Never returns.
+        [[noreturn]] void Reset();
+
+        // RCC_CSR[31:24] reset-flag byte (OBL / PIN / BOR / SW / IWDG / WWDG /
+        // LPWR). The flags are sticky until cleared, so this reads live and is
+        // surfaced verbatim on Endpoint::SystemStatus for the master to decode.
+        uint8_t ResetCause();
     } // namespace System
 } // namespace Hal

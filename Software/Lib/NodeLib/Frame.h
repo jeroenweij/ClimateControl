@@ -49,6 +49,12 @@ namespace NodeLib
             return counters;
         }
 
+        // Endpoint::DiagReset -- zero the RX tallies.
+        void ResetCounters()
+        {
+            counters = RxCounters{};
+        }
+
       private:
         enum class State
         {
