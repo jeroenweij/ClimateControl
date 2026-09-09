@@ -6,6 +6,8 @@ add_library(Hal STATIC
     Gpio.cpp
     Uart.h
     Uart.cpp
+    OneWire.h
+    OneWire.cpp
     Crc.h
     Crc.cpp
     Tick.h

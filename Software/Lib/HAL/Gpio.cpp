@@ -57,6 +57,10 @@ Gpio::Gpio(const Pin pin, const Mode mode) :
             init.Mode = GPIO_MODE_INPUT;
             init.Pull = GPIO_PULLUP;
             break;
+        case Mode::OpenDrain:
+            init.Mode = GPIO_MODE_OUTPUT_OD;
+            init.Pull = GPIO_NOPULL;
+            break;
     }
 
     HAL_GPIO_Init(pin.port, &init);

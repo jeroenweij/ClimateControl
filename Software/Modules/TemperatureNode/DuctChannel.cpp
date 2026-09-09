@@ -12,9 +12,12 @@ using NodeLib::Operation;
 
 namespace
 {
-    // DS18B20 12-bit conversion is ~750 ms; one sample per second keeps the
-    // probe well within spec and the duct air changes far slower than that.
+    // The duct air changes far slower than this; one reading per second is
+    // plenty and leaves the 1-Wire line idle most of the time.
     constexpr Tools::time_a SampleIntervalMs = 1000;
+
+    // Small margin on top of the datasheet worst-case conversion time.
+    constexpr Tools::time_a ConversionGuardMs = 20;
 
     // Force a Report at least this often even when the reading has not moved, so
     // MainController's view of the value does not go stale (TemperatureNode-Spec.md
@@ -28,48 +31,78 @@ namespace
 DuctChannel::DuctChannel(NodeLib::Node& node, const Endpoint endpoint, const Hal::Pin oneWirePin) :
     node(node),
     endpoint(endpoint),
-    oneWirePin(oneWirePin),
+    sensor(oneWirePin),
+    state(State::Idle),
     value(0),
     lastReported(0),
     everReported(false),
     present(false),
     sampleTimer(),
+    conversionTimer(),
     minReportTimer()
 {
 }
 
 void DuctChannel::Init()
 {
-    // TODO: 1-Wire bit-bang bring-up on 'oneWirePin' -- open-drain (drive low /
-    // release, the on-board 4.7k pulls high), timing-critical slots with
-    // interrupts briefly masked (TemperatureNode-Spec.md §4.1). Hal::Gpio has no
-    // open-drain mode yet; that HAL addition + the DS18B20 driver are the
-    // remaining work here.
+    // The 1-Wire line is configured (open-drain, released) by the Hal::OneWire
+    // inside 'sensor'. Nothing else to bring up here.
+    state   = State::Idle;
     present = false;
 }
 
 void DuctChannel::Loop()
 {
-    if (sampleTimer.IsRunning() && !sampleTimer.Finished())
+    switch (state)
     {
-        return;
-    }
-    sampleTimer.Start(SampleIntervalMs);
+        case State::Idle:
+        {
+            if (sampleTimer.IsRunning() && !sampleTimer.Finished())
+            {
+                return;
+            }
 
-    int16_t    sample = 0;
-    const bool ok     = ReadProbe(sample);
-    if (ok != present)
-    {
-        LOG_INFO("Duct probe " << endpoint << (ok ? " present" : " lost"));
-        present = ok;
-    }
-    if (!ok)
-    {
-        return;
-    }
+            if (sensor.StartConversion())
+            {
+                state = State::Converting;
+                conversionTimer.Start(Ds18b20::ConversionTimeMs + ConversionGuardMs);
+            }
+            else
+            {
+                SetPresent(false);
+                sampleTimer.Start(SampleIntervalMs);
+            }
+            break;
+        }
 
-    value = sample;
+        case State::Converting:
+        {
+            if (conversionTimer.IsRunning() && !conversionTimer.Finished())
+            {
+                return;
+            }
 
+            int16_t sample = 0;
+            if (sensor.ReadTemperature(sample))
+            {
+                SetPresent(true);
+                value = sample;
+                PublishIfDue();
+            }
+            else
+            {
+                SetPresent(false);
+            }
+
+            state = State::Idle;
+            sampleTimer.Start(SampleIntervalMs);
+            break;
+        }
+    }
+}
+
+void DuctChannel::PublishIfDue()
+{
     const int16_t delta      = static_cast<int16_t>(value - lastReported);
     const bool    moved      = delta >= ReportThresholdCentiDeg || delta <= -ReportThresholdCentiDeg;
     const bool    refreshDue = !minReportTimer.IsRunning() || minReportTimer.Finished();
@@ -99,6 +132,15 @@ void DuctChannel::Invalidate()
     everReported = false;
 }
 
+void DuctChannel::SetPresent(const bool nowPresent)
+{
+    if (nowPresent != present)
+    {
+        LOG_INFO("Duct probe " << endpoint << (nowPresent ? " present" : " lost"));
+        present = nowPresent;
+    }
+}
+
 bool DuctChannel::Present() const
 {
     return present;
@@ -107,15 +149,4 @@ bool DuctChannel::Present() const
 int16_t DuctChannel::Value() const
 {
     return value;
-}
-
-bool DuctChannel::ReadProbe(int16_t& /*centiDegC*/)
-{
-    // TODO: DS18B20 transaction -- reset pulse + presence detect, Skip-ROM
-    // (0xCC) CONVERT T (0x44), then Skip-ROM READ SCRATCHPAD (0xBE); check the
-    // scratchpad CRC-8, convert the native int16 (1/16 degC) to centi-degC.
-    // One device per line, so no ROM search (TemperatureNode-Spec.md §4.1).
-    // Until the 1-Wire driver lands, report the probe as absent rather than
-    // inventing a reading.
-    return false;
 }
