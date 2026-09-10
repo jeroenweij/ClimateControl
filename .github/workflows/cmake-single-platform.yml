@@ -1,5 +1,7 @@
-# CI build for the STM32 firmware in Software/.
-# Cross-compiles every module with arm-none-eabi-gcc; nothing here runs on the runner.
+# CI for the STM32 firmware in Software/.
+#   format : clang-format check (make check)
+#   build  : cross-compile every module with arm-none-eabi-gcc
+#   test   : host-native unit tests (make test -> ctest)
 name: CMake on a single platform
 
 on:
@@ -15,37 +17,58 @@ env:
   BUILD_DIR: ${{ github.workspace }}/Software/build
 
 jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Pin the same clang-format the tree was formatted with (18-20 agree;
+      # 21+ reflows some comments).
+      - name: Install clang-format
+        run: pip install 'clang-format==19.1.7'
+
+      - name: Check formatting
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: make check
+
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install ARM GNU toolchain
-      uses: carlosperate/arm-none-eabi-gcc-action@v1
-      with:
-        release: '14.2.Rel1'
+      - name: Install ARM GNU toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '14.2.Rel1'
 
-    - name: Configure CMake
-      run: cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+      - name: Configure CMake
+        run: cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
-    - name: Build
-      run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} -j
+      - name: Build
+        run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} -j
 
-    - name: Size report
-      run: arm-none-eabi-size ${{ env.BUILD_DIR }}/Modules/*/*.elf
+      - name: Size report
+        run: arm-none-eabi-size ${{ env.BUILD_DIR }}/Modules/*/*.elf
 
-    - name: Upload firmware images
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware-${{ env.BUILD_TYPE }}
-        path: |
-          ${{ env.BUILD_DIR }}/Modules/*/*.elf
-          ${{ env.BUILD_DIR }}/Modules/*/*.bin
-          ${{ env.BUILD_DIR }}/Modules/*/*.hex
+      - name: Upload firmware images
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ env.BUILD_TYPE }}
+          path: |
+            ${{ env.BUILD_DIR }}/Modules/*/*.elf
+            ${{ env.BUILD_DIR }}/Modules/*/*.bin
+            ${{ env.BUILD_DIR }}/Modules/*/*.hex
 
-    # TODO: no tests exist yet - kept non-blocking until a test target lands.
-    - name: Test
-      continue-on-error: true
-      working-directory: ${{ env.BUILD_DIR }}
-      run: ctest -C ${{ env.BUILD_TYPE }}
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Host build -- uses the runner's native g++, no ARM toolchain needed.
+      - name: Build and run unit tests
+        working-directory: ${{ env.SOURCE_DIR }}
+        run: make test

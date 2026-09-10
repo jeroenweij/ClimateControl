@@ -15,6 +15,7 @@ ClimateControl/
     ├── .clang-format       # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
     ├── CMakeLists.txt      # top-level CMake project — aggregates Lib/* and Modules/*
     ├── cmake/              # ARM Cortex-M0+ toolchain file + stm32.cmake (add_stm32_executable)
+    ├── test/               # host-native unit-test project (framework + Hal fakes); suites live per-module in Lib/*/test and Modules/*/test
     ├── Lib/
     │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL (Uart/Gpio/Crc/Flash/Backup/Tick/System/OneWire) — the only place ST driver headers get included
     │   ├── Board/           # BoardPins.h (pin map) + MemoryMap.h / ImageDescriptor.h (flash layout) — header-only
@@ -61,9 +62,10 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 - **Compiler:** `arm-none-eabi-gcc` (installed on this machine).
 - **Build system:** CMake — `add_stm32_executable()` (`Software/cmake/stm32.cmake`) builds each `Modules/*` into a `.elf` (+ `.bin`/`.hex`/size + `flash-<name>`), top-level `Software/CMakeLists.txt` aggregates `Lib/*` and `Modules/*`. Toolchain `Software/cmake/arm-none-eabi-cortex-m0plus.cmake` (`-mcpu=cortex-m0plus -mthumb`, newlib-nano). Shared startup + per-module `.ld` are in place. `make -C Software build`.
 - **Driver layer:** STM32Cube HAL/LL, wrapped by `Lib/HAL` — protocol and application code never includes ST headers directly.
+- **Unit tests:** `Software/test/` is a *separate host-native CMake project* (not part of the ARM build) — the portable logic compiled with the runner's g++ against fakes in `test/fake/` (Hal + `ConfigStore` doubles, `test/fake/include/stm32g0xx_hal.h` dummy) and run under `ctest`. Tiny in-tree xUnit harness in `test/framework/` (`CC_TEST` / `CC_CHECK`); no external deps. Each module keeps its suites next to the code in a `test/` folder, registered with `cc_add_test()`. `make -C Software test`; `make -C Software all` runs `check` + `test` + `build`. See `Software/test/README.md`.
 - **MCU:** STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) — locked in 2026-09-08 for all four boards (MainController, ControllerNode, TemperatureNode, Thermostat). Drop-in replacement for the earlier STM32G030F6P6TR: identical pinout, +32 KB flash (bus-resident DFU bootloader + NINA driver headroom), plus LPUART1 / RTC+backup-registers / TIM2. HAL device define is `STM32G031xx`.
 - **Flashing:** SEGGER J-Link — a CMake custom target per module shells out to `JLinkExe` with a generated commander script. **`JLinkExe`/`JLinkGDBServer` are not yet installed on this machine** — install the J-Link Software Pack before the flash target will run.
-- **CI:** `.github/workflows/cmake-single-platform.yml` — on push/PR to `main`, installs the ARM toolchain, configures + builds the `Software/` CMake project (`Release`), and uploads the per-module `.elf`/`.bin`/`.hex`. The `ctest` step is `continue-on-error` until a test target exists.
+- **CI:** `.github/workflows/cmake-single-platform.yml` — on push/PR to `main`, three jobs: `format` (`make check`, clang-format pinned to 19), `build` (ARM toolchain → build `Software/` `Release` → upload per-module `.elf`/`.bin`/`.hex`), `test` (`make test` → host `ctest`).
 
 ## Specs index
 
