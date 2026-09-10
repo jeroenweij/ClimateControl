@@ -2,15 +2,15 @@
 * Created by J. Weij
 *
 * Linker script -- Bootloader image.
-* Flash: 8 KB at 0x08000000 (the reset-vector owner, SWD-flashed only).
-* See Spec/Node-Flash-Layout-and-Bootloader-Spec.md §3.
+* Flash: 10 KB at 0x08000000 (the reset-vector owner, SWD-flashed only).
+* See Lib/Board/MemoryMap.h and Spec/Node-Flash-Layout-and-Bootloader-Spec.md §3.
 *************************************************************/
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 8K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 10K
     RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 8K
 }
 

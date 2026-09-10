@@ -23,6 +23,12 @@ namespace NodeLib
         // 0x2_  firmware -- every node; data[0] = FirmwareOp
         Firmware = 0x20,
 
+        // ControllerNode only: "act on my paired Thermostat over the link".
+        // data[0] = FirmwareOp, same as Firmware. App-delivered (NOT NodeLib-
+        // handled) -- the ControllerNode terminates it and re-originates a link
+        // transaction. See ControllerNode-Thermostat-Link-Spec.md §5.4.
+        ThermostatFirmware = 0x22,
+
         // 0x3_  application, ControllerNode
         DamperTarget = 0x30, // RW  uint8 %
         DamperActual = 0x31, // RO  uint8 %
@@ -66,6 +72,9 @@ namespace NodeLib
                 break;
             case Endpoint::Firmware:
                 oStrStream << "Firmware";
+                break;
+            case Endpoint::ThermostatFirmware:
+                oStrStream << "ThermostatFirmware";
                 break;
             case Endpoint::DamperTarget:
                 oStrStream << "DamperTarget";

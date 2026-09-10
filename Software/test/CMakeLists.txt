@@ -52,6 +52,7 @@ add_library(nodelib_host STATIC
     ${CC_SW_ROOT}/Lib/NodeLib/ErrorHandler.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/Node.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/NodeMaster.cpp
+    ${CC_SW_ROOT}/Lib/NodeLib/LinkMaster.cpp
 )
 target_link_libraries(nodelib_host PUBLIC test_fakes)
 

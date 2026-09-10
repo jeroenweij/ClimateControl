@@ -41,11 +41,18 @@ namespace
 } // namespace
 
 Node::Node(const uint32_t baudRate) :
+    Node(baudRate, Hal::Uart::Instance::Usart1, Board::BusUart)
+{
+}
+
+Node::Node(const uint32_t baudRate, const Hal::Uart::Instance instance, const Hal::UartPins& pins) :
     errorHandler(),
     handler(nullptr),
     nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
     messagesQueued(0),
     baudRate(baudRate),
+    busInstance(instance),
+    busPins(pins),
     txFrames(0),
     queueDrops(0),
     resetPending(false),
@@ -94,10 +101,10 @@ void Node::Init()
         }
     }
 
-    uart.Init(baudRate, Board::BusUart);
+    uart.Init(baudRate, busInstance, busPins);
 }
 
-void Node::Loop()
+void Node::PumpRx()
 {
     while (uart.Available())
     {
@@ -108,6 +115,11 @@ void Node::Loop()
         }
     }
     frame.Update();
+}
+
+void Node::Loop()
+{
+    PumpRx();
     ServiceIdentify();
 
     if (hearthBeatTimer.Finished() && handler != nullptr)
@@ -169,7 +181,16 @@ void Node::HandleMessage(const Message& m)
             HandleSystemMessage(m);
             break;
         case static_cast<uint8_t>(Endpoint::Firmware) & 0xF0:
-            HandleFirmwareMessage(m);
+            // Endpoint::Firmware is NodeLib-owned; ThermostatFirmware (and any
+            // future app endpoint in this block) goes to the module handler.
+            if (m.id.endpoint == Endpoint::Firmware)
+            {
+                HandleFirmwareMessage(m);
+            }
+            else if (handler)
+            {
+                handler->ReceivedMessage(m);
+            }
             break;
         case static_cast<uint8_t>(Endpoint::DiagRxCounters) & 0xF0:
             HandleDiagnosticsMessage(m);

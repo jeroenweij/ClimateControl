@@ -36,9 +36,8 @@ using NodeLib::ConfigStore;
 
 namespace
 {
-    // OTA runs at the same rate as the application bus (RS485 spec §8 item 3
-    // leaves an OTA-specific baud open).
-    constexpr uint32_t BusBaud = 115200;
+    // One baud everywhere -- the OTA transfer runs at the normal bus rate.
+    constexpr uint32_t BusBaud = Board::BusBaudRate;
 
     bool EnterBootloaderRequested()
     {

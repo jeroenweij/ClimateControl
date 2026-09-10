@@ -25,6 +25,24 @@ namespace NodeLib
         Status          = 0x07,
     };
 
+    // lastError byte in a FirmwareOp::Status payload. Values 0..7 mirror the
+    // bootloader's local codes in Modules/Bootloader/FirmwareSlave.cpp; the
+    // ControllerNode adds AlreadyCurrent for a ThermostatFirmware[Begin] whose
+    // version already matches (ControllerNode-Thermostat-Link-Spec.md §5.4.1).
+    enum class FirmwareError : uint8_t
+    {
+        None           = 0,
+        WrongModule    = 1,
+        BadSize        = 2,
+        EraseFailed    = 3,
+        ProgramFailed  = 4,
+        Overrun        = 5,
+        CrcMismatch    = 6,
+        BadState       = 7,
+        AlreadyCurrent = 8, // ThermostatFirmware only -- no-op update, skipped
+        LinkDown       = 9, // ThermostatFirmware only -- Thermostat unreachable
+    };
+
     inline std::stringstream& operator<<(std::stringstream& oStrStream, const FirmwareOp op)
     {
         switch (op)

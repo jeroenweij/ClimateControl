@@ -37,7 +37,12 @@ namespace NodeLib
         // file-scope global (C++ static-init order isn't guaranteed relative to
         // HAL bring-up). UART itself is deferred to Init() below, matching how
         // the original AVR version deferred Serial1.begin() there too.
+        //
+        // The 1-arg form binds the RS485 main bus (USART1 / Board::BusUart). The
+        // 3-arg form lets a ControllerNode also drive USART2 for its Thermostat
+        // link (ControllerNode-Thermostat-Link-Spec.md §5).
         Node(const uint32_t baudRate);
+        Node(const uint32_t baudRate, const Hal::Uart::Instance instance, const Hal::UartPins& pins);
 
         void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
@@ -55,10 +60,13 @@ namespace NodeLib
         void Loop();
 
       protected:
-        bool         ReadMessage(const Message& m);
-        void         flushQueue();
-        void         WriteMessage(const Message& m);
-        void         ResetHearthBeat();
+        bool ReadMessage(const Message& m);
+        void flushQueue();
+        void WriteMessage(const Message& m);
+        void ResetHearthBeat();
+        // Drain the UART through the framer, dispatching each decoded message.
+        // The shared inner loop of Node::Loop() and LinkMaster::Loop().
+        void         PumpRx();
         virtual void HandleMasterMessage(const Message&) {}
 
         ErrorHandler         errorHandler;
@@ -93,7 +101,9 @@ namespace NodeLib
         void              StartIdentify(uint8_t seconds);
         void              ServiceIdentify();
 
-        uint32_t baudRate;
+        uint32_t            baudRate;
+        Hal::Uart::Instance busInstance;
+        const Hal::UartPins busPins;
 
         uint32_t txFrames;
         uint32_t queueDrops;

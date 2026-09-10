@@ -49,6 +49,11 @@ namespace Board
         {BusDe, 1},
     };
 
+    // Wire bit rate for the RS485 main bus and the ControllerNode<->Thermostat
+    // link -- an exact integer USART divisor, well within range for the ~100 m /
+    // 20-node terminated bus. See RS485-Node-Protocol-Spec-STM32G030.md §9.
+    constexpr uint32_t BusBaudRate = 250000;
+
     // --- Status indicators & user button (all three boards) ---------------
     inline const Hal::Pin ActivityLed{GPIOA, GPIO_PIN_7}; // pin 14  net "LED"         (NodeLib ledPin)
     inline const Hal::Pin ErrorLed{GPIOB, GPIO_PIN_0}; // pin 15  net "LED_ERROR"   (NodeLib errorLedPin)
@@ -71,7 +76,7 @@ namespace Board
                                                        //     (ControllerNode-Thermostat-Link-Spec.md Sec3, open).
                                                        //   Main board: hardware RTS to the NINA -- same pin and AF,
                                                        //     aliased as NinaRts below.
-    constexpr uint8_t     Usart2Af = 1;
+    constexpr uint8_t Usart2Af = 1;
 
     // Thermostat link, ready for Hal::Uart::Init() (mirrors BusUart; the DE
     // entry is inert if the link is wired full-duplex / plain UART).
@@ -118,6 +123,11 @@ namespace Board
     inline const Hal::Pin ServoPwm{GPIOA, GPIO_PIN_6}; // pin 13  net "PWM", TIM3_CH1 (AF1)
                                                        //   externally pulled to the safe damper position.
                                                        //   Same physical pin as the Main board's NinaReset.
+    inline const Hal::Pin ServoEnable{GPIOA, GPIO_PIN_5}; // pin 12  servo power-enable, HIGH = servo powered.
+                                                          //   Off by default (pin Hi-Z at reset / unprogrammed):
+                                                          //   the 5V servo rail sits behind a MCU-gated high-side
+                                                          //   switch, energised only for a move. See
+                                                          //   Node-Bus-Power-Path-Spec.md §3.1.
 
     // --- Thermostat board -- Thermostat ------------------------------
     //   No main bus: USART1's PB6/PB7 become I2C1 for the OLED + room sensor;
@@ -126,7 +136,7 @@ namespace Board
     inline const Hal::Pin I2cSda{GPIOB, GPIO_PIN_7}; // pin 1   I2C1_SDA (AF6)  SSD1306/SSD1315 OLED + CHT40MEMS sensor
     inline const Hal::Pin I2cScl{GPIOB, GPIO_PIN_6}; // pin 20  I2C1_SCL (AF6)
                                                      //   pin 1 bonds PB7/PB8; pin 20 bonds PB3/PB4/PB5/PB6.
-    constexpr uint8_t     I2cAf = 6;
+    constexpr uint8_t I2cAf = 6;
 
     inline const Hal::Pin Button2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
                                                        //   (button 1 is UserButton / PA11 above -- ErrorHandler ack

@@ -90,7 +90,7 @@ FirmwareSlave::FirmwareSlave(const uint32_t baudRate, const uint8_t nodeId, cons
 
 void FirmwareSlave::Init()
 {
-    uart.Init(baudRate);
+    uart.Init(baudRate, module);
     heartbeatTimer.Start(HeartbeatMs);
     led.Write(true);
 }

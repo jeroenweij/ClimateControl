@@ -2,16 +2,16 @@
 * Created by J. Weij
 *
 * Linker script -- MainController application image.
-* Flash: 52 KB at 0x08002000 (above the 8 KB bootloader). The image
-* descriptor sits at a fixed 0xC0 offset, right after the vector table.
-* See Spec/Node-Flash-Layout-and-Bootloader-Spec.md §3/§4.
+* Flash: 50 KB at 0x08002800 (above the bootloader). The image descriptor sits
+* at a fixed 0xC0 offset, right after the vector table.
+* See Lib/Board/MemoryMap.h and Spec/Node-Flash-Layout-and-Bootloader-Spec.md §3/§4.
 *************************************************************/
 
 ENTRY(Reset_Handler)
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 52K
+    FLASH (rx)  : ORIGIN = 0x08002800, LENGTH = 50K
     RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 8K
 }
 

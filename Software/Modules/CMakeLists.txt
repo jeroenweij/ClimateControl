@@ -2,3 +2,5 @@
 add_subdirectory(Bootloader)
 add_subdirectory(MainController)
 add_subdirectory(TemperatureNode)
+add_subdirectory(ControllerNode)
+add_subdirectory(Thermostat)

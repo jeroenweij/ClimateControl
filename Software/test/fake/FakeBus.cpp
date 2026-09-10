@@ -61,7 +61,7 @@ Uart::Uart()
 {
 }
 
-void Uart::Init(const uint32_t, const UartPins&)
+void Uart::Init(const uint32_t, const Instance, const UartPins&)
 {
 }
 

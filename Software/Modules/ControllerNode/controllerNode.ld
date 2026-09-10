@@ -1,7 +1,7 @@
 /*************************************************************
 * Created by J. Weij
 *
-* Linker script -- TemperatureNode application image.
+* Linker script -- ControllerNode application image.
 * Flash: 50 KB at 0x08002800 (above the bootloader). The image descriptor sits
 * at a fixed 0xC0 offset, right after the vector table.
 * See Lib/Board/MemoryMap.h and Spec/Node-Flash-Layout-and-Bootloader-Spec.md §3/§4.

@@ -5,6 +5,7 @@
  * RS485 bus master (node id 0). See Spec/MainController-Spec.md.
  *************************************************************/
 
+#include "BoardPins.h"
 #include "MemoryMap.h"
 #include "System.h"
 
@@ -12,7 +13,7 @@
 
 namespace
 {
-    constexpr uint32_t BusBaud = 115200;
+    constexpr uint32_t BusBaud = Board::BusBaudRate;
 } // namespace
 
 int main()
@@ -23,7 +24,7 @@ int main()
     Hal::System::Init();
 
     // TODO: clock tree to 64 MHz (HSI16 -> PLL). Running on HSI16 (16 MHz) for
-    // now -- fine for 115200 on USART1.
+    // now -- 16 MHz / 250000 = 64 exact, so the bus baud is fine either way.
 
     NodeLib::NodeMaster master(BusBaud);
     master.Init();

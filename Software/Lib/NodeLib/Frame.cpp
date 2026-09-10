@@ -13,7 +13,7 @@ namespace
 {
     const uint8_t frameStart[2] = {0xEE, 0x42};
 
-    // Spec recommends ~2-3 byte-periods (~200us at 115200 baud) for the
+    // Spec recommends ~2-3 byte-periods (~100us at 250000 baud) for the
     // inter-byte timeout (§5). Tools::DelayTimer only has millisecond
     // resolution (Hal::Tick is a 1ms SysTick), so this is coarser than the
     // spec's suggestion -- a hardware timer would be needed for tighter
