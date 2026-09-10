@@ -76,6 +76,6 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `Node-Bus-Power-Path-Spec.md` | Per-node 48V→5V→3.3V regulation chain |
 | `Software-Architecture-Spec.md` | Module map, directory layout, build/toolchain, code style |
 | `MainController-Spec.md` | Bus-master role + 48V power input / bus injection (§3); NINA-W152 Wi-Fi connectivity (§5); supervisory bridge role |
-| `MainController-Server-Link-Spec.md` | MainController ↔ server link: relay NodeLib frames verbatim over one LAN TCP socket (no TLS v1), Go+SQLite server decodes + stores + serves the web UI; `0x60` uplink endpoint block; OTA-over-uplink |
+| `MainController-Server-Link-Spec.md` | MainController ↔ server link: relay NodeLib frames verbatim over one LAN TCP socket; server decodes + stores to SQLite + serves an SPA (HTTP + WebSocket); `0x60` uplink endpoint block; OTA-over-uplink |
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
