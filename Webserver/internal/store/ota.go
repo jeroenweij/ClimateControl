@@ -75,7 +75,7 @@ func (s *Store) OtaJobs(ctx context.Context, limit int) ([]OtaJob, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []OtaJob
+	out := []OtaJob{}
 	for rows.Next() {
 		j, err := scanOtaJob(rows)
 		if err != nil {

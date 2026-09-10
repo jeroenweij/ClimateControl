@@ -116,7 +116,7 @@ func (s *Store) Nodes(ctx context.Context) ([]Node, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Node
+	out := []Node{}
 	for rows.Next() {
 		var n Node
 		var mod, online int
@@ -173,7 +173,7 @@ func (s *Store) Readings(ctx context.Context, nodeID int, ep nodelib.Endpoint, f
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ReadingPoint
+	out := []ReadingPoint{}
 	for rows.Next() {
 		var p ReadingPoint
 		var num sql.NullFloat64
@@ -243,7 +243,7 @@ func (s *Store) Overrides(ctx context.Context, nodeID int) ([]Override, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Override
+	out := []Override{}
 	for rows.Next() {
 		var o Override
 		var ep int

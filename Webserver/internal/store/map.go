@@ -44,7 +44,7 @@ func (s *Store) Floors(ctx context.Context) ([]Floor, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Floor
+	out := []Floor{}
 	for rows.Next() {
 		var f Floor
 		if err := rows.Scan(&f.ID, &f.Name, &f.ImagePath, &f.WidthPx, &f.HeightPx, &f.Sort); err != nil {
@@ -110,7 +110,7 @@ func (s *Store) Placements(ctx context.Context) ([]Placement, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Placement
+	out := []Placement{}
 	for rows.Next() {
 		var p Placement
 		var poly sql.NullString

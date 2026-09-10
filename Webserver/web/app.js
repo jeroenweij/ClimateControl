@@ -108,13 +108,13 @@ window.addEventListener("hashchange", route);
 // ---- data loads ------------------------------------------------------
 
 async function loadNodes() {
-  state.nodes = await api("/api/nodes");
+  state.nodes = (await api("/api/nodes")) || [];
 }
 async function loadFloors() {
-  state.floors = await api("/api/floors");
+  state.floors = (await api("/api/floors")) || [];
 }
 async function loadPlacements() {
-  state.placements = await api("/api/placements");
+  state.placements = (await api("/api/placements")) || [];
 }
 
 // ---- map view -------------------------------------------------------
@@ -237,7 +237,7 @@ async function renderOverrides() {
 }
 
 async function renderOverrideTable() {
-  const rows = await api("/api/overrides");
+  const rows = (await api("/api/overrides")) || [];
   $("#override-table tbody").innerHTML = rows
     .map(
       (o) => `<tr>
