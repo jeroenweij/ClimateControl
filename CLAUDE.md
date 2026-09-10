@@ -10,12 +10,13 @@ See `Spec/` for the full design docs — read those before making architectural 
 ClimateControl/
 ├── Spec/                   # design specs — protocol, hardware, power, per-module, architecture
 ├── Hardware/                # PCB/schematic sources
+├── Webserver/              # Go building server: MainController TCP uplink → SQLite + embedded SPA
 └── Software/
     ├── .clang-format       # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
     ├── CMakeLists.txt      # top-level CMake project — aggregates Lib/* and Modules/*
     ├── cmake/              # ARM Cortex-M0+ toolchain file + stm32.cmake (add_stm32_executable)
     ├── Lib/
-    │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL — the only place ST driver headers get included
+    │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL (Uart/Gpio/Crc/Flash/Backup/Tick/System/OneWire) — the only place ST driver headers get included
     │   ├── Board/           # BoardPins.h (pin map) + MemoryMap.h / ImageDescriptor.h (flash layout) — header-only
     │   ├── Tools/           # DelayTimer + Logger — shared helpers
     │   ├── Startup/         # shared startup_stm32g031xx.s + syscalls.c
@@ -23,12 +24,10 @@ ClimateControl/
     └── Modules/
         ├── Bootloader/       # bus-resident OTA bootloader — one binary for all boards (base skeleton)
         ├── MainController/   # RS485 bus master (base skeleton)
-        ├── ControllerNode/   # damper/servo slave node + ControllerNode<->Thermostat link — not built yet
-        ├── TemperatureNode/  # duct temperature slave node — not built yet
-        └── Thermostat/       # room UI, paired 1:1 to one ControllerNode — not built yet
+        └── TemperatureNode/  # duct temperature slave node — framework in place (DS18B20 1-Wire driver, DuctChannel/TemperatureHandler)
 ```
 
-Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Bootloader` + `MainController` build today (`make -C Software build`); the three slave modules are still empty. The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
+`ControllerNode/` and `Thermostat/` are not created yet. Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Bootloader`, `MainController` and `TemperatureNode` build today (`make -C Software build`, or the `Software/` CMake project directly); `ControllerNode` and `Thermostat` don't exist yet. The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
 
 ## System architecture
 
@@ -64,6 +63,7 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 - **Driver layer:** STM32Cube HAL/LL, wrapped by `Lib/HAL` — protocol and application code never includes ST headers directly.
 - **MCU:** STM32G031F8P6 (Cortex-M0+, 64 MHz, 64 KB flash / 8 KB SRAM, TSSOP20) — locked in 2026-09-08 for all four boards (MainController, ControllerNode, TemperatureNode, Thermostat). Drop-in replacement for the earlier STM32G030F6P6TR: identical pinout, +32 KB flash (bus-resident DFU bootloader + NINA driver headroom), plus LPUART1 / RTC+backup-registers / TIM2. HAL device define is `STM32G031xx`.
 - **Flashing:** SEGGER J-Link — a CMake custom target per module shells out to `JLinkExe` with a generated commander script. **`JLinkExe`/`JLinkGDBServer` are not yet installed on this machine** — install the J-Link Software Pack before the flash target will run.
+- **CI:** `.github/workflows/cmake-single-platform.yml` — on push/PR to `main`, installs the ARM toolchain, configures + builds the `Software/` CMake project (`Release`), and uploads the per-module `.elf`/`.bin`/`.hex`. The `ctest` step is `continue-on-error` until a test target exists.
 
 ## Specs index
 
