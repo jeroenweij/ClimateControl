@@ -1,5 +1,6 @@
 :root {
   color-scheme: light dark;
+  --content-width: 1800px;
   --bg: #f4f5f7;
   --panel: #ffffff;
   --ink: #1c1f23;
@@ -32,16 +33,22 @@ body {
   font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
+/* Full-bleed band; its contents line up with <main>'s content box. */
 header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.7rem 1.2rem;
+  padding: 0.7rem 0;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 10;
+}
+header .bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 0 1.2rem;
 }
 header h1 { font-size: 1rem; margin: 0; letter-spacing: 0.02em; }
 nav { display: flex; gap: 0.25rem; flex: 1; }
@@ -64,7 +71,7 @@ nav a.active { background: var(--accent); color: #fff; }
 .pill.up { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
 .pill.down { background: color-mix(in srgb, var(--err) 25%, transparent); color: var(--err); }
 
-main { padding: 1.2rem; max-width: 1100px; margin: 0 auto; }
+main { padding: 1.2rem; max-width: var(--content-width); margin: 0 auto; }
 h2 { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
 h3 { font-size: 0.9rem; margin: 1.4rem 0 0.5rem; color: var(--muted); }
 
