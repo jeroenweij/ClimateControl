@@ -1,0 +1,6 @@
+{
+  "httpAddr": ":8080",
+  "uplinkAddr": ":9000",
+  "uplinkToken": "GENERATED-ON-FIRST-RUN",
+  "dataDir": "/opt/ccserver/data"
+}

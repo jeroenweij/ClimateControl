@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClimateControl</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <h1>ClimateControl</h1>
+  <nav>
+    <a href="#/map" data-view="map">Map</a>
+    <a href="#/overrides" data-view="overrides">Overrides</a>
+    <a href="#/status" data-view="status">Status</a>
+    <a href="#/setup" data-view="setup">Map setup</a>
+  </nav>
+  <span id="link-state" class="pill" title="MainController uplink">uplink …</span>
+</header>
+
+<main>
+  <section id="view-map" class="view">
+    <div class="toolbar">
+      <label>Floor
+        <select id="floor-select"></select>
+      </label>
+      <span class="legend">
+        <i style="background:var(--cold)"></i>16&deg;
+        <i style="background:var(--mid)"></i>21&deg;
+        <i style="background:var(--hot)"></i>26&deg;
+      </span>
+    </div>
+    <div id="map-stage" class="stage">
+      <img id="floor-img" alt="floor plan">
+      <svg id="map-overlay" preserveAspectRatio="none"></svg>
+    </div>
+    <p id="map-empty" class="empty" hidden>No floor plan yet — add one on the <a href="#/setup">Map setup</a> page.</p>
+  </section>
+
+  <section id="view-overrides" class="view" hidden>
+    <h2>Overrides</h2>
+    <form id="override-form" class="card">
+      <label>Node <select id="ov-node"></select></label>
+      <label>Endpoint <select id="ov-endpoint"></select></label>
+      <label>Value <input id="ov-value" type="number" step="0.1"></label>
+      <button type="submit">Send &amp; hold</button>
+      <span id="ov-msg" class="msg"></span>
+    </form>
+    <h3>Held values</h3>
+    <table id="override-table"><thead><tr>
+      <th>Node</th><th>Endpoint</th><th>Value</th><th>By</th><th></th>
+    </tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="view-status" class="view" hidden>
+    <h2>Nodes</h2>
+    <table id="node-table"><thead><tr>
+      <th>ID</th><th>Module</th><th>State</th><th>Room / duct</th><th>Last seen</th>
+    </tr></thead><tbody></tbody></table>
+
+    <h2>MainController &amp; bus</h2>
+    <div id="main-status" class="card kv"></div>
+
+    <h2>Firmware</h2>
+    <form id="ota-form" class="card">
+      <label>Node <select id="ota-node"></select></label>
+      <label>Image <input id="ota-file" type="file" accept=".bin"></label>
+      <button type="submit">Push update</button>
+      <span id="ota-msg" class="msg"></span>
+    </form>
+    <table id="ota-table"><thead><tr>
+      <th>Job</th><th>Node</th><th>File</th><th>State</th><th>Progress</th>
+    </tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="view-setup" class="view" hidden>
+    <h2>Map setup</h2>
+    <form id="floor-form" class="card">
+      <label>Name <input id="floor-name" type="text" placeholder="Ground floor"></label>
+      <label>Image <input id="floor-file" type="file" accept="image/*"></label>
+      <button type="submit">Add floor</button>
+      <span id="floor-msg" class="msg"></span>
+    </form>
+    <div class="toolbar">
+      <label>Floor <select id="setup-floor-select"></select></label>
+      <label>Place node <select id="setup-node-select"></select></label>
+      <span class="hint">then click on the plan</span>
+      <button id="floor-delete" type="button" class="danger">Delete this floor</button>
+    </div>
+    <div id="setup-stage" class="stage editing">
+      <img id="setup-img" alt="floor plan">
+      <svg id="setup-overlay" preserveAspectRatio="none"></svg>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

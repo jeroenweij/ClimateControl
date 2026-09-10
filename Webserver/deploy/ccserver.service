@@ -1,0 +1,34 @@
+# systemd unit for the ClimateControl server.
+# Install to /etc/systemd/system/ccserver.service and adjust paths if needed.
+
+[Unit]
+Description=ClimateControl building server
+Documentation=https://github.com/jweij/climatecontrol
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ccserver
+Group=ccserver
+WorkingDirectory=/opt/ccserver
+ExecStart=/opt/ccserver/ccserver -config /opt/ccserver/config.json
+Restart=on-failure
+RestartSec=3
+
+# The server only needs its own data directory.
+StateDirectory=ccserver
+ReadWritePaths=/opt/ccserver/data
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

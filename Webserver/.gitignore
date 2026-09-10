@@ -1,0 +1,12 @@
+# The repo-root .gitignore is C/CMake-oriented and excludes patterns that are
+# real source here: *.mod (Fortran) and Makefile (CMake-generated). Re-include.
+!go.mod
+!Makefile
+
+/bin/
+/dist/
+/data/
+/config.json
+*.db
+*.db-wal
+*.db-shm
