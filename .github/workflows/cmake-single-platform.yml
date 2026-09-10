@@ -26,10 +26,11 @@ jobs:
         with:
           python-version: '3.x'
 
-      # Pin the same clang-format the tree was formatted with (18-20 agree;
-      # 21+ reflows some comments).
+      # Pin the clang-format the tree was last formatted with -- matches the
+      # pipx install on the dev machine. clang-format <= 21 disagrees with it
+      # on AlignConsecutiveDeclarations in Lib/Board/BoardPins.h.
       - name: Install clang-format
-        run: pip install 'clang-format==19.1.7'
+        run: pip install 'clang-format==23.1.0'
 
       - name: Check formatting
         working-directory: ${{ env.SOURCE_DIR }}
