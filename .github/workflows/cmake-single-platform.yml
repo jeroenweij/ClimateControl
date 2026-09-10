@@ -20,9 +20,9 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -39,7 +39,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install ARM GNU toolchain
         uses: carlosperate/arm-none-eabi-gcc-action@v1
@@ -56,7 +56,7 @@ jobs:
         run: arm-none-eabi-size ${{ env.BUILD_DIR }}/Modules/*/*.elf
 
       - name: Upload firmware images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: firmware-${{ env.BUILD_TYPE }}
           path: |
@@ -67,7 +67,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Host build -- uses the runner's native g++, no ARM toolchain needed.
       - name: Build and run unit tests
