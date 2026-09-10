@@ -87,7 +87,12 @@ sudo chown -R ccserver:ccserver /opt/ccserver
 sudo chmod 750 /opt/ccserver
 sudo chmod +x  /opt/ccserver/ccserver
 
-# 3.3 first start — this generates the uplink token
+# 3.2b if :8080 or :9000 is already taken on this box (e.g. another web app),
+#      edit /opt/ccserver/config.json now and set httpAddr / uplinkAddr to
+#      free ports — check with:  sudo ss -ltnp
+
+# 3.3 first start — the empty uplinkToken in config.json is filled in with a
+#     fresh 16-byte secret and written back
 sudo systemctl daemon-reload
 sudo systemctl enable --now ccserver
 

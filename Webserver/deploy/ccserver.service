@@ -16,9 +16,11 @@ ExecStart=/opt/ccserver/ccserver -config /opt/ccserver/config.json
 Restart=on-failure
 RestartSec=3
 
-# The server only needs its own data directory.
+# The install dir must be writable: the server persists the generated
+# uplinkToken back to config.json on first run, and keeps the SQLite DB +
+# uploaded assets under data/.
 StateDirectory=ccserver
-ReadWritePaths=/opt/ccserver/data
+ReadWritePaths=/opt/ccserver
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
