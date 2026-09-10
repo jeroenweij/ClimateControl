@@ -64,6 +64,38 @@ func ParseNodePresence(data []byte) (NodePresence, bool) {
 	return NodePresence{NodeID: data[0], Module: Module(data[1]), Up: data[2] != 0}, true
 }
 
+// ThermostatStatus is a 0x63 Report: the presence, bootloader state, running
+// firmware version and identity of the Thermostat paired to one ControllerNode,
+// relayed by the MainController from Get RoomLink + Get ThermostatFirmware.
+// See ControllerNode-Thermostat-Link-Spec.md §5.6.
+type ThermostatStatus struct {
+	ControllerNodeID uint8
+	LinkUp           bool
+	BLState          uint8
+	FWMajor          uint8
+	FWMinor          uint8
+	UID              [12]byte
+}
+
+// FWVersion packs the running version as major<<8 | minor, matching the
+// encoding stored for bus nodes.
+func (t ThermostatStatus) FWVersion() int { return int(t.FWMajor)<<8 | int(t.FWMinor) }
+
+// ParseThermostatStatus decodes a 0x63 Report payload (17 bytes).
+func ParseThermostatStatus(data []byte) (ThermostatStatus, bool) {
+	if len(data) < 17 {
+		return ThermostatStatus{}, false
+	}
+	var t ThermostatStatus
+	t.ControllerNodeID = data[0]
+	t.LinkUp = data[1] != 0
+	t.BLState = data[2]
+	t.FWMajor = data[3]
+	t.FWMinor = data[4]
+	copy(t.UID[:], data[5:17])
+	return t, true
+}
+
 // MainStatus is a 0x67 Report: MainController + bus health, ~10 s.
 type MainStatus struct {
 	RxFrames      uint32 `json:"rxFrames"`

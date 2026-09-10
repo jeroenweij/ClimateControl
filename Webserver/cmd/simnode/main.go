@@ -12,6 +12,8 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
@@ -23,7 +25,10 @@ func main() {
 	controllers := flag.Int("controllers", 3, "number of ControllerNodes to simulate")
 	temps := flag.Int("temps", 1, "number of TemperatureNodes to simulate")
 	period := flag.Duration("period", 3*time.Second, "reporting interval")
+	fw := flag.String("fw", "1.0", "firmware version the simulated nodes report (major.minor)")
 	flag.Parse()
+
+	fwMajor, fwMinor := parseVersion(*fw)
 
 	tok, err := hex.DecodeString(*tokenHex)
 	if err != nil || len(tok) != 16 {
@@ -33,7 +38,7 @@ func main() {
 	copy(token[:], tok)
 
 	for {
-		if err := run(*addr, token, *controllers, *temps, *period); err != nil {
+		if err := run(*addr, token, *controllers, *temps, *period, fwMajor, fwMinor); err != nil {
 			log.Printf("disconnected: %v — retrying in 2s", err)
 			time.Sleep(2 * time.Second)
 		}
@@ -47,7 +52,7 @@ type simNode struct {
 	setpt  float64
 }
 
-func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration) error {
+func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fwMajor, fwMinor uint16) error {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return err
@@ -77,7 +82,7 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration) er
 
 	// UplinkHello.
 	hello := make([]byte, 0, 23)
-	hello = appendU16(hello, 0x0001)
+	hello = appendU16(hello, fwMajor<<8|fwMinor) // MainController's own firmware
 	hello = appendU32(hello, 0)
 	hello = append(hello, byte(len(nodes)))
 	hello = append(hello, token[:]...)
@@ -96,6 +101,40 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration) er
 	}
 	_ = write(nodelib.Frame{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport,
 		Data: append([]byte{0xFF, 0, 0}, 0, 0, 0, 0)})
+
+	// SystemInfo per node so the server learns the running firmware version:
+	// module(1) hwRev(1) fwMajor(2 LE) fwMinor(2 LE).
+	sysInfo := func(n simNode) {
+		d := []byte{byte(n.module), 1}
+		d = appendU16(d, fwMajor)
+		d = appendU16(d, fwMinor)
+		_ = write(nodelib.Frame{Node: byte(n.id), Endpoint: nodelib.EndpointSystemInfo, Operation: nodelib.OpReport, Data: d})
+	}
+	for _, n := range nodes {
+		sysInfo(n)
+	}
+
+	// ThermostatStatus (0x63) for every ControllerNode: the server models each
+	// as owning one Thermostat. controllerNodeId(1) linkUp(1) blState(1)
+	// fwMajor(1) fwMinor(1) uid[12].
+	thermStatus := func(n simNode) {
+		if n.module != nodelib.ModuleControllerNode {
+			return
+		}
+		d := make([]byte, 17)
+		d[0] = byte(n.id)
+		d[1] = 1 // link up
+		d[2] = 0 // bl state: app
+		d[3] = byte(fwMajor)
+		d[4] = byte(fwMinor)
+		for i := 0; i < 12; i++ {
+			d[5+i] = byte(0xA0 + n.id + i)
+		}
+		_ = write(nodelib.Frame{Node: 0, Endpoint: nodelib.EndpointThermostatStatus, Operation: nodelib.OpReport, Data: d})
+	}
+	for _, n := range nodes {
+		thermStatus(n)
+	}
 
 	// Drain inbound (Get roster / Set overrides) so the socket doesn't stall.
 	go func() {
@@ -146,6 +185,10 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration) er
 				}
 			}
 		case <-status.C:
+			for _, n := range nodes {
+				sysInfo(n)
+				thermStatus(n)
+			}
 			uptime += 10
 			ms := make([]byte, 0, 23)
 			ms = appendU32(ms, uptime*4)
@@ -172,6 +215,17 @@ func i16(f float64) []byte {
 	return []byte{byte(v), byte(uint16(v) >> 8)}
 }
 func appendU16(b []byte, v uint16) []byte { return append(b, byte(v), byte(v>>8)) }
+
+func parseVersion(s string) (major, minor uint16) {
+	parts := strings.SplitN(s, ".", 2)
+	m, _ := strconv.Atoi(parts[0])
+	major = uint16(m)
+	if len(parts) == 2 {
+		n, _ := strconv.Atoi(parts[1])
+		minor = uint16(n)
+	}
+	return
+}
 func appendU32(b []byte, v uint32) []byte {
 	return append(b, byte(v), byte(v>>8), byte(v>>16), byte(v>>24))
 }

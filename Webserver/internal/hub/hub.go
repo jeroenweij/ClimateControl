@@ -121,6 +121,14 @@ func (h *Hub) PublishPresence(node int, module nodelib.Module, up bool) {
 	h.broadcast(PresenceEvent{Type: "presence", Node: node, Module: module.String(), Up: up})
 }
 
+// PublishThermostat broadcasts a paired-thermostat state change so the
+// Firmware view can refresh.
+func (h *Hub) PublishThermostat(controllerNodeID int, linkUp bool) {
+	h.broadcast(map[string]any{
+		"type": "thermostat", "controllerNodeId": controllerNodeID, "linkUp": linkUp,
+	})
+}
+
 // PublishMain caches and broadcasts MainController health.
 func (h *Hub) PublishMain(st nodelib.MainStatus, online bool) {
 	ev := MainEvent{Type: "main", Status: st, Online: online, TS: time.Now().UnixMilli()}

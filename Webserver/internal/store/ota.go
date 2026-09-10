@@ -20,7 +20,7 @@ type OtaJob struct {
 	Module     int    `json:"module"`
 	Started    int64  `json:"started"`
 	Finished   *int64 `json:"finished,omitempty"`
-	State      string `json:"state"` // pending|entering|erasing|writing|verifying|done|error
+	State      string `json:"state"` // queued|entering|erasing|writing|verifying|done|error
 	LastOffset int    `json:"lastOffset"`
 	Error      string `json:"error,omitempty"`
 	ImagePath  string `json:"-"`
@@ -34,7 +34,7 @@ func (s *Store) CreateOtaJob(ctx context.Context, j OtaJob) (int64, error) {
 	}
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO ota_jobs (node_id, target, filename, size, crc32, fw_version, module, started, state, image_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
 		j.NodeID, target, j.Filename, j.Size, int64(j.CRC32), j.FWVersion, j.Module,
 		time.Now().UnixMilli(), j.ImagePath)
 	if err != nil {
@@ -98,6 +98,31 @@ func (s *Store) ActiveOtaJob(ctx context.Context) (OtaJob, bool, error) {
 		return OtaJob{}, false, err
 	}
 	return j, true, nil
+}
+
+// NextQueuedOtaJob returns the oldest job still waiting to run (ok == false
+// when the queue is empty). Only one push runs at a time; the driver moves a
+// job out of 'queued' as soon as it starts.
+func (s *Store) NextQueuedOtaJob(ctx context.Context) (OtaJob, bool, error) {
+	j, err := scanOtaJob(s.db.QueryRowContext(ctx, otaSelect+
+		` WHERE state = 'queued' ORDER BY id ASC LIMIT 1`))
+	if err == sql.ErrNoRows {
+		return OtaJob{}, false, nil
+	}
+	if err != nil {
+		return OtaJob{}, false, err
+	}
+	return j, true, nil
+}
+
+// HasPendingOtaJob reports whether a job for this node+target is already queued
+// or running, so a repeated operator press does not stack duplicates.
+func (s *Store) HasPendingOtaJob(ctx context.Context, nodeID int, target string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ota_jobs WHERE node_id = ? AND target = ? AND state NOT IN ('done','error')`,
+		nodeID, target).Scan(&n)
+	return n > 0, err
 }
 
 const otaSelect = `SELECT id, node_id, target, filename, size, crc32, fw_version, module,

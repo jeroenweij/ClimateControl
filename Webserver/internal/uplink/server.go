@@ -28,6 +28,7 @@ type Handler interface {
 	OnRosterEntry(e nodelib.RosterEntry)
 	OnPresence(p nodelib.NodePresence)
 	OnMainStatus(s nodelib.MainStatus)
+	OnThermostatStatus(t nodelib.ThermostatStatus)
 	OnOtaReport(r nodelib.OtaControlReport)
 }
 
@@ -227,6 +228,10 @@ func (c *conn) dispatch(f nodelib.Frame, h Handler) {
 	case f.Endpoint == nodelib.EndpointMainStatus && f.Operation == nodelib.OpReport:
 		if s, ok := nodelib.ParseMainStatus(f.Data); ok {
 			h.OnMainStatus(s)
+		}
+	case f.Endpoint == nodelib.EndpointThermostatStatus && f.Operation == nodelib.OpReport:
+		if t, ok := nodelib.ParseThermostatStatus(f.Data); ok {
+			h.OnThermostatStatus(t)
 		}
 	case f.Endpoint == nodelib.EndpointOtaControl && f.Operation == nodelib.OpReport:
 		if r, ok := nodelib.ParseOtaControlReport(f.Data); ok {

@@ -84,7 +84,7 @@ Transport verbs (`Discover` / `Announce` / `Poll` / `Done`) are bus-internal and
 | `0x60` `UplinkHello` | MC→S | `Report` | `fwVersion(2) · uptimeSec(4) · nodeCount(1) · authToken(16)` | First frame after every (re)connect. Connection is dropped on token mismatch. |
 | `0x61` `Roster` | S→MC / MC→S | `Get` / `Report` | Report: `{nodeId(1) · module(1) · state(1) · lastSeenMs(4)}`, one node per frame, `nodeId = 0xFF` terminates | Full active-node table. Streamed unsolicited after `UplinkHello` and on request. `lastSeenMs` is `MainController` uptime-ms at last contact (relative — the MCU has no wall clock). |
 | `0x62` `NodePresence` | MC→S | `Report` | `nodeId(1) · module(1) · up(1)` | A node joined discovery (`up = 1`) or missed its heartbeat (`up = 0`). |
-| `0x63` | — | — | — | reserved |
+| `0x63` `ThermostatStatus` | MC→S | `Report` | `controllerNodeId(1) · linkUp(1) · blState(1) · fwMajor(1) · fwMinor(1) · uid[12]` (17 B) | The paired Thermostat behind one ControllerNode — link state + running firmware + identity. On change + slow keepalive; the MC fills it from `Get RoomLink` + `Get ThermostatFirmware`. See `ControllerNode-Thermostat-Link-Spec.md` §5.6. |
 | `0x64` `Keepalive` | ↔ | `Get` / `Report` | none | Idle liveness, ~30 s interval. A missed round trip triggers reconnect. |
 | `0x65` `OtaControl` | S→MC / MC→S | `Set` / `Report` | Set: `targetNodeId(1) · imageSize(4) · imageCrc32(4) · fwVersion(2) · module(1)`. Report: `state(1) · targetNodeId(1) · nextOffset(4) · lastError(1)` | Start / abort / progress of an image push (§8). `targetNodeId = 0` = `MainController` self-update. |
 | `0x66` `OtaData` | S→MC | `Set` | `offset(4) · bytes(≤27)` — identical layout to the bus `Firmware Write` payload | One image chunk; the bridge rewrites the header and forwards it (§8). |
@@ -112,7 +112,7 @@ It also tracks node presence from `Roster` / `NodePresence`, composes downlink f
 | Surface | Path | Purpose |
 |---|---|---|
 | App bundle | `GET /`, `/assets/*` | The compiled single-page app (`index.html` + JS + CSS). Downloaded once per browser session. |
-| JSON API | `GET`/`POST /api/*` | Everything that is not a live value: history queries, commands, node status, config, map setup, firmware upload. Request/response over SQLite + the state cache. |
+| JSON API | `GET`/`POST /api/*` | Everything that is not a live value: history queries, commands, node status, config, map setup, the firmware repository + updates (`/api/firmware*`). Request/response over SQLite + the state cache. |
 | WebSocket | `GET /ws` | The live channel. On connect the server sends a full current-state snapshot; thereafter it pushes one message per value change for the life of the socket. |
 
 ### Data flow — a node value reaching the browser
@@ -131,7 +131,7 @@ A single-page app. After the initial bundle load it runs entirely client-side:
 
 - Opens `/ws`, applies the initial snapshot, and renders the map and tables with no loading state.
 - Applies each incremental `{node, endpoint, value, ts}` push to the single affected element — no reload, no polling.
-- Calls the JSON API for non-live actions: history graphs (`GET /api/readings?node=&endpoint=&from=&to=`), overrides (`POST /api/commands`), firmware upload (`POST /api/ota`), map edits (`POST /api/map/*`).
+- Calls the JSON API for non-live actions: history graphs (`GET /api/readings?node=&endpoint=&from=&to=`), overrides (`POST /api/commands`), the firmware repository + updates (`GET/POST /api/firmware`, `POST /api/firmware/update[-all]`), map edits (`POST /api/map/*`).
 - Command outcomes (`Ack` / `Nack` / the resulting `Report`) return over the same WebSocket, so every UI update flows through one path.
 
 The operator pages (§7) and the map-setup page are routes within this one app.
@@ -139,10 +139,13 @@ The operator pages (§7) and the map-setup page are routes within this one app.
 ### Database (SQLite)
 
 ```
-nodes(id PK, module, uid, fw_version, first_seen, last_seen, state)
+nodes(id PK, module, uid, fw_version, first_seen, last_seen, state)  -- fw_version from SystemInfo
 readings(ts, node_id, endpoint, raw BLOB, value_num, value_text)   -- indexed (node_id, endpoint, ts)
 commands(ts, node_id, endpoint, operation, payload, user, sent_ts, ack_ts, result)
-ota_jobs(id PK, node_id, filename, size, crc32, fw_version, started, finished, state, last_offset, error)
+ota_jobs(id PK, node_id, target, filename, size, crc32, fw_version, module, started, finished, state, last_offset, error, image_path)
+                                                                   -- target 'node'|'thermostat'; state 'queued' until the single-flight driver picks it up
+firmware_images(module PK, filename, version, size, crc32, uploaded_ts, image_path)  -- one held image per module; version = major<<8|minor, parsed from the filename
+thermostats(controller_node_id PK, uid, fw_version, bl_state, link_up, last_seen)    -- from 0x63 ThermostatStatus
 config_overrides(node_id, endpoint, value, user, ts)               -- re-asserted when the node rejoins
 map_floors(id PK, name, image_path, width_px, height_px)
 map_placements(node_id, floor_id, x_px, y_px, poly_json NULL)      -- one row per ControllerNode
@@ -162,7 +165,8 @@ One server-side module implements the `NodeLib` wire format: the `Frame` deframe
 |---|---|---|
 | **Building map** — floor plan, live per-room temperature (§7.1) | renders from the state cache, live-updates over `/ws` | none beyond the node `Report`s already arriving |
 | **Overrides** — change setpoint / damper mode / any writable endpoint | writes `config_overrides`, composes `Set <node> <endpoint> <value>` | downlink `Set` → node `Report` / `Ack` → cache + push |
-| **Status** — per-node module / fw / uptime / error flags / bus counters, plus firmware upload | shows `SystemInfo` / `SystemStatus` / `DiagRxCounters` / `MainStatus`; accepts a `.bin` | on-demand `Get` downlink; OTA sequence (§8) |
+| **Status** — per-node module / fw / uptime / error flags / bus counters | shows `SystemInfo` / `SystemStatus` / `DiagRxCounters` / `MainStatus` | on-demand `Get` downlink |
+| **Firmware** — installed version per node (+ a row per Thermostat), the held image per module, per-node / "update all" push | `SystemInfo` fw + `0x63` + `firmware_images`; accepts a `<Module>_<major>.<minor>.bin` | single-flight OTA queue, OTA sequence (§8) |
 | **Map setup** (separate config page) | per-floor floor-plan image upload; click to place each `ControllerNode`; optional room polygon | none |
 
 When a node rejoins, the server re-applies any matching `config_overrides` (a rebooted node returns at defaults).

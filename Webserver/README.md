@@ -188,19 +188,32 @@ cycle.
 |---|---|
 | Map | live floor-plan heatmap of room temperatures |
 | Overrides | change a setpoint / damper mode; the value is held and re-applied if the node reboots |
-| Status | per-node status (online / offline / unexpected), bus counters, and firmware upload |
+| Status | per-node status (online / offline / unexpected) and bus counters |
+| Firmware | installed firmware per node, upload new images, push updates |
 | Map setup | upload a floor-plan image, click to place each ControllerNode |
 
-**Firmware update** — Status page → Firmware → choose a **target**, pick the
-node, upload the module's `.bin` from `Software/build/Modules/*`. The server
-validates the image header, CRC, and that its module matches the target, then
-drives the OTA sequence; progress shows in the job table.
+**Firmware update** — the **Firmware** page.
 
-- **Bus node** — `ControllerNode`, `TemperatureNode`, or a MainController
-  self-update (node id `0`). Relayed on the RS485 bus.
-- **Paired thermostat** — pick the thermostat's **ControllerNode**; the push is
-  relayed over the private ControllerNode↔Thermostat link (that ControllerNode
-  must be running its application). Upload a `Thermostat` image.
+1. **Upload an image.** The build produces one per module under
+   `Software/build/Modules/<module>/<Module>_<version>.bin` (e.g.
+   `ControllerNode_1.0.bin`). The server reads the module and version straight
+   from that filename and cross-checks the image's own descriptor — a file that
+   does not match the `<Module>_<major>.<minor>.bin` shape is rejected. The
+   repository holds **one image per module**; a new upload replaces the old one.
+2. **Push it.** Each node shows its installed version against the held image.
+   *Update* appears where a node is online and running something older; it is
+   greyed out otherwise. *Update all* (next to the image) does every eligible
+   node of that type. **One push runs at a time** — the rest queue, in the
+   *Update queue* table, whether they came from one button or many.
+
+Each **ControllerNode** has two rows: its own firmware, and its paired
+**Thermostat**'s (pushed over the private ControllerNode↔Thermostat link — that
+ControllerNode must be running its application, and the link must be up).
+
+The **MainController** is the first row (id `MC`); its version comes from the
+uplink handshake and a push is a self-update (`targetNodeId = 0`). The bus and
+this server link drop while it reboots into its bootloader — the UI asks to
+confirm.
 
 **Backup** — the entire state is one SQLite file:
 
@@ -302,5 +315,10 @@ the wire protocol changes.
 | `GET/DELETE /api/overrides[/{node}/{endpoint}]` | held values |
 | `GET/POST/DELETE /api/floors[/{id}]`, `GET /api/floors/{id}/image` | floor plans |
 | `GET /api/placements`, `PUT/DELETE /api/placements/{node}` | node map positions |
-| `POST /api/ota` (multipart: `node`, `image`), `GET /api/ota[/{id}]` | firmware push |
-| `GET /ws` | live channel: `snapshot` then `value` / `presence` / `main` / `ota` events |
+| `POST /api/ota` (multipart: `node`, `target`, `image`), `GET /api/ota[/{id}]` | ad-hoc firmware push + job list/queue |
+| `GET /api/firmware` | held images + per-node/-thermostat firmware status |
+| `POST /api/firmware` (multipart: `image`) | add/replace the held image for a module (module + version from the filename) |
+| `DELETE /api/firmware/{module}` | drop the held image for a module |
+| `POST /api/firmware/update` `{node,target}` | queue one update from the held image |
+| `POST /api/firmware/update-all` `{module}` | queue an update for every eligible node of that type |
+| `GET /ws` | live channel: `snapshot` then `value` / `presence` / `main` / `ota` / `thermostat` events |

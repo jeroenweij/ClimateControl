@@ -93,9 +93,23 @@ func TestStartOTAThermostatJob(t *testing.T) {
 		t.Errorf("job module = %d, want %d (Thermostat)", job.Module, nodelib.ModuleThermostat)
 	}
 
-	// A second push while this one is live is rejected.
-	if _, err := svc.StartOTA(context.Background(), 4, "node", "x.bin", image(nodelib.ModuleControllerNode), t.TempDir()); !errors.Is(err, ErrOtaBusy) {
-		t.Fatalf("second push: got %v, want ErrOtaBusy", err)
+	// A second push for a different target while this one is live is accepted
+	// and left queued — one push runs at a time, the rest wait.
+	queuedID, err := svc.StartOTA(context.Background(), 4, "node", "x.bin", image(nodelib.ModuleControllerNode), t.TempDir())
+	if err != nil {
+		t.Fatalf("second push: got %v, want it queued", err)
+	}
+	qjob, err := svc.Store().OtaJob(context.Background(), queuedID)
+	if err != nil {
+		t.Fatalf("OtaJob: %v", err)
+	}
+	if qjob.State != "queued" {
+		t.Errorf("second job state = %q, want queued", qjob.State)
+	}
+
+	// Pressing the same target again does not stack a duplicate.
+	if _, err := svc.StartOTA(context.Background(), 4, "node", "x.bin", image(nodelib.ModuleControllerNode), t.TempDir()); !errors.Is(err, ErrOtaQueued) {
+		t.Fatalf("duplicate press: got %v, want ErrOtaQueued", err)
 	}
 }
 

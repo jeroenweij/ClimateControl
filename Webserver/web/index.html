@@ -15,6 +15,7 @@
       <a href="#/map" data-view="map">Map</a>
       <a href="#/overrides" data-view="overrides">Overrides</a>
       <a href="#/status" data-view="status">Status</a>
+      <a href="#/firmware" data-view="firmware">Firmware</a>
       <a href="#/setup" data-view="setup">Map setup</a>
     </nav>
     <span id="link-state" class="pill" title="MainController uplink">uplink …</span>
@@ -63,22 +64,30 @@
 
     <h2>MainController &amp; bus</h2>
     <div id="main-status" class="card kv"></div>
+  </section>
 
-    <h2>Firmware</h2>
-    <form id="ota-form" class="card">
-      <label>Target <select id="ota-target">
-        <option value="node">Bus node</option>
-        <option value="thermostat">Paired thermostat</option>
-      </select></label>
-      <label id="ota-node-label">Node <select id="ota-node"></select></label>
-      <label>Image <input id="ota-file" type="file" accept=".bin"></label>
-      <button type="submit">Push update</button>
-      <span id="ota-msg" class="msg"></span>
+  <section id="view-firmware" class="view" hidden>
+    <h2>Firmware images</h2>
+    <form id="fw-upload-form" class="card">
+      <label>Image file <input id="fw-file" type="file" accept=".bin"></label>
+      <button type="submit">Upload</button>
+      <span id="fw-msg" class="msg"></span>
     </form>
-    <p class="hint">A thermostat has no bus address — pick its ControllerNode and
-      the push is relayed over the private link (the ControllerNode must be
-      running its application). Upload the matching module's <code>.bin</code>.</p>
-    <table id="ota-table"><thead><tr>
+    <table id="fw-image-table"><thead><tr>
+      <th>Module</th><th>Version</th><th>File</th><th>Size</th><th>Uploaded</th><th></th><th></th>
+    </tr></thead><tbody></tbody></table>
+
+    <h2>Nodes</h2>
+    <p class="hint">Each ControllerNode shows two rows: its own firmware and its
+      paired thermostat's. A button is greyed out when the node is offline or
+      already on the latest image.</p>
+    <table id="fw-node-table"><thead><tr>
+      <th>Node</th><th>Name</th><th>Module</th><th>Status</th><th>Installed</th><th>Available</th><th></th>
+    </tr></thead><tbody></tbody></table>
+
+    <h2>Update queue</h2>
+    <p class="hint">One update runs at a time; the rest wait here in order.</p>
+    <table id="fw-job-table"><thead><tr>
       <th>Job</th><th>Node</th><th>Target</th><th>File</th><th>State</th><th>Progress</th>
     </tr></thead><tbody></tbody></table>
   </section>

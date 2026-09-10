@@ -55,6 +55,10 @@ function handleEvent(msg) {
       break;
     case "presence":
       loadNodes().then(refreshCurrentView);
+      if (currentView() === "firmware") loadFirmware();
+      break;
+    case "thermostat":
+      if (currentView() === "firmware") loadFirmware();
       break;
     case "main":
       state.main = msg;
@@ -65,7 +69,7 @@ function handleEvent(msg) {
       if (currentView() === "status") renderMainStatus();
       break;
     case "ota":
-      if (currentView() === "status") loadOta();
+      if (currentView() === "firmware") loadFirmware();
       break;
   }
 }
@@ -82,6 +86,7 @@ const views = {
   map: { render: renderMap },
   overrides: { render: renderOverrides },
   status: { render: renderStatus },
+  firmware: { render: renderFirmware },
   setup: { render: renderSetup },
 };
 
@@ -280,16 +285,7 @@ async function renderStatus() {
   await loadNodes().catch(() => {});
   renderNodeTable();
   renderMainStatus();
-  fillOtaNodeSelect();
-  loadOta();
 }
-
-// The thermostat push is relayed by its ControllerNode, so only ControllerNodes
-// are valid targets for it.
-function fillOtaNodeSelect() {
-  fillNodeSelect($("#ota-node"), $("#ota-target").value === "thermostat");
-}
-$("#ota-target").addEventListener("change", fillOtaNodeSelect);
 
 function roomOrDuct(nodeId) {
   const parts = [];
@@ -300,7 +296,7 @@ function roomOrDuct(nodeId) {
   return parts.join(" · ") || "—";
 }
 
-const STATUS_CLASS = { online: "on", offline: "off", unexpected: "warn" };
+const STATUS_CLASS = { online: "on", offline: "off", unexpected: "warn", "link-down": "warn" };
 
 function renderNodeTable() {
   $("#node-table tbody").innerHTML = state.nodes
@@ -334,9 +330,83 @@ function renderMainStatus() {
     kv("free heap", s.freeHeap + " B");
 }
 
-async function loadOta() {
-  const jobs = await api("/api/ota");
-  $("#ota-table tbody").innerHTML = jobs
+// ---- firmware view ----------------------------------------------
+
+const fwState = { images: [], targets: [] };
+
+async function renderFirmware() {
+  await loadFirmware();
+}
+
+async function loadFirmware() {
+  const [view, jobs] = await Promise.all([api("/api/firmware"), api("/api/ota")]);
+  fwState.images = view.images || [];
+  fwState.targets = view.targets || [];
+  renderFirmwareImages();
+  renderFirmwareNodes();
+  renderFirmwareJobs(jobs);
+}
+
+function fmtBytes(n) {
+  if (n >= 1024) return (n / 1024).toFixed(1) + " kB";
+  return n + " B";
+}
+
+function updatableCount(module) {
+  return fwState.targets.filter((t) => t.module === module && t.canUpdate).length;
+}
+
+function renderFirmwareImages() {
+  const body = $("#fw-image-table tbody");
+  if (!fwState.images.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No firmware images uploaded yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = fwState.images
+    .map((fi) => {
+      const n = updatableCount(fi.module);
+      return `<tr>
+        <td>${esc(fi.module)}</td>
+        <td>${esc(fi.versionStr)}</td>
+        <td><code>${esc(fi.filename)}</code></td>
+        <td>${fmtBytes(fi.size)}</td>
+        <td>${fi.uploadedTs ? new Date(fi.uploadedTs).toLocaleString() : "—"}</td>
+        <td><button data-fw-all="${esc(fi.module)}" ${n ? "" : "disabled"}>Update all${n ? ` (${n})` : ""}</button></td>
+        <td><button data-fw-del="${esc(fi.module)}" class="danger">Remove</button></td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderFirmwareNodes() {
+  const body = $("#fw-node-table tbody");
+  if (!fwState.targets.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No nodes known yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = fwState.targets
+    .map((t) => {
+      const label = t.job ? t.job : t.canUpdate ? "Update" : t.reason || "—";
+      const btn = t.canUpdate
+        ? `<button data-fw-up="${t.nodeId}/${t.target}">Update</button>`
+        : `<button disabled>${esc(label)}</button>`;
+      const indent = t.target === "thermostat" ? ' style="padding-left:1.6rem"' : "";
+      const idCell = t.target === "thermostat" ? "↳" : t.nodeId === 0 ? "MC" : t.nodeId;
+      return `<tr>
+        <td>${idCell}</td>
+        <td${indent}>${esc(t.name || "")}</td>
+        <td>${esc(t.module)}</td>
+        <td class="${STATUS_CLASS[t.status] || "off"}">${esc(t.status)}</td>
+        <td>${esc(t.installedStr)}</td>
+        <td>${esc(t.latestStr || "—")}</td>
+        <td>${btn}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderFirmwareJobs(jobs) {
+  $("#fw-job-table tbody").innerHTML = (jobs || [])
     .map((j) => {
       const pct = j.size ? Math.round((j.lastOffset / j.size) * 100) : 0;
       return `<tr>
@@ -348,25 +418,79 @@ async function loadOta() {
     .join("");
 }
 
-$("#ota-form").addEventListener("submit", async (e) => {
+$("#fw-upload-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const msg = $("#ota-msg");
+  const msg = $("#fw-msg");
   msg.className = "msg";
   msg.textContent = "uploading…";
+  const f = $("#fw-file").files[0];
+  if (!f) {
+    msg.className = "msg err";
+    msg.textContent = "choose a file";
+    return;
+  }
   const fd = new FormData();
-  fd.append("node", $("#ota-node").value);
-  fd.append("target", $("#ota-target").value);
-  fd.append("image", $("#ota-file").files[0]);
+  fd.append("image", f);
   try {
-    await api("/api/ota", { method: "POST", body: fd });
+    const fi = await api("/api/firmware", { method: "POST", body: fd });
     msg.className = "msg ok";
-    msg.textContent = "started";
-    loadOta();
+    msg.textContent = `stored ${fi.module} ${fi.versionStr}`;
+    $("#fw-file").value = "";
+    loadFirmware();
   } catch (err) {
     msg.className = "msg err";
     msg.textContent = err.message;
   }
 });
+
+$("#fw-image-table").addEventListener("click", async (e) => {
+  const del = e.target.dataset.fwDel;
+  const all = e.target.dataset.fwAll;
+  try {
+    if (del) {
+      if (!confirm(`Remove the stored ${del} image?`)) return;
+      await api(`/api/firmware/${encodeURIComponent(del)}`, { method: "DELETE" });
+    } else if (all) {
+      if (all === "MainController" && !confirm("Update the MainController? The bus and this server link drop while it reboots into its bootloader.")) return;
+      e.target.disabled = true;
+      const r = await api("/api/firmware/update-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ module: all }),
+      });
+      flash(`queued ${r.queued} update${r.queued === 1 ? "" : "s"}`);
+    } else return;
+    loadFirmware();
+  } catch (err) {
+    flash(err.message, true);
+    loadFirmware();
+  }
+});
+
+$("#fw-node-table").addEventListener("click", async (e) => {
+  const up = e.target.dataset.fwUp;
+  if (!up) return;
+  const [node, target] = up.split("/");
+  if (node === "0" && !confirm("Update the MainController itself? The bus and this server link drop while it reboots into its bootloader.")) return;
+  e.target.disabled = true;
+  try {
+    await api("/api/firmware/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ node: parseInt(node, 10), target }),
+    });
+    flash("update queued");
+  } catch (err) {
+    flash(err.message, true);
+  }
+  loadFirmware();
+});
+
+function flash(text, isErr) {
+  const msg = $("#fw-msg");
+  msg.className = "msg " + (isErr ? "err" : "ok");
+  msg.textContent = text;
+}
 
 // ---- map setup view ---------------------------------------------
 

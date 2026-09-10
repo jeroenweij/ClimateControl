@@ -198,9 +198,25 @@ The server models every `ControllerNode` as owning one Thermostat.
 
 Built in firmware: the `EEndpoint`/`EFirmware` additions, the `NodeLib` framing use split (`LinkMaster` added alongside `Node`/`NodeMaster`), `OtaUart` module-aware USART select, and the `ControllerNode` and `Thermostat` modules — the ControllerNode carries the `Damper`, the Room* cache, `LinkMaster`, and the `ThermostatFirmware` relay; the Thermostat is a NodeLib slave on the link with the OLED / CHT40 sensor / buttons still stubbed (they need an I²C HAL).
 
-Partly built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`) and the Status-page firmware control now let an operator start a thermostat push (target selector → `module = Thermostat` in the `0x65 OtaControl` Set, `targetNodeId` = the owning ControllerNode). The push driver and progress handling are unchanged — they already key on the `0x65` report stream.
+Built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`); the
+`0x63 ThermostatStatus` decode + `thermostats` table (`controller_node_id`,
+`uid`, `fw_version`, `bl_state`, `link_up`, `last_seen`); the `firmware_images`
+repository (one image per module, module + version parsed from the upload
+filename `<Module>_<major>.<minor>.bin` and cross-checked against the descriptor,
+which the build now fills from `CC_FW_VERSION`); the **Firmware** page, which
+lists every node with its installed version against the held image and gives
+each ControllerNode a second row for its Thermostat, plus per-node and
+per-module ("update all") push buttons that grey out when the target is offline
+or already current; and a single-flight OTA **queue** (one push at a time, the
+rest `state = 'queued'`, fed by both single presses and "update all"). Node
+firmware versions come from `SystemInfo` reports, thermostat versions from
+`0x63`.
 
-Not built yet: the MainController side (`0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, and the remaining `Webserver` work (`thermostats` table, `0x63` decode, per-Thermostat fw-version display + pre-flight version check, `Force` re-flash).
+Not built yet: the MainController side (emitting `0x63 ThermostatStatus`,
+`module == 4` routing in the OTA sequence — waits on the MainController uplink
+layer as a whole), the `provision` target's pair mode, the pre-flight
+already-current check against `0x63` before creating a thermostat job, and
+`Force` re-flash.
 
 ---
 

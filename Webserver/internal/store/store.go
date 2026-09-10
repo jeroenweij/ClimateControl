@@ -89,6 +89,17 @@ func (s *Store) UpsertNode(ctx context.Context, id int, module nodelib.Module, o
 	return err
 }
 
+// SetNodeFirmware records a node's running firmware version (major<<8 | minor),
+// as learned from a SystemInfo report. A zero version is ignored.
+func (s *Store) SetNodeFirmware(ctx context.Context, id, version int) error {
+	if version == 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET fw_version = ? WHERE id = ?`, version, id)
+	return err
+}
+
 // SetNodeOnline flips just the online flag (heartbeat / presence).
 func (s *Store) SetNodeOnline(ctx context.Context, id int, online bool) error {
 	_, err := s.db.ExecContext(ctx,

@@ -6,6 +6,7 @@ add_stm32_executable(controllerNode
         ThermostatLink.cpp
         ControllerHandler.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/controllerNode.ld
+    MODULE ControllerNode
     LIBRARIES
         Hal
         Board

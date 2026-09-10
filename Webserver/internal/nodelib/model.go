@@ -48,44 +48,46 @@ const (
 
 	// Uplink block (0x60-0x6F): MainController <-> server only, never on the
 	// RS485 bus. See MainController-Server-Link-Spec.md §5.
-	EndpointUplinkHello  Endpoint = 0x60
-	EndpointRoster       Endpoint = 0x61
-	EndpointNodePresence Endpoint = 0x62
-	EndpointKeepalive    Endpoint = 0x64
-	EndpointOtaControl   Endpoint = 0x65
-	EndpointOtaData      Endpoint = 0x66
-	EndpointMainStatus   Endpoint = 0x67
+	EndpointUplinkHello      Endpoint = 0x60
+	EndpointRoster           Endpoint = 0x61
+	EndpointNodePresence     Endpoint = 0x62
+	EndpointThermostatStatus Endpoint = 0x63
+	EndpointKeepalive        Endpoint = 0x64
+	EndpointOtaControl       Endpoint = 0x65
+	EndpointOtaData          Endpoint = 0x66
+	EndpointMainStatus       Endpoint = 0x67
 )
 
 var endpointNames = map[Endpoint]string{
-	EndpointTransport:      "Transport",
-	EndpointSystemInfo:     "SystemInfo",
-	EndpointSystemStatus:   "SystemStatus",
-	EndpointSystemControl:  "SystemControl",
-	EndpointFirmware:       "Firmware",
-	EndpointDamperTarget:   "DamperTarget",
-	EndpointDamperActual:   "DamperActual",
-	EndpointDamperMode:     "DamperMode",
-	EndpointSupplyTemp:     "SupplyTemp",
-	EndpointReturnTemp:     "ReturnTemp",
-	EndpointSensorStatus:   "SensorStatus",
-	EndpointRoomSetpoint:   "RoomSetpoint",
-	EndpointRoomTemp:       "RoomTemp",
-	EndpointRoomHumidity:   "RoomHumidity",
-	EndpointRoomMode:       "RoomMode",
-	EndpointRoomLink:       "RoomLink",
-	EndpointDiagRxCounters: "DiagRxCounters",
-	EndpointDiagTxCounters: "DiagTxCounters",
-	EndpointDiagLastError:  "DiagLastError",
-	EndpointDiagLog:        "DiagLog",
-	EndpointDiagReset:      "DiagReset",
-	EndpointUplinkHello:    "UplinkHello",
-	EndpointRoster:         "Roster",
-	EndpointNodePresence:   "NodePresence",
-	EndpointKeepalive:      "Keepalive",
-	EndpointOtaControl:     "OtaControl",
-	EndpointOtaData:        "OtaData",
-	EndpointMainStatus:     "MainStatus",
+	EndpointTransport:        "Transport",
+	EndpointSystemInfo:       "SystemInfo",
+	EndpointSystemStatus:     "SystemStatus",
+	EndpointSystemControl:    "SystemControl",
+	EndpointFirmware:         "Firmware",
+	EndpointDamperTarget:     "DamperTarget",
+	EndpointDamperActual:     "DamperActual",
+	EndpointDamperMode:       "DamperMode",
+	EndpointSupplyTemp:       "SupplyTemp",
+	EndpointReturnTemp:       "ReturnTemp",
+	EndpointSensorStatus:     "SensorStatus",
+	EndpointRoomSetpoint:     "RoomSetpoint",
+	EndpointRoomTemp:         "RoomTemp",
+	EndpointRoomHumidity:     "RoomHumidity",
+	EndpointRoomMode:         "RoomMode",
+	EndpointRoomLink:         "RoomLink",
+	EndpointDiagRxCounters:   "DiagRxCounters",
+	EndpointDiagTxCounters:   "DiagTxCounters",
+	EndpointDiagLastError:    "DiagLastError",
+	EndpointDiagLog:          "DiagLog",
+	EndpointDiagReset:        "DiagReset",
+	EndpointUplinkHello:      "UplinkHello",
+	EndpointRoster:           "Roster",
+	EndpointNodePresence:     "NodePresence",
+	EndpointThermostatStatus: "ThermostatStatus",
+	EndpointKeepalive:        "Keepalive",
+	EndpointOtaControl:       "OtaControl",
+	EndpointOtaData:          "OtaData",
+	EndpointMainStatus:       "MainStatus",
 }
 
 var endpointByName = func() map[string]Endpoint {

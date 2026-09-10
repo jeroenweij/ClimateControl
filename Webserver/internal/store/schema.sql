@@ -64,6 +64,32 @@ CREATE TABLE IF NOT EXISTS ota_jobs (
     image_path  TEXT NOT NULL
 );
 
+-- The firmware repository: one image per module type. Uploading a new image
+-- for a module replaces the row (and the old file on disk is removed). The
+-- module and version are parsed from the upload filename
+-- (<Module>_<major>.<minor>.bin) and cross-checked against the image
+-- descriptor. See ControllerNode-Thermostat-Link-Spec.md §5.6.
+CREATE TABLE IF NOT EXISTS firmware_images (
+    module      INTEGER PRIMARY KEY,         -- nodelib.Module
+    filename    TEXT NOT NULL,               -- original upload name
+    version     INTEGER NOT NULL,            -- major<<8 | minor
+    size        INTEGER NOT NULL,
+    crc32       INTEGER NOT NULL,
+    uploaded_ts INTEGER NOT NULL,
+    image_path  TEXT NOT NULL
+);
+
+-- One row per ControllerNode, mirroring its paired Thermostat's link state and
+-- running firmware, filled from the 0x63 ThermostatStatus uplink report.
+CREATE TABLE IF NOT EXISTS thermostats (
+    controller_node_id INTEGER PRIMARY KEY,  -- -> nodes.id
+    uid                BLOB NOT NULL DEFAULT x'',
+    fw_version         INTEGER NOT NULL DEFAULT 0,  -- major<<8 | minor
+    bl_state           INTEGER NOT NULL DEFAULT 0,
+    link_up            INTEGER NOT NULL DEFAULT 0,
+    last_seen          INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS config_overrides (
     node_id  INTEGER NOT NULL,
     endpoint INTEGER NOT NULL,

@@ -4,6 +4,7 @@ add_stm32_executable(thermostat
         ImageInfo.cpp
         ThermostatHandler.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/thermostat.ld
+    MODULE Thermostat
     LIBRARIES
         Hal
         Board

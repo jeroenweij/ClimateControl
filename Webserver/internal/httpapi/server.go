@@ -56,6 +56,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/ota", s.handleListOTA)
 	mux.HandleFunc("GET /api/ota/{id}", s.handleGetOTA)
 
+	mux.HandleFunc("GET /api/firmware", s.handleFirmwareView)
+	mux.HandleFunc("POST /api/firmware", s.handleUploadFirmware)
+	mux.HandleFunc("DELETE /api/firmware/{module}", s.handleDeleteFirmware)
+	mux.HandleFunc("POST /api/firmware/update", s.handleFirmwareUpdate)
+	mux.HandleFunc("POST /api/firmware/update-all", s.handleFirmwareUpdateAll)
+
 	// SPA bundle: static assets, everything else falls through to index.html.
 	mux.Handle("GET /", s.spaHandler())
 

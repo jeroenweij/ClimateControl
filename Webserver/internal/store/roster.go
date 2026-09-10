@@ -27,6 +27,7 @@ type RosterNode struct {
 	Expected  bool   `json:"expected"`
 	Seen      bool   `json:"seen"` // ever reported to this server
 	Online    bool   `json:"online"`
+	FWVersion int    `json:"fwVersion"` // running firmware, major<<8 | minor (0 = unknown)
 	FirstSeen int64  `json:"firstSeen"`
 	LastSeen  int64  `json:"lastSeen"`
 	// Status is one of "online", "offline", "unexpected". "unexpected" wins
@@ -173,6 +174,7 @@ func (s *Store) Roster(ctx context.Context, masterOnline bool) ([]RosterNode, er
 		n := get(sn.ID)
 		n.Seen = true
 		n.Online = sn.Online && masterOnline
+		n.FWVersion = sn.FWVersion
 		n.FirstSeen = sn.FirstSeen
 		n.LastSeen = sn.LastSeen
 		if sn.Module != "" && sn.Module != nodelib.ModuleUnknown.String() {

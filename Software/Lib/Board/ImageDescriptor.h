@@ -49,8 +49,18 @@ namespace Board
     };
     static_assert(sizeof(ImageDescriptor) == 32, "ImageDescriptor must be 32 bytes");
 
+// The firmware version is supplied by the build (CC_FW_VERSION in the
+// top-level CMake -> CC_FW_VERSION_MAJOR / _MINOR compile definitions). The
+// fallbacks keep a bare compile (an IDE indexer, a unit-test TU) working.
+#ifndef CC_FW_VERSION_MAJOR
+#define CC_FW_VERSION_MAJOR 0
+#endif
+#ifndef CC_FW_VERSION_MINOR
+#define CC_FW_VERSION_MINOR 0
+#endif
+
 // Place one of these in an application's sources, e.g.:
-//   CC_IMAGE_DESCRIPTOR(Board::ImageModule::MainController, 0, 1)
+//   CC_IMAGE_DESCRIPTOR(Board::ImageModule::MainController, CC_FW_VERSION_MAJOR, CC_FW_VERSION_MINOR)
 #define CC_IMAGE_DESCRIPTOR(MODULE, MAJOR, MINOR)                                                 \
     extern "C" __attribute__((section(".image_descriptor"), used)) const ::Board::ImageDescriptor \
         gImageDescriptor = {::Board::ImageMagic, 1, (MODULE), 0, (MAJOR), (MINOR)}

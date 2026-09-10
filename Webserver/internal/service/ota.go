@@ -28,8 +28,10 @@ const (
 	otaStepWait   = 20 * time.Second // per-phase timeout
 )
 
-// StartOTA validates the uploaded image, records a job, and launches the push
-// driver. Only one push runs at a time.
+// StartOTA validates the uploaded image and records a job. Only one push runs
+// at a time; every other job waits in the queue (state "queued") and the driver
+// picks the next one up as soon as the current push finishes. Both a single
+// operator press and an "update all of this type" fan-out land here.
 //
 // target is "node" (flash the bus node itself) or "thermostat" (flash the
 // Thermostat paired to the ControllerNode at nodeID, relayed over its private
@@ -42,17 +44,6 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 	}
 	if target != "node" && target != "thermostat" {
 		return 0, ErrOtaTargetMismatch
-	}
-
-	s.mu.Lock()
-	if s.ota != nil && !s.ota.finished() {
-		s.mu.Unlock()
-		return 0, ErrOtaBusy
-	}
-	s.mu.Unlock()
-
-	if !s.send.Connected() {
-		return 0, ErrDownlinkUnavailable
 	}
 
 	desc, crc, err := nodelib.ParseImage(bin)
@@ -72,10 +63,18 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 		pushModule = nodelib.ModuleThermostat
 	}
 
+	// One press = one job: an already-queued or running job for the same
+	// node+target absorbs the repeat instead of stacking a duplicate.
+	if pending, err := s.st.HasPendingOtaJob(ctx, nodeID, target); err != nil {
+		return 0, err
+	} else if pending {
+		return 0, ErrOtaQueued
+	}
+
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		return 0, err
 	}
-	path := imageDir + "/ota-" + time.Now().Format("20060102-150405") + "-" + filename
+	path := imageDir + "/ota-" + time.Now().Format("20060102-150405.000") + "-" + filename
 	if err := os.WriteFile(path, bin, 0o644); err != nil {
 		return 0, err
 	}
@@ -93,23 +92,51 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 	if err != nil {
 		return 0, err
 	}
+	s.hb.PublishOta(hub.OtaEvent{JobID: jobID, State: "queued", NodeID: nodeID, Size: len(bin)})
 
-	d := &otaDriver{
-		svc:     s,
-		jobID:   jobID,
-		nodeID:  nodeID,
-		image:   bin,
-		crc32:   crc,
-		fw:      uint16(int(desc.FWVersionMajor)<<8 | int(desc.FWVersionMinor)),
-		module:  pushModule,
-		reports: make(chan nodelib.OtaControlReport, 8),
-		doneCh:  make(chan struct{}),
-	}
-	s.mu.Lock()
-	s.ota = d
-	s.mu.Unlock()
-	go d.run()
+	s.kickOta()
 	return jobID, nil
+}
+
+// kickOta starts the next queued push if nothing is running. It is safe to call
+// from anywhere: after enqueue, when a push finishes, and on uplink reconnect.
+func (s *Service) kickOta() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ota != nil && !s.ota.finished() {
+		return
+	}
+	if !s.send.Connected() {
+		return // retry on the next kick (OnConnect / next enqueue)
+	}
+	ctx := context.Background()
+	for {
+		job, ok, err := s.st.NextQueuedOtaJob(ctx)
+		if err != nil || !ok {
+			s.ota = nil
+			return
+		}
+		bin, err := os.ReadFile(job.ImagePath)
+		if err != nil {
+			_ = s.st.UpdateOtaJob(ctx, job.ID, "error", 0, "image file missing: "+err.Error())
+			s.hb.PublishOta(hub.OtaEvent{JobID: job.ID, State: "error", NodeID: job.NodeID, Error: "image file missing"})
+			continue
+		}
+		d := &otaDriver{
+			svc:     s,
+			jobID:   job.ID,
+			nodeID:  job.NodeID,
+			image:   bin,
+			crc32:   job.CRC32,
+			fw:      uint16(job.FWVersion),
+			module:  nodelib.Module(job.Module),
+			reports: make(chan nodelib.OtaControlReport, 8),
+			doneCh:  make(chan struct{}),
+		}
+		s.ota = d
+		go d.run()
+		return
+	}
 }
 
 type otaDriver struct {
@@ -150,6 +177,8 @@ func (d *otaDriver) done(state, errMsg string, offset int) {
 			Offset: offset, Size: len(d.image), Error: errMsg,
 		})
 		close(d.doneCh)
+		// Hand off to the next queued push, if any.
+		go d.svc.kickOta()
 	})
 }
 

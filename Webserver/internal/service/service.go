@@ -33,6 +33,7 @@ type Service struct {
 	mu   sync.Mutex
 	send Sender
 	ota  *otaDriver
+	mcFW int // MainController running firmware (major<<8|minor), from UplinkHello; 0 = unknown
 }
 
 // New builds the service. Call SetSender once the uplink server exists.
@@ -51,6 +52,15 @@ func (s *Service) Hub() *hub.Hub       { return s.hb }
 // is not, every node is treated as offline (there is no bus to hear them on).
 func (s *Service) MasterOnline() bool {
 	return s.send != nil && s.send.Connected()
+}
+
+// MainControllerFW returns the MainController's running firmware version
+// (major<<8|minor) as reported in its last UplinkHello, or 0 if it has never
+// connected.
+func (s *Service) MainControllerFW() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mcFW
 }
 
 // warnIfUnexpected logs a node id that showed up on the bus without an entry in
@@ -73,8 +83,12 @@ func (s *Service) warnIfUnexpected(id int, module nodelib.Module) {
 // OnConnect asks for a fresh roster and re-asserts stored overrides.
 func (s *Service) OnConnect(h nodelib.UplinkHello) {
 	s.hb.SetUplink(true)
+	s.mu.Lock()
+	s.mcFW = int(h.FWVersion)
+	s.mu.Unlock()
 	s.send.Send(nodelib.Frame{Node: nodelib.NodeMaster, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpGet})
 	s.reassertOverrides(0)
+	s.kickOta() // resume any push that was waiting for the downlink
 }
 
 // OnDisconnect flags the uplink down.
@@ -93,6 +107,9 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 			s.log.Warn("store reading", "err", err)
 		}
 		_ = s.st.UpsertNode(ctx, node, moduleFromInfo(f, v), true)
+		if fw := firmwareFromInfo(f, v); fw != 0 {
+			_ = s.st.SetNodeFirmware(ctx, node, fw)
+		}
 		s.hb.PublishValue(node, f.Endpoint, v)
 
 	case nodelib.OpAck:
@@ -122,6 +139,15 @@ func (s *Service) OnPresence(p nodelib.NodePresence) {
 // OnMainStatus publishes MainController/bus health.
 func (s *Service) OnMainStatus(st nodelib.MainStatus) {
 	s.hb.PublishMain(st, true)
+}
+
+// OnThermostatStatus records the link state + running firmware of the
+// Thermostat paired to one ControllerNode (0x63, spec §5.6).
+func (s *Service) OnThermostatStatus(t nodelib.ThermostatStatus) {
+	if err := s.st.UpsertThermostat(context.Background(), t); err != nil {
+		s.log.Warn("store thermostat status", "err", err)
+	}
+	s.hb.PublishThermostat(int(t.ControllerNodeID), t.LinkUp)
 }
 
 // OnOtaReport feeds the firmware-push driver.
@@ -172,6 +198,17 @@ func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint
 		_ = s.st.SetOverride(ctx, node, ep, value, user)
 	}
 	return nil
+}
+
+// firmwareFromInfo pulls the running version (major<<8 | minor) out of a
+// decoded SystemInfo payload; 0 when the frame is not SystemInfo.
+func firmwareFromInfo(f nodelib.Frame, v nodelib.Value) int {
+	if f.Endpoint != nodelib.EndpointSystemInfo || v.Fields == nil {
+		return 0
+	}
+	maj, _ := v.Fields["fwMajor"].(uint16)
+	min, _ := v.Fields["fwMinor"].(uint16)
+	return int(maj)<<8 | int(min)
 }
 
 func moduleFromInfo(f nodelib.Frame, v nodelib.Value) nodelib.Module {

@@ -339,7 +339,7 @@ func (s *Server) handleStartOTA(w http.ResponseWriter, r *http.Request) {
 
 	jobID, err := s.svc.StartOTA(r.Context(), node, target, hdr.Filename, bin, filepath.Join(s.assetDir, "ota"))
 	switch {
-	case errors.Is(err, service.ErrOtaBusy):
+	case errors.Is(err, service.ErrOtaBusy), errors.Is(err, service.ErrOtaQueued):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrOtaTargetMismatch):
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -351,6 +351,132 @@ func (s *Server) handleStartOTA(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 	default:
 		writeJSON(w, http.StatusAccepted, map[string]any{"jobId": jobID})
+	}
+}
+
+// --- firmware repository ---------------------------------------------
+
+func (s *Server) firmwareRepoDir() string { return filepath.Join(s.assetDir, "firmware") }
+func (s *Server) otaJobDir() string       { return filepath.Join(s.assetDir, "ota") }
+
+func (s *Server) handleFirmwareView(w http.ResponseWriter, r *http.Request) {
+	view, err := s.svc.FirmwareView(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleUploadFirmware(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "expected multipart form with 'image'")
+		return
+	}
+	file, hdr, err := r.FormFile("image")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing 'image' file")
+		return
+	}
+	defer file.Close()
+	bin, err := io.ReadAll(io.LimitReader(file, 1<<20))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	fi, err := s.svc.StoreFirmware(r.Context(), hdr.Filename, bin, s.firmwareRepoDir())
+	switch {
+	case errors.Is(err, service.ErrBadFirmwareName), errors.Is(err, service.ErrFirmwareDescMismatch):
+		writeErr(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, nodelib.ErrBadImage):
+		writeErr(w, http.StatusBadRequest, "not a valid ClimateControl image (bad magic/CRC)")
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err.Error())
+	default:
+		writeJSON(w, http.StatusCreated, fi)
+	}
+}
+
+func (s *Server) handleDeleteFirmware(w http.ResponseWriter, r *http.Request) {
+	mod, ok := nodelib.ModuleByName(r.PathValue("module"))
+	if !ok || mod == nodelib.ModuleUnknown {
+		writeErr(w, http.StatusBadRequest, "unknown module")
+		return
+	}
+	if err := s.svc.DeleteFirmware(r.Context(), mod); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type fwUpdateReq struct {
+	Node   *int   `json:"node"` // 0 = the MainController itself (self-update)
+	Target string `json:"target"`
+}
+
+func (s *Server) handleFirmwareUpdate(w http.ResponseWriter, r *http.Request) {
+	var req fwUpdateReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.Target == "" {
+		req.Target = "node"
+	}
+	if req.Node == nil || *req.Node < 0 || *req.Node >= nodelib.NodeBroadcast {
+		writeErr(w, http.StatusBadRequest, "missing or out-of-range 'node' (0..254; 0 = MainController)")
+		return
+	}
+	if *req.Node == 0 && req.Target != "node" {
+		writeErr(w, http.StatusBadRequest, "the MainController has no paired thermostat")
+		return
+	}
+	jobID, err := s.svc.EnqueueUpdate(r.Context(), *req.Node, req.Target, s.otaJobDir())
+	s.writeEnqueueResult(w, []int64{jobID}, err)
+}
+
+type fwUpdateAllReq struct {
+	Module string `json:"module"`
+}
+
+func (s *Server) handleFirmwareUpdateAll(w http.ResponseWriter, r *http.Request) {
+	var req fwUpdateAllReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if _, ok := nodelib.ModuleByName(req.Module); !ok {
+		writeErr(w, http.StatusBadRequest, "unknown module")
+		return
+	}
+	ids, err := s.svc.EnqueueUpdateAll(r.Context(), req.Module, s.otaJobDir())
+	s.writeEnqueueResult(w, ids, err)
+}
+
+func (s *Server) writeEnqueueResult(w http.ResponseWriter, ids []int64, err error) {
+	switch {
+	case errors.Is(err, service.ErrOtaQueued):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrNoFirmwareImage):
+		writeErr(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrUnknownNodeModule):
+		writeErr(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrOtaTargetMismatch):
+		writeErr(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrDownlinkUnavailable):
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err.Error())
+	default:
+		queued := 0
+		for _, id := range ids {
+			if id > 0 {
+				queued++
+			}
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"queued": queued, "jobIds": ids})
 	}
 }
 
