@@ -11,6 +11,19 @@ CREATE TABLE IF NOT EXISTS nodes (
     online      INTEGER NOT NULL DEFAULT 0
 );
 
+-- The expected-node roster: nodes the installation is supposed to have. Seeded
+-- from config.json (source='config', replaced wholesale on every start) and
+-- extendable at runtime via /api/expected-nodes (source='ui'). A bus node not
+-- listed here is "unexpected"; a listed node not reporting is "offline".
+CREATE TABLE IF NOT EXISTS expected_nodes (
+    id       INTEGER PRIMARY KEY,          -- bus node id (1..N)
+    module   INTEGER NOT NULL DEFAULT 0,   -- expected board type, 0 = any
+    name     TEXT    NOT NULL DEFAULT '',  -- operator-facing label
+    note     TEXT    NOT NULL DEFAULT '',
+    source   TEXT    NOT NULL DEFAULT 'ui',-- 'config' | 'ui'
+    added_ts INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS readings (
     ts        INTEGER NOT NULL,               -- unix millis, server clock at receipt
     node_id   INTEGER NOT NULL,
@@ -36,7 +49,8 @@ CREATE TABLE IF NOT EXISTS commands (
 
 CREATE TABLE IF NOT EXISTS ota_jobs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id     INTEGER NOT NULL,
+    node_id     INTEGER NOT NULL,             -- bus node id; the ControllerNode's id for a thermostat job
+    target      TEXT NOT NULL DEFAULT 'node', -- 'node' | 'thermostat' (pushed through node_id's link)
     filename    TEXT NOT NULL,
     size        INTEGER NOT NULL,
     crc32       INTEGER NOT NULL,

@@ -47,6 +47,27 @@ func (s *Service) SetSender(snd Sender) { s.send = snd }
 func (s *Service) Store() *store.Store { return s.st }
 func (s *Service) Hub() *hub.Hub       { return s.hb }
 
+// MasterOnline reports whether a MainController is currently connected. When it
+// is not, every node is treated as offline (there is no bus to hear them on).
+func (s *Service) MasterOnline() bool {
+	return s.send != nil && s.send.Connected()
+}
+
+// warnIfUnexpected logs a node id that showed up on the bus without an entry in
+// the expected roster.
+func (s *Service) warnIfUnexpected(id int, module nodelib.Module) {
+	exp, err := s.st.ExpectedNodes(context.Background())
+	if err != nil {
+		return
+	}
+	for _, e := range exp {
+		if e.ID == id {
+			return
+		}
+	}
+	s.log.Warn("unexpected node on bus (not in expected roster)", "node", id, "module", module.String())
+}
+
 // --- uplink.Handler --------------------------------------------------------
 
 // OnConnect asks for a fresh roster and re-asserts stored overrides.
@@ -84,6 +105,7 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 // OnRosterEntry records one node from a roster stream.
 func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	_ = s.st.UpsertNode(context.Background(), int(e.NodeID), e.Module, true)
+	s.warnIfUnexpected(int(e.NodeID), e.Module)
 	s.hb.PublishPresence(int(e.NodeID), e.Module, true)
 }
 
@@ -92,6 +114,7 @@ func (s *Service) OnPresence(p nodelib.NodePresence) {
 	_ = s.st.SetNodeOnline(context.Background(), int(p.NodeID), p.Up)
 	s.hb.PublishPresence(int(p.NodeID), p.Module, p.Up)
 	if p.Up {
+		s.warnIfUnexpected(int(p.NodeID), p.Module)
 		s.reassertOverrides(int(p.NodeID))
 	}
 }

@@ -8,8 +8,11 @@ import (
 
 // OtaJob tracks one firmware push.
 type OtaJob struct {
-	ID         int64  `json:"id"`
-	NodeID     int    `json:"nodeId"`
+	ID     int64 `json:"id"`
+	NodeID int   `json:"nodeId"`
+	// Target is "node" (the bus node itself) or "thermostat" (the Thermostat
+	// paired to the ControllerNode at NodeID, pushed over its private link).
+	Target     string `json:"target"`
 	Filename   string `json:"filename"`
 	Size       int    `json:"size"`
 	CRC32      uint32 `json:"crc32"`
@@ -25,10 +28,14 @@ type OtaJob struct {
 
 // CreateOtaJob records a new firmware push.
 func (s *Store) CreateOtaJob(ctx context.Context, j OtaJob) (int64, error) {
+	target := j.Target
+	if target == "" {
+		target = "node"
+	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO ota_jobs (node_id, filename, size, crc32, fw_version, module, started, state, image_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-		j.NodeID, j.Filename, j.Size, int64(j.CRC32), j.FWVersion, j.Module,
+		INSERT INTO ota_jobs (node_id, target, filename, size, crc32, fw_version, module, started, state, image_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+		j.NodeID, target, j.Filename, j.Size, int64(j.CRC32), j.FWVersion, j.Module,
 		time.Now().UnixMilli(), j.ImagePath)
 	if err != nil {
 		return 0, err
@@ -93,7 +100,7 @@ func (s *Store) ActiveOtaJob(ctx context.Context) (OtaJob, bool, error) {
 	return j, true, nil
 }
 
-const otaSelect = `SELECT id, node_id, filename, size, crc32, fw_version, module,
+const otaSelect = `SELECT id, node_id, target, filename, size, crc32, fw_version, module,
 	started, finished, state, last_offset, error, image_path FROM ota_jobs`
 
 type rowScanner interface {
@@ -105,7 +112,7 @@ func scanOtaJob(row rowScanner) (OtaJob, error) {
 	var finished sql.NullInt64
 	var errMsg sql.NullString
 	var crc int64
-	err := row.Scan(&j.ID, &j.NodeID, &j.Filename, &j.Size, &crc, &j.FWVersion, &j.Module,
+	err := row.Scan(&j.ID, &j.NodeID, &j.Target, &j.Filename, &j.Size, &crc, &j.FWVersion, &j.Module,
 		&j.Started, &finished, &j.State, &j.LastOffset, &errMsg, &j.ImagePath)
 	if err != nil {
 		return OtaJob{}, err

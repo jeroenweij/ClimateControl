@@ -22,6 +22,27 @@ type Config struct {
 	UplinkToken string `json:"uplinkToken"`
 	// DataDir holds the SQLite file and uploaded assets.
 	DataDir string `json:"dataDir"`
+	// Nodes is the expected-node roster: every bus node the installation is
+	// supposed to have. A node seen on the bus that is not listed here is
+	// flagged "unexpected"; a listed node that is not currently reporting is
+	// flagged "offline". Additional entries can also be managed at runtime via
+	// the /api/expected-nodes endpoint; this list is the authoritative set and
+	// is re-synced into the database on every start.
+	Nodes []NodeConfig `json:"nodes,omitempty"`
+}
+
+// NodeConfig is one expected-node entry in the config file.
+type NodeConfig struct {
+	// ID is the RS485 bus node id (1..N).
+	ID int `json:"id"`
+	// Module is the board type, matching nodelib.Module.String()
+	// ("ControllerNode", "TemperatureNode", "MainController", "Thermostat").
+	// Optional — an empty or unknown value means "any".
+	Module string `json:"module,omitempty"`
+	// Name is an operator-facing label (e.g. the room it serves).
+	Name string `json:"name,omitempty"`
+	// Note is free-form commissioning text.
+	Note string `json:"note,omitempty"`
 }
 
 // Default returns the built-in defaults (no token).

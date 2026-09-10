@@ -60,6 +60,8 @@ function handleEvent(msg) {
       state.main = msg;
       state.uplinkUp = msg.online;
       setLinkState(msg.online);
+      // Master up/down flips every node between online and offline.
+      loadNodes().then(refreshCurrentView).catch(() => {});
       if (currentView() === "status") renderMainStatus();
       break;
     case "ota":
@@ -278,9 +280,16 @@ async function renderStatus() {
   await loadNodes().catch(() => {});
   renderNodeTable();
   renderMainStatus();
-  fillNodeSelect($("#ota-node"));
+  fillOtaNodeSelect();
   loadOta();
 }
+
+// The thermostat push is relayed by its ControllerNode, so only ControllerNodes
+// are valid targets for it.
+function fillOtaNodeSelect() {
+  fillNodeSelect($("#ota-node"), $("#ota-target").value === "thermostat");
+}
+$("#ota-target").addEventListener("change", fillOtaNodeSelect);
 
 function roomOrDuct(nodeId) {
   const parts = [];
@@ -291,12 +300,14 @@ function roomOrDuct(nodeId) {
   return parts.join(" · ") || "—";
 }
 
+const STATUS_CLASS = { online: "on", offline: "off", unexpected: "warn" };
+
 function renderNodeTable() {
   $("#node-table tbody").innerHTML = state.nodes
     .map(
       (n) => `<tr>
-        <td>${n.id}</td><td>${esc(n.module)}</td>
-        <td class="${n.online ? "on" : "off"}">${n.online ? "online" : "offline"}</td>
+        <td>${n.id}</td><td>${esc(n.name || "")}</td><td>${esc(n.module)}</td>
+        <td class="${STATUS_CLASS[n.status] || "off"}">${esc(n.status)}</td>
         <td>${esc(roomOrDuct(n.id))}</td>
         <td>${n.lastSeen ? new Date(n.lastSeen * 1000).toLocaleTimeString() : "—"}</td>
       </tr>`
@@ -329,7 +340,7 @@ async function loadOta() {
     .map((j) => {
       const pct = j.size ? Math.round((j.lastOffset / j.size) * 100) : 0;
       return `<tr>
-        <td>${j.id}</td><td>${j.nodeId}</td><td>${esc(j.filename)}</td>
+        <td>${j.id}</td><td>${j.nodeId}</td><td>${esc(j.target || "node")}</td><td>${esc(j.filename)}</td>
         <td>${esc(j.state)}${j.error ? " – " + esc(j.error) : ""}</td>
         <td>${pct}%</td>
       </tr>`;
@@ -344,6 +355,7 @@ $("#ota-form").addEventListener("submit", async (e) => {
   msg.textContent = "uploading…";
   const fd = new FormData();
   fd.append("node", $("#ota-node").value);
+  fd.append("target", $("#ota-target").value);
   fd.append("image", $("#ota-file").files[0]);
   try {
     await api("/api/ota", { method: "POST", body: fd });

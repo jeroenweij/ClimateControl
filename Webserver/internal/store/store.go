@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
@@ -38,7 +39,26 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// migrate applies additive schema changes that CREATE TABLE IF NOT EXISTS
+// cannot make to a database created by an older build. Each step is
+// idempotent: a "duplicate column" error means it is already applied.
+func migrate(db *sql.DB) error {
+	steps := []string{
+		`ALTER TABLE ota_jobs ADD COLUMN target TEXT NOT NULL DEFAULT 'node'`,
+	}
+	for _, s := range steps {
+		if _, err := db.Exec(s); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close releases the database.

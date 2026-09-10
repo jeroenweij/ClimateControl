@@ -198,7 +198,9 @@ The server models every `ControllerNode` as owning one Thermostat.
 
 Built in firmware: the `EEndpoint`/`EFirmware` additions, the `NodeLib` framing use split (`LinkMaster` added alongside `Node`/`NodeMaster`), `OtaUart` module-aware USART select, and the `ControllerNode` and `Thermostat` modules — the ControllerNode carries the `Damper`, the Room* cache, `LinkMaster`, and the `ThermostatFirmware` relay; the Thermostat is a NodeLib slave on the link with the OLED / CHT40 sensor / buttons still stubbed (they need an I²C HAL).
 
-Not built yet: the MainController side (`0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, and the `Webserver` changes (`thermostats` table, `ota_jobs.target`, `0x63` decode, UI).
+Partly built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`) and the Status-page firmware control now let an operator start a thermostat push (target selector → `module = Thermostat` in the `0x65 OtaControl` Set, `targetNodeId` = the owning ControllerNode). The push driver and progress handling are unchanged — they already key on the `0x65` report stream.
+
+Not built yet: the MainController side (`0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, and the remaining `Webserver` work (`thermostats` table, `0x63` decode, per-Thermostat fw-version display + pre-flight version check, `Force` re-flash).
 
 ---
 

@@ -71,6 +71,15 @@ func run(cfgPath string, log *slog.Logger) error {
 	}
 	defer st.Close()
 
+	want := make([]store.ExpectedNode, 0, len(cfg.Nodes))
+	for _, n := range cfg.Nodes {
+		want = append(want, store.ExpectedNode{ID: n.ID, Module: n.Module, Name: n.Name, Note: n.Note})
+	}
+	if err := st.SyncConfigExpectedNodes(context.Background(), want); err != nil {
+		return err
+	}
+	log.Info("expected-node roster synced from config", "count", len(want))
+
 	hb := hub.New()
 	svc := service.New(st, hb, log)
 

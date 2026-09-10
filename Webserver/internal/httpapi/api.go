@@ -33,7 +33,7 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":       true,
-		"uplinkUp": s.svc != nil,
+		"uplinkUp": s.svc.MasterOnline(),
 	})
 }
 
@@ -43,12 +43,80 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
-	nodes, err := s.svc.Store().Nodes(r.Context())
+	nodes, err := s.svc.Store().Roster(r.Context(), s.svc.MasterOnline())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, nodes)
+}
+
+// --- expected-node roster --------------------------------------------
+
+func (s *Server) handleListExpectedNodes(w http.ResponseWriter, r *http.Request) {
+	nodes, err := s.svc.Store().ExpectedNodes(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, nodes)
+}
+
+type expectedNodeReq struct {
+	Module string `json:"module"`
+	Name   string `json:"name"`
+	Note   string `json:"note"`
+}
+
+func (s *Server) handleSetExpectedNode(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	if id <= 0 || id >= nodelib.NodeBroadcast {
+		writeErr(w, http.StatusBadRequest, "node id must be 1..254")
+		return
+	}
+	var req expectedNodeReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	mod := nodelib.ModuleUnknown
+	if req.Module != "" {
+		m, ok := nodelib.ModuleByName(req.Module)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "unknown module name")
+			return
+		}
+		mod = m
+	}
+	if err := s.svc.Store().SetExpectedNode(r.Context(), id, mod, req.Name, req.Note, "ui"); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "module": mod.String(), "name": req.Name, "note": req.Note, "source": "ui"})
+}
+
+func (s *Server) handleDeleteExpectedNode(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	if id <= 0 {
+		writeErr(w, http.StatusBadRequest, "bad node id")
+		return
+	}
+	nodes, err := s.svc.Store().ExpectedNodes(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, n := range nodes {
+		if n.ID == id && n.Source == "config" {
+			writeErr(w, http.StatusConflict, "this node comes from config.json — remove it there and restart")
+			return
+		}
+	}
+	if err := s.svc.Store().DeleteExpectedNode(r.Context(), id); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleReadings(w http.ResponseWriter, r *http.Request) {
@@ -253,6 +321,10 @@ func (s *Server) handleStartOTA(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "missing 'node'")
 		return
 	}
+	target := r.FormValue("target")
+	if target == "" {
+		target = "node"
+	}
 	file, hdr, err := r.FormFile("image")
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "missing 'image' file")
@@ -265,10 +337,12 @@ func (s *Server) handleStartOTA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobID, err := s.svc.StartOTA(r.Context(), node, hdr.Filename, bin, filepath.Join(s.assetDir, "ota"))
+	jobID, err := s.svc.StartOTA(r.Context(), node, target, hdr.Filename, bin, filepath.Join(s.assetDir, "ota"))
 	switch {
 	case errors.Is(err, service.ErrOtaBusy):
 		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrOtaTargetMismatch):
+		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrDownlinkUnavailable):
 		writeErr(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, nodelib.ErrBadImage):

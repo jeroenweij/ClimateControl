@@ -30,7 +30,20 @@ const (
 
 // StartOTA validates the uploaded image, records a job, and launches the push
 // driver. Only one push runs at a time.
-func (s *Service) StartOTA(ctx context.Context, nodeID int, filename string, bin []byte, imageDir string) (int64, error) {
+//
+// target is "node" (flash the bus node itself) or "thermostat" (flash the
+// Thermostat paired to the ControllerNode at nodeID, relayed over its private
+// link — ControllerNode-Thermostat-Link-Spec.md §5). For a thermostat push the
+// image's descriptor module must be Thermostat; the MainController routes on
+// the module byte in the 0x65 OtaControl frame (spec §5.7).
+func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename string, bin []byte, imageDir string) (int64, error) {
+	if target == "" {
+		target = "node"
+	}
+	if target != "node" && target != "thermostat" {
+		return 0, ErrOtaTargetMismatch
+	}
+
 	s.mu.Lock()
 	if s.ota != nil && !s.ota.finished() {
 		s.mu.Unlock()
@@ -47,6 +60,18 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, filename string, bin
 		return 0, err
 	}
 
+	isThermImage := desc.Module == nodelib.ModuleThermostat
+	if (target == "thermostat") != isThermImage {
+		return 0, ErrOtaTargetMismatch
+	}
+	// The module byte carried in 0x65 OtaControl is what tells the
+	// MainController to drive ThermostatFirmware instead of Firmware; a
+	// Thermostat image already carries module=Thermostat, but be explicit.
+	pushModule := desc.Module
+	if target == "thermostat" {
+		pushModule = nodelib.ModuleThermostat
+	}
+
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		return 0, err
 	}
@@ -57,11 +82,12 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, filename string, bin
 
 	jobID, err := s.st.CreateOtaJob(ctx, store.OtaJob{
 		NodeID:    nodeID,
+		Target:    target,
 		Filename:  filename,
 		Size:      len(bin),
 		CRC32:     crc,
 		FWVersion: int(desc.FWVersionMajor)<<8 | int(desc.FWVersionMinor),
-		Module:    int(desc.Module),
+		Module:    int(pushModule),
 		ImagePath: path,
 	})
 	if err != nil {
@@ -75,7 +101,7 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, filename string, bin
 		image:   bin,
 		crc32:   crc,
 		fw:      uint16(int(desc.FWVersionMajor)<<8 | int(desc.FWVersionMinor)),
-		module:  desc.Module,
+		module:  pushModule,
 		reports: make(chan nodelib.OtaControlReport, 8),
 		doneCh:  make(chan struct{}),
 	}

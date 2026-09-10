@@ -167,6 +167,21 @@ func (m Module) String() string {
 	return "Module(" + itoa(int(m)) + ")"
 }
 
+var moduleByName = func() map[string]Module {
+	m := make(map[string]Module, len(moduleNames))
+	for mod, n := range moduleNames {
+		m[n] = mod
+	}
+	return m
+}()
+
+// ModuleByName resolves a name (as produced by Module.String) back to the
+// value; the second result is false for an unknown name.
+func ModuleByName(name string) (Module, bool) {
+	m, ok := moduleByName[name]
+	return m, ok
+}
+
 func hexByte(b uint8) string {
 	const hex = "0123456789ABCDEF"
 	return string([]byte{hex[b>>4], hex[b&0xF]})

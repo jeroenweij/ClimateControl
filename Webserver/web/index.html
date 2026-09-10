@@ -58,7 +58,7 @@
   <section id="view-status" class="view" hidden>
     <h2>Nodes</h2>
     <table id="node-table"><thead><tr>
-      <th>ID</th><th>Module</th><th>State</th><th>Room / duct</th><th>Last seen</th>
+      <th>ID</th><th>Name</th><th>Module</th><th>Status</th><th>Room / duct</th><th>Last seen</th>
     </tr></thead><tbody></tbody></table>
 
     <h2>MainController &amp; bus</h2>
@@ -66,13 +66,20 @@
 
     <h2>Firmware</h2>
     <form id="ota-form" class="card">
-      <label>Node <select id="ota-node"></select></label>
+      <label>Target <select id="ota-target">
+        <option value="node">Bus node</option>
+        <option value="thermostat">Paired thermostat</option>
+      </select></label>
+      <label id="ota-node-label">Node <select id="ota-node"></select></label>
       <label>Image <input id="ota-file" type="file" accept=".bin"></label>
       <button type="submit">Push update</button>
       <span id="ota-msg" class="msg"></span>
     </form>
+    <p class="hint">A thermostat has no bus address — pick its ControllerNode and
+      the push is relayed over the private link (the ControllerNode must be
+      running its application). Upload the matching module's <code>.bin</code>.</p>
     <table id="ota-table"><thead><tr>
-      <th>Job</th><th>Node</th><th>File</th><th>State</th><th>Progress</th>
+      <th>Job</th><th>Node</th><th>Target</th><th>File</th><th>State</th><th>Progress</th>
     </tr></thead><tbody></tbody></table>
   </section>
 

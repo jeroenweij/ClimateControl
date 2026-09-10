@@ -12,3 +12,8 @@ var ErrDownlinkUnavailable = errors.New("downlink unavailable (no MainController
 
 // ErrOtaBusy is returned when a firmware push is already running.
 var ErrOtaBusy = errors.New("a firmware push is already in progress")
+
+// ErrOtaTargetMismatch is returned when the uploaded image's module does not
+// match the chosen push target (a Thermostat image for a "node" push, or a
+// non-Thermostat image for a "thermostat" push).
+var ErrOtaTargetMismatch = errors.New("image module does not match the selected target")

@@ -2,5 +2,10 @@
   "httpAddr": ":8080",
   "uplinkAddr": ":9000",
   "uplinkToken": "",
-  "dataDir": "/opt/ccserver/data"
+  "dataDir": "/opt/ccserver/data",
+  "nodes": [
+    { "id": 1, "module": "ControllerNode", "name": "Living room" },
+    { "id": 2, "module": "ControllerNode", "name": "Master bedroom" },
+    { "id": 8, "module": "TemperatureNode", "name": "Supply duct", "note": "attic plenum" }
+  ]
 }

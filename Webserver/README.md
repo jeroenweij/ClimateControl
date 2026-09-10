@@ -107,7 +107,12 @@ sudo -u ccserver cat /opt/ccserver/config.json
   "httpAddr": ":8080",
   "uplinkAddr": ":9000",
   "uplinkToken": "3f9c1a...<32 hex characters>",
-  "dataDir": "/opt/ccserver/data"
+  "dataDir": "/opt/ccserver/data",
+  "nodes": [
+    { "id": 1, "module": "ControllerNode",  "name": "Living room" },
+    { "id": 2, "module": "ControllerNode",  "name": "Master bedroom" },
+    { "id": 8, "module": "TemperatureNode", "name": "Supply duct" }
+  ]
 }
 ```
 
@@ -117,6 +122,22 @@ sudo -u ccserver cat /opt/ccserver/config.json
 | `uplinkAddr` | listen address for the `MainController` TCP connection. |
 | `uplinkToken` | the 32-hex-char shared secret. Generated once; keep it. The `MainController` must send it in its first frame. |
 | `dataDir` | holds `climatecontrol.db` and uploaded floor-plan / firmware files. |
+| `nodes` | the **expected-node roster** — every bus node the installation should have. Optional but recommended. |
+
+`nodes[]` entries take `id` (1–254, required), `module` (`ControllerNode` /
+`TemperatureNode` / `Thermostat` / `MainController`, optional — omit for "any"),
+`name`, and `note`. This list is authoritative and re-synced into the database
+on every start: add a node here and restart to register it; remove it here and
+restart to drop it. (`PUT`/`DELETE /api/expected-nodes/{id}` can also add or
+remove entries at runtime for scripting, but the config file is the normal way.)
+
+The roster drives the node status shown in the UI and API:
+
+| status | meaning |
+|---|---|
+| `online` | in the roster and currently reporting on the bus |
+| `offline` | in the roster but not reporting — or **no MainController is connected** (then every node is offline) |
+| `unexpected` | seen on the bus but **not** in the roster — a wrong node id, a stray node, or one you still need to add |
 
 Edit the file and `sudo systemctl restart ccserver` to apply changes.
 
@@ -167,13 +188,19 @@ cycle.
 |---|---|
 | Map | live floor-plan heatmap of room temperatures |
 | Overrides | change a setpoint / damper mode; the value is held and re-applied if the node reboots |
-| Status | per-node health, bus counters, and firmware upload |
+| Status | per-node status (online / offline / unexpected), bus counters, and firmware upload |
 | Map setup | upload a floor-plan image, click to place each ControllerNode |
 
-**Firmware update** — Status page → pick a node → upload the module's `.bin`
-(`ControllerNode`, `TemperatureNode`, or MainController image from
-`Software/build/Modules/*`). The server validates the image header and CRC,
-then drives the OTA sequence; progress shows in the job table.
+**Firmware update** — Status page → Firmware → choose a **target**, pick the
+node, upload the module's `.bin` from `Software/build/Modules/*`. The server
+validates the image header, CRC, and that its module matches the target, then
+drives the OTA sequence; progress shows in the job table.
+
+- **Bus node** — `ControllerNode`, `TemperatureNode`, or a MainController
+  self-update (node id `0`). Relayed on the RS485 bus.
+- **Paired thermostat** — pick the thermostat's **ControllerNode**; the push is
+  relayed over the private ControllerNode↔Thermostat link (that ControllerNode
+  must be running its application). Upload a `Thermostat` image.
 
 **Backup** — the entire state is one SQLite file:
 
