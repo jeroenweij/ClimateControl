@@ -29,7 +29,7 @@
 | MCU | STM32G031F8P6 | Cortex-M0+, 64 MHz max, 64 KB flash, 8 KB SRAM, TSSOP20 (locked in 2026-09-08; was STM32G030F6P6TR — drop-in, +32 KB flash, adds LPUART1 / RTC / TIM2). §7 SRAM budget unchanged. |
 | UART | USART1 | Supports **hardware Driver-Enable (DE)** output — no manual GPIO toggle + `delay()` needed |
 | Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. Standard EIA-485 common-mode range (-7V to +12V) — margin against this bus's ground-offset estimates checked in `Node-Bus-Hardware-Design-Spec.md` §6, comfortable after the both-ends power feed. |
-| Baud rate | 115200 (keep, for continuity) — reassess to 250k–1M if bus length/noise allows | STM32G0 USART can run well above 1 Mbps; ATmega was the limiting factor before. Bus length now known (~100m total, see hardware spec §7) — comfortably within range for elevated baud rates. |
+| Baud rate | **250 000** (§9) | Exact integer USART divisor (no generator error to add to the crystal-less HSI16 spread); 2.5×10⁷ bit·m/s is deep inside the safe region for the ~100 m / 20-node terminated bus. 500 k is a bench-validated fallback; 1 Mbit is not used. |
 | CRC engine | Hardware CRC peripheral (`CRC` block) | Offloads CRC calc from CPU, frees it for polling/servo timing |
 
 ### Why hardware DE control matters
@@ -77,7 +77,7 @@ v1 could get away with no resync logic because every frame was the same fixed si
 Chosen mitigation (deliberately not full byte-stuffing/COBS — see rationale below):
 
 1. **CRC catches almost all bad frames.** A corrupted `LEN` will, with overwhelming probability, cause the CRC computed over the (wrong) byte range to fail against the trailing 2 bytes, so the bad frame is rejected rather than silently accepted.
-2. **Inter-byte timeout.** If more than `T_gap` (recommend 2–3 byte-periods at the configured baud, e.g. ~200 µs at 115200) elapses between bytes while mid-frame, abandon the partial frame and return to sync-hunting. This bounds how long a single corruption event can wedge the parser.
+2. **Inter-byte timeout.** If more than `T_gap` (recommend 2–3 byte-periods at the configured baud — ~100 µs at 250 000, §9 item 2) elapses between bytes while mid-frame, abandon the partial frame and return to sync-hunting. This bounds how long a single corruption event can wedge the parser.
 3. **Max frame guard.** If `LEN` (or a corrupted read of it) would make the frame exceed the configured max (§7), abandon and resync immediately rather than blocking on bytes that will never come in the expected window.
 4. **`SYNC` byte still re-armed continuously in payload search**, exactly like v1: even while "in frame," if the resulting frame fails CRC, the next sync search starts from the byte immediately after the failed attempt's SYNC, not from scratch at the buffer start — so a spuriously-matched SYNC inside a garbled stream doesn't cost more than one bad frame.
 
@@ -139,7 +139,12 @@ This keeps total protocol RAM usage well under 2 KB, leaving headroom for applic
 ## 9. Open decisions (need your input before finalizing)
 
 1. **`MAX_DATA` cap** — 32 bytes assumed above; tell me if any planned message type needs more (e.g. streaming a batch of readings in one frame).
-2. **Baud rate** — stay at 115200 for parity with existing bus wiring/cable runs, or take advantage of the STM32G0's higher ceiling? Depends on cable length/environment you haven't described yet.
+2. ~~**Baud rate**~~ — **250 000 baud.** ~100 m total bus (`Node-Bus-Hardware-Design-Spec.md` §7 item 3), 20 nodes, terminated both ends, indoor (~10–40 °C):
+   - **Exact integer USART divisor** at both candidate kernel clocks (÷64 at a 16 MHz HCLK, ÷256 at 64 MHz). Zero baud-generator error — the crystal-less HSI16 clock (±~1 % indoors, so ~±2 % node-to-node) already spends most of the async-UART framing budget, so there is no room to add divisor error. 460 800 / 921 600 are not exact and 1 Mbit leaves too little margin against HSI16 spread plus the slower edges from each node's 10 Ω + SM712 + stub loading.
+   - **Length·rate = 2.5×10⁷ bit·m/s** — an order of magnitude inside the conservative RS-485 knee (~10⁸) and far inside what the 12 Mbps MAX3485 does over 100 m of terminated pair. Bit period 4 µs vs. ~0.5 µs one-way cable delay → reflections settle in well under a bit.
+   - A full 50 KB OTA image transfers in ~6 s (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2).
+   - USART config: oversampling ×16 and the 3-sample majority vote (both defaults) for noise immunity; the §8 inter-byte timeout is specified in byte-periods so it scales automatically.
+   - **500 000** (÷128, also exact) is the fallback headroom step, taken only if bench measurement on the real 100 m run shows margin. The `ControllerNode`↔`Thermostat` link runs the same 250 000 (`ControllerNode-Thermostat-Link-Spec.md` §3).
 3. **CRC placement (whole-frame vs re-verify per field)** — spec above puts CRC after `DATA`, covering header+data only. Confirm that's acceptable vs. also covering `LEN` (would require restructuring since `LEN` is needed *before* you know where `DATA`/CRC end).
 4. **Backward compatibility** — is this a clean-slate rewrite (old ATmega nodes retired), or do you need v1 and v2 nodes coexisting on the same bus during a transition? That changes whether `SYNC` bytes need to differ between versions so a mixed bus doesn't misparse frames.
 

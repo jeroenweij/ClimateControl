@@ -75,7 +75,7 @@ Decided 2026-09-07, replacing the earlier single-master-pull-up scheme (2026-09-
 | All 20 servos stalled simultaneously (worst case) | ~40 A | **~4.7 A** |
 
 **Decision:**
-- Normal operation (~1.4A) is comfortably within a bonded-pair connector's safe range — no special handling needed for the typical case.
+- Normal operation (~1.4A) is comfortably within a bonded-pair connector's safe range — no special handling needed for the typical case. The servo is per-node power-gated (`Node-Bus-Power-Path-Spec.md` §3.1), so both rows below are *transients* bounded by how many dampers move at once; the resting bus current is ~20 × (MCU + transceiver) ≈ tens of mA. The both-ends feed below is headroom for a coordinated multi-damper move.
 - Worst-case simultaneous full-stall (~4.7A) can exceed the ~2–3A single-hop connector budget.
 - **Mitigation — committed 2026-09-06: power injection at both ends of the chain**, not multi-point injection every 4–5 nodes as originally sketched. With the bus length now known (~100m, §7 item 3), feeding both ends splits each node's return current toward whichever end is electrically closer, cutting the worst-case IR drop to roughly 1/4 of the single-end-fed case (standard result for a distributed load fed from both ends) — simpler than 4-5 separate injection points along the run, and sufficient: see §6 for the RS485 common-mode margin this resolves. Requires an actual physical power connection at the far end of the run (a second supply there, or a dedicated feed cable back to the master), not just something the daisy-chain connectors handle on their own. RS485 stays a single continuous bus end-to-end regardless — only the power pairs need the second feed point.
 - **Regardless of the above, every node gets a fuse or PTC on its 48V input** — cheap insurance against a single node fault pulling down the shared rail, and it caps that node's worst-case contribution to bus current.
@@ -144,7 +144,7 @@ TSSOP20: a **single combined `VDD/VDDA` pin (4)** and **single `VSS/VSSA` (5)** 
 | ADC reference | (none — it's `VDD`) | Matters for `TemperatureNode` if NTC-into-ADC is chosen: LDO ripple sets the temperature noise floor. Consider AP2112 (`C51118`) over XC6206 there. |
 | `NRST` (pin 6) | 100 nF to GND + reset button (§6.4) | Internal ~40 kΩ pull-up present — no external pull-up. |
 | `BOOT0` | nothing | Shares the `PA14`/SWCLK pad. Factory `nBOOT_SEL = 1` → boot source is the option byte, pad free as SWCLK, boots from flash. Leave default (SWD flashing means no UART-bootloader strap is needed). |
-| Clock | **HSI16 only** | HSI16 is ±0.75 % trimmed, ±1 %/0–85 °C, ±2 % at −40 °C — fine for 115200 and up to ~250–460 k node-to-node. Pins 2/3 (`PB9/PC14-OSC32_IN`, `PC15-OSC32_OUT`) can instead take a **32.768 kHz LSE crystal** for the G031 RTC (wall-clock for MainController schedules). On the MainController board `PB9` is the bus-disable output (`RESET_NODES`), so LSE there would need it relocated; on Node/Thermostat boards pins 2/3 are free. Footprint LSE **DNP** on all boards for now. |
+| Clock | **HSI16 only** | HSI16 is ±0.75 % trimmed, ±1 %/0–85 °C, ±2 % at −40 °C — fine for the **250 000 baud** bus (§7 item 3): an indoor duct/wall sees ~10–40 °C where HSI16 holds ≈ ±1 %, so two nodes are ~±2 % apart, inside the async-UART framing budget — and 250 000 is an exact integer divisor of the USART clock, so the generator adds no error on top. This is why 1 Mbit is not used. Pins 2/3 (`PB9/PC14-OSC32_IN`, `PC15-OSC32_OUT`) can instead take a **32.768 kHz LSE crystal** for the G031 RTC (wall-clock for MainController schedules). On the MainController board `PB9` is the bus-disable output (`RESET_NODES`), so LSE there would need it relocated; on Node/Thermostat boards pins 2/3 are free. Footprint LSE **DNP** on all boards for now. |
 | SWD | 5-pin header: `3V3` (Vtref), `SWDIO`=PA13 (18), `SWCLK`=PA14 (19), `NRST` (6), `GND` | No caps on SWDIO/SWCLK. Cortex-M0+ has **no SWO/ITM** — see §6.5. |
 
 ### 6.2 Pin assignment (TSSOP20)
@@ -178,8 +178,8 @@ Pins 1, 15 and 20 each bond several GPIO pads to one physical pin — configure 
 | 8  PA1  | USART2_RTS (AF1) → NINA CTS | link DE (AF1) | — | link DE (AF1) |
 | 9  PA2  | USART2_TX (AF1) → NINA | link TX (USART2, AF1) | — | link TX (USART2, AF1) |
 | 10 PA3  | USART2_RX (AF1) ← NINA | link RX (USART2, AF1) | — | link RX (USART2, AF1) |
-| 11 PA4  | — | — | 1-Wire #2 | — |
-| 12 PA5  | — | — | 1-Wire #1 | — |
+| 11 PA4  | — | free (bit-bang debug-TX candidate) | 1-Wire #2 | — |
+| 12 PA5  | — | **servo enable** (GPIO out, off by default — `Node-Bus-Power-Path-Spec.md` §3.1) | 1-Wire #1 | — |
 | 13 PA6  | NINA RESET_N (open-drain out) | servo PWM (TIM3_CH1, AF1) | — | — |
 
 MainController + TemperatureNode are two populate variants of one PCB (the 48 V injection front-end and NINA are DNP on the TemperatureNode build, the 1-Wire front-end DNP on the MainController build). MainController has no spare hardware UART for a debug console (USART1 = bus, USART2 = NINA). The G031's `LPUART1` does not help: on TSSOP20 its TX/RX only reach PA2/PA3 (the PB10/PB11 and PC0/PC1 options are not bonded), i.e. the same pins as USART2. Bit-bang `Tools::Logger` on a free pin (PC15, PA4, PA5) or drop the console — **verify the LPUART1 AF map against DS12992 before relying on this.**
@@ -242,7 +242,7 @@ Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader
 2. **RJ45 straight-through nets** — 48 V (orange 1/2), GND (brown 7/8), A/B (blue 4/5), ENABLE (green 3/6) all pass in-jack → out-jack unbuffered. ENABLE also gets the per-node **1.5 MΩ pull-up to local 48 V** (§3) and feeds the buck EN pin.
 3. **Input protection + regulators** per `Node-Bus-Power-Path-Spec.md` (PTC fuse, 48 V TVS, reverse diode, 47 µF/100 V bulk, LMR16030 buck, LDO, all caps).
 4. **100 nF at every VCC pin** — MCU, transceiver, LDO.
-5. **Reset-safe I/O** — every MCU output benign at POR; servo PWM pin externally pulled to the safe damper position.
+5. **Reset-safe I/O** — every MCU output benign at POR. On a `ControllerNode` the **servo enable** (PA5) defaults off with the pin Hi-Z, so the servo is unpowered at POR / on an unprogrammed board (`Node-Bus-Power-Path-Spec.md` §3.1); keep a light external pull on the servo PWM pin toward the safe position as secondary insurance.
 6. **Test points:** 48 V, 5 V, 3V3, GND, A, B, debug-UART TX, SWD header.
 7. **One solid ground pour**; for NTC-into-ADC keep the divider return near the MCU ground pin.
 
@@ -252,6 +252,6 @@ Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader
 
 1. **Real servo stall current** — §4's numbers use a generic placeholder. With both-ends power injection now committed (§4), this mainly affects fuse/PTC sizing and connector budget rather than signal integrity (§6's RS485 margin concern is resolved regardless, with >4x headroom even at the current placeholder stall estimate).
 2. **Whether simultaneous full-stall across all 20 nodes is a realistic scenario** for your application (e.g. synchronized power-on homing) or a non-issue because servos move independently — no longer signal-integrity-critical now that both-ends injection (§4) resolved the RS485 margin question (§6) with comfortable headroom either way. Still relevant for fuse/PTC and connector-current sizing.
-3. ~~**Cable run length per segment**~~ — partially resolved 2026-09-06: total bus length ~100m. No longer a factor for ENABLE (§3's per-node pull-up scheme removes the ground-offset exposure entirely). Per-segment breakdown and RS485 baud-rate implications not yet revisited against this number.
+3. ~~**Cable run length per segment / RS485 baud rate**~~ — total bus length ~100 m. Not a factor for ENABLE (§3's per-node pull-up scheme removes the ground-offset exposure entirely). **Baud: 250 000** (`RS485-Node-Protocol-Spec-STM32G030.md` §9) — an exact integer USART divisor (zero baud-generator error, which matters because the HSI16 clock spread already spends most of the async-UART budget); length·rate = 2.5×10⁷ bit·m/s sits deep inside the safe region for 100 m of terminated twisted pair with 20 lightly-loaded stubs. 500 000 (also exact) is the next step only if bench-validated on the real cable; 1 Mbit is not recommended — too little margin against HSI16 spread + loaded edges for a duct-buried bus.
 4. ~~**Final connector choice**~~ — resolved 2026-09-06: C7501838, two single-port jacks per node (see §5). Footprint still needs verification against the board layout once you're at PCB stage.
 5. ~~**ENABLE line noise filtering**~~ — downgraded 2026-09-06: no longer load-bearing now that ENABLE drives at 48V (see §3) rather than 5V — the Schmitt-trigger + RC filter is optional insurance against transient noise, not a fix for a margin problem that no longer exists at this drive voltage. Add it if cheap, skip it if not without much consequence either way.

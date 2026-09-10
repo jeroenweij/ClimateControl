@@ -1,11 +1,10 @@
 # ControllerNode ↔ Thermostat Link — Design Spec
 
-**Status:** Draft — topology and protocol-reuse approach (§2) confirmed 2026-09-06, Thermostat hardware direction set (§4), physical-layer details still open (see §5)
-**Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (main bus protocol this link is *not* using wholesale), `Software-Architecture-Spec.md` (module map)
+**Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (main bus protocol this link reuses a subset of), `Node-Message-Model-Spec.md` (endpoint/operation model the link shares; `ThermostatFirmware` is defined here in §5.4), `Node-Flash-Layout-and-Bootloader-Spec.md` (§7 Thermostat OTA — the "relay details" it defers are §5 here), `Software-Architecture-Spec.md` (module map)
 
 ---
 
-## 1. Confirmed topology
+## 1. Topology
 
 Each `ControllerNode` (damper actuator, main-bus slave) has exactly one `Thermostat` (room UI/setpoint) paired to it. That pair talks over a **separate, dedicated link — not the main RS485 bus**:
 
@@ -18,27 +17,29 @@ MainController ──(main RS485 bus, many nodes)── ControllerNode ──(de
 
 - `ControllerNode` is on the main bus as a normal `NodeLib` slave (node ID `1..N`, per the protocol spec).
 - `Thermostat` is **not** addressable on the main bus at all — it only ever talks to its own `ControllerNode`.
-- Because the link has exactly two fixed endpoints, the main protocol's round-robin arbitration (`Discover`/`Announce`/`Poll`/`Done`, protocol spec §6) exists to let one master poll an unknown number of slaves fairly — that problem doesn't exist here. A full port of the main-bus state machine would be solving a problem this link doesn't have.
+- Because the link has exactly two fixed endpoints, the main protocol's *arbitration* (`Discover`/`Announce`, dynamic roster — protocol spec §6) exists to let one master poll an unknown number of slaves fairly, and that problem doesn't exist here. The `Poll`/`Done` transmit-window discipline is nonetheless kept (§5.3): it costs one round-trip per cycle and buys byte-for-byte reuse of the bus bootloader's OTA slave over this link (§5).
 
 ---
 
-## 2. What carries over from NodeLib vs. what doesn't (confirmed)
+## 2. What carries over from NodeLib
 
-| Protocol-spec concept | Carries over? | Why |
+| Protocol-spec concept | On this link | Why |
 |---|---|---|
-| `Id`/`Message` framing, CRC16, sync/resync (protocol spec §3–§5) | **Yes** | Still useful for a clean, corruption-detected frame even on a 2-endpoint link — no reason to invent a different frame format just because there's no arbitration. |
-| `Endpoint`/`Operation` enums (`Node-Message-Model-Spec.md`) | **Yes — a subset** | Resolved 2026-09-08: the link uses the **named-endpoint** blocks `System*`, `Room*` (`RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`), and `DamperActual`/`DamperMode` — the same values as the main bus, just a subset. Never the `Transport` endpoint. Verbs: `Get`/`Set`/`Report`/`Ack`/`Nack`. On this link the **`Thermostat` is the source of truth for `Room*`** and pushes `Report`s; the `ControllerNode` pushes `DamperActual`/`DamperMode` for the display. See `Node-Message-Model-Spec.md` §7. |
-| `Discover`/`Announce` discovery | **No** | Fixed 1:1 pairing — nothing to discover. |
-| `Poll`/`Done` round-robin polling | **No** | No arbitration needed between exactly two endpoints; a simple periodic-push + ping/ack exchange is sufficient. |
-| Heartbeat/`ConnectionLost()` | **Yes, conceptually** | Still want to detect a dead/disconnected `Thermostat` (or vice versa) — just doesn't need the full poll-cycle machinery to drive it, a simple periodic ping/ack works. Surfaced on the main bus as `RoomLink` (0 down / 1 up). |
+| `Id`/`Message` framing, CRC16, sync/resync (protocol spec §3–§5) | **Yes** | A clean, corruption-detected frame is worth having on a 2-endpoint link too — no reason for a different frame format. |
+| `Endpoint`/`Operation` enums (`Node-Message-Model-Spec.md`) | **A subset** | The **named-endpoint** blocks `System*`, `Room*` (`RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`), `DamperActual`/`DamperMode`, and `Firmware` — same values as the main bus. Never the `Transport` endpoint. Verbs: `Get`/`Set`/`Report`/`Ack`/`Nack`. The **`Thermostat` is the source of truth for `Room*`** and pushes `Report`s; the `ControllerNode` pushes `DamperActual`/`DamperMode` for the display. See `Node-Message-Model-Spec.md` §7. |
+| `Discover`/`Announce` | **Bring-up only** | The CN sends one `Discover` after reset / link loss to read the Thermostat's app-vs-bootloader `state` from its `Announce`. No periodic re-discovery. §5.3. |
+| `Poll`/`Done` transmit-window discipline | **Yes — single-peer** | There is nothing to arbitrate, but this is the discipline the bus-resident bootloader's `FirmwareSlave` speaks, so the same bootloader binary takes an image over this link with no OTA-specific code (§5). The CN runs `LinkMaster` — a single-peer master; the cost is one `Poll`/`Done` round-trip per cycle. |
+| Heartbeat / `ConnectionLost()` | **Yes** | Driven off the poll cycle (§5.3): 3 consecutive missed `Done` → `ConnectionLost()`. Surfaced on the main bus as `RoomLink` (0 down / 1 up). |
 
-**Confirmed:** don't reuse `NodeLib::Node`/`NodeMaster` as-is for this link. Instead, factor the reusable parts (`Id`/`Message`/CRC framing) into something shared — a candidate for `Software/Lib/NodeLib` itself, split so the framing layer doesn't drag in the round-robin master/slave state machine — and write a much smaller point-to-point exchange (simple request/response or periodic push + ping/ack for liveness) specifically for this link, rather than adapting `NodeMaster`'s arbitration to a degenerate 2-node case.
+`Software/Lib/NodeLib` is split into a framing layer (`Frame`/`Crc`/`Id`/`Message`/`EEndpoint`/`EOperation`) and the roles built on it. The **Thermostat** runs the full slave (`NodeLib::Node`) — a point-to-point link changes nothing on the slave side. The **ControllerNode** runs `LinkMaster` on the link (§5.3): `NodeMaster` with discovery and the N-slave roster stripped to a fixed single peer, not the full arbitration state machine. Reusing this discipline rather than a bespoke push/ack exchange is what lets the bus bootloader receive an image over the link with no new transfer code.
 
 ---
 
 ## 3. Physical layer
 
-You noted this is "possibly also a RS485 bus with just 2 endpoints" — RS485's differential signaling is a reasonable choice here independent of the arbitration question, since it's still a wired link that may run a non-trivial distance from a duct-mounted `ControllerNode` to a wall-mounted room thermostat, and differential signaling resists noise better than single-ended UART over that distance. But since there are only ever two endpoints, it doesn't need the transceiver DE/RE half-duplex switching that the main bus needs for multi-drop arbitration — it could run full-duplex (two independent differential pairs, or even a simple UART if the run is short enough) instead of half-duplex RS485. **This needs your input** — see open items below.
+**Half-duplex 2-wire RS485 with hardware driver-enable** — the same transceiver and BOM as the main bus. Differential signalling suits the duct-to-wall run, and although a 2-endpoint link has nothing to arbitrate and could run full-duplex or plain UART, the bus-resident bootloader's OTA UART (`Modules/Bootloader/OtaUart.cpp`) drives a hardware DE line and expects `DEAT`/`DEDT` turnaround timing. Matching that here — transceiver DE on `Board::Usart2De` (PA1) — is what lets the same bootloader binary serve a Thermostat image with only a USART-select change (§5.5).
+
+On the ControllerNode this is a *second* RS485 front-end (USART2, PA2/PA3, DE PA1) alongside the main-bus one (USART1); on the Thermostat it is the only link. `BoardPins.h` (`LinkUart`) carries these pins. Bit rate is `Board::BusBaudRate` (250 000), the same as the main bus.
 
 ---
 
@@ -51,7 +52,7 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project
 **SSD1306 / SSD1315 128×64 mono OLED.**
 - I²C: 2 pins (SDA/SCL), **shared** with the room sensor (§4.3) — no extra pins for the sensor.
 - Framebuffer 128×64/8 = **1 KB** of the 8 KB SRAM — fine alongside the link's `Message` buffers.
-- **Constraint is flash, not RAM:** 32 KB total. Driver + framing + app fits, but keep fonts minimal (one small + one large digit font, not a font library).
+- **Constraint is flash, not RAM:** the app slot is 50 KB (`Node-Flash-Layout-and-Bootloader-Spec.md` §3). Driver + framing + app fits, but keep fonts minimal (one small + one large digit font, not a font library).
 
 **Power** (module with onboard charge pump, from 3.3 V):
 
@@ -83,7 +84,7 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project
 |---|---|
 | 1 / 20 | I²C1 SDA (PB7) / SCL (PB6) — OLED + room sensor |
 | 9 / 10 | link TX / RX (USART2, PA2/PA3) |
-| 8 | link DE (PA1) — only if the link ends up half-duplex RS-485 (§3) |
+| 8 | link DE (PA1) — half-duplex RS-485 (§3) |
 | 16 / 17 | button 1 / button 2 (PA11 / PA12) |
 | 14 | status LED (PA7) |
 | 6 / 18 / 19 | NRST + reset button / SWDIO / SWCLK |
@@ -92,14 +93,118 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project
 
 ### 4.5 Power delivery
 
-The display's ~10 mA typical (≤ ~27 mA peak) is trivial over any reasonable feed, so it does not constrain the still-open question of *how* the Thermostat is powered (§5 item 3). If the Thermostat is fed from the `ControllerNode` over the link cable, size that feed for MCU (~5 mA) + transceiver (~1 mA) + OLED (~12 mA typ) ≈ 20 mA, ~40 mA peak.
+The display's ~10 mA typical (≤ ~27 mA peak) is trivial over any reasonable feed, so it does not constrain the still-open question of *how* the Thermostat is powered (§6 item 2). If the Thermostat is fed from the `ControllerNode` over the link cable, size that feed for MCU (~5 mA) + transceiver (~1 mA) + OLED (~12 mA typ) ≈ 20 mA, ~40 mA peak.
 
 ---
 
-## 5. Open items — need your input before finalizing
+## 5. Firmware update — the OTA link master
 
-1. **Physical link:** half-duplex RS485 (2-wire, matching the main bus parts/BOM for consistency), full-duplex RS485/RS422-style (4-wire), or plain UART (if cable runs are always short, e.g. within one room)?
-2. **Cable/connector:** does this link ride on the same RJ45/Ethernet-cable infrastructure as the main bus (`Node-Bus-Hardware-Design-Spec.md` §3, spare conductors?) or a separate cable run entirely? The main-bus RJ45 pinout in that spec is already fully allocated (RS485 pair, 48V pair, GND pair, ENABLE pair) — there's no spare pair for a second differential link on the same cable.
-3. **Thermostat power:** does `Thermostat` draw power from `ControllerNode` over this same link/cable (see §4.5 for the current budget), or does it have its own local supply (e.g. mains-adjacent wall power, batteries)? Affects both this spec and a possible future `Thermostat` power-path spec.
-4. **Display part number** — §4 locks the room sensor (CHT40MEMS, `C54305346`) and button type; the OLED is still just "SSD1306/SSD1315 128×64" — pick a specific module vs. bare-controller + panel, and confirm no onboard high-Iq LDO on it.
-5. **Control loop location:** confirm — does `ControllerNode` itself run the room's thermostat control loop (compare `Thermostat`'s setpoint/room-temp against damper position and act locally), with `MainController` only seeing the results over the main bus? This is the assumption `MainController-Spec.md` §2 is currently built on.
+The same bus-resident bootloader binary receives the Thermostat image over this link, unchanged, because the ControllerNode speaks the transport discipline the bootloader already implements. This is the "relay details" that `Node-Flash-Layout-and-Bootloader-Spec.md` §7 defers here.
+
+### 5.1 Ordering — the node first, then its Thermostat
+
+A ControllerNode and its Thermostat update as two separate, sequential jobs, CN first:
+
+1. The **ControllerNode** updates over the main bus — the normal flow of `Node-Flash-Layout-and-Bootloader-Spec.md` §6. Self-healed by the CN's own bootloader if interrupted.
+2. Once the CN is confirmed back in its application on the new image, the **Thermostat** update runs *through the CN application*, which acts as the OTA master on the link (§5.4).
+
+The CN **bootloader never relays** — it only ever updates the CN itself. A Thermostat is updatable only while its CN runs a healthy application; that CN app is the Thermostat's recovery anchor, in place of "the bus" for a main-bus node. A Thermostat left with an invalid image sits in its bootloader waiting for its CN to re-drive the push — no J-Link needed as long as the CN app and the link are intact. Interrupting a Thermostat push does not disturb the CN (it is relaying, not resetting itself), so the server just retries.
+
+**Damper safe state during the transfer.** Whenever the CN loses fresh room data — its Thermostat sitting in the bootloader for a transfer, or any `ConnectionLost()` (§5.3) — the CN drives the damper to **50 % (neutral airflow)** and then powers the servo down. It does not hold the last position or fall back to `DamperMode`. This is the same park the CN runs in `INodeHandler::PrepareForReset()` before its *own* OTA reset. The servo is unpowered by default in the hardware — a STM32-gated power enable, de-asserted at reset and while the MCU is unprogrammed — and is energised only for the brief move to a new setpoint, so "powered down" is the resting state and the metal gearing holds 50 % until the Thermostat re-announces and the control loop resumes. Hardware side: `Node-Bus-Power-Path-Spec.md` §3.1.
+
+### 5.2 The Thermostat runs full NodeLib
+
+The Thermostat application is an ordinary `NodeLib::Node` slave on its link USART (USART2, PA2/PA3 + PA1 DE), with `ConfigStore` giving it `module = Thermostat` and its `nodeId` (§5.2.1). It serves the §2 endpoint subset (`System*`; `Room*` as source of truth; `DamperActual`/`DamperMode` for the display; `Diagnostics*`; `Firmware`). The point-to-point nature of the link changes nothing on the slave side — it is effectively a `ControllerNode` app minus the damper, plus the OLED/sensor/buttons.
+
+`Firmware` on the Thermostat is handled as on any node: a running app receiving `Firmware[EnterBootloader]` parks its UI, writes `Board::EnterBootloaderMagic` to the backup register and resets; the bootloader then serves the `Begin`/`Write`/`End`/`Activate` transfer.
+
+#### 5.2.1 Thermostat `nodeId` — same as its ControllerNode
+
+The Thermostat is provisioned with the **same `nodeId` as the ControllerNode it is paired to**. The pair is programmed together at manufacture — identical `nodeId`, different `module` (`1` = ControllerNode, `4` = Thermostat). The link is private, so the shared id never collides: the CN acts only as master on the link, the Thermostat only as slave.
+
+Consequences:
+- A Thermostat is **not field-interchangeable** without re-provisioning.
+- The server, `0x63` and `ota_jobs` identify a Thermostat by its owning ControllerNode's id directly; no separate address space.
+- `FirmwareSlave`'s `(nodeId-1)×25 ms` announce back-off is dead time on the 1:1 link — `LinkMaster` just waits out its discovery window.
+- `LinkMaster`'s single peer id is `ConfigStore::NodeId()` (the CN's own id).
+- The `provision` CMake target (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.3) has a pair mode that writes both records with a shared id in one bench step.
+
+### 5.3 `LinkMaster` — the CN's single-peer poll loop
+
+The CN application instantiates, on its link USART, `NodeLib::LinkMaster` — a distinct class, not a mode of `NodeMaster`. It shares only the framing/`Node` plumbing; the discovery array, dynamic roster and round-robin cursor are not carried. It is `NodeMaster` with the arbitration removed:
+
+| `NodeMaster` | `LinkMaster` |
+|---|---|
+| dynamic discovery, `activeNodes[MAX_NODES]` | fixed single peer, id = `ConfigStore::NodeId()` (§5.2.1) |
+| round-robin across N slaves | poll the one peer every **200 ms** |
+| `Discover` + Announce collection each cycle | one `Discover` at bring-up / after link loss to read the peer's app-vs-bootloader `state`; no periodic re-discovery |
+| injects master `Set`/`Get` in the gaps | same |
+| `ConnectionLost()` from poll-cycle bookkeeping | **3** consecutive missed `Done` → `RoomLink = 0` + `ConnectionLost()` |
+
+Normal traffic: the Thermostat pushes `Room*` `Report`s in its poll window; the CN injects `Set DamperActual` / `Set DamperMode` for the display, and `Set RoomSetpoint` for a master override. One poll loop covers liveness, room-state relay and OTA.
+
+### 5.4 `ThermostatFirmware` endpoint (`0x22`)
+
+Delegating the Thermostat's OTA (and version query) from the main bus needs one new endpoint, because a plain `Firmware` frame addressed to the CN means "update the CN". `ThermostatFirmware = 0x22` sits in the Firmware block of `Node-Message-Model-Spec.md` §3 — the `FirmwareOp` sub-opcode symmetry with `Firmware = 0x20` is the reason it is not in the `Room` block.
+
+```
+ThermostatFirmware = 0x22   // data[0] = FirmwareOp; "act on my paired Thermostat over the link"
+```
+
+- Same `data[0] = FirmwareOp` sub-opcodes as `Firmware` (`Begin`/`Write`/`End`/`Activate`/`Abort`/`Status`) — the `Operation` verb set does not grow.
+- **NodeLib does not self-handle it** (unlike `Firmware`). It is delivered to the ControllerNode's `INodeHandler` like an application endpoint — only the ControllerNode module defines it, exactly like the `Room*` block.
+- The CN handler terminates each frame and originates a fresh link transaction against the Thermostat's real `Firmware` endpoint, driven by `LinkMaster`:
+
+| main bus → CN | CN → Thermostat, over the link |
+|---|---|
+| `Set ThermostatFirmware[Begin] {module=4, imageSize, imageCrc32, fwVersion, flags}` | (guard, §5.4.1) `Set Firmware[EnterBootloader]`, wait for the bootloader `Announce`, then `Set Firmware[Begin {…}]` (the standard 12-byte payload, `flags` dropped) |
+| `Set ThermostatFirmware[Write] {offset, bytes≤27}` | `Set Firmware[Write {offset, bytes}]` in the next link poll window |
+| `Set ThermostatFirmware[End]` / `[Activate]` / `[Abort]` | the same `Firmware` op |
+| `Get ThermostatFirmware` (no FirmwareOp) | answered from the CN's link cache — no link traffic |
+
+- `ThermostatFirmware[Begin]` is CN-terminated, so its payload differs from the bus `Firmware[Begin]` — it adds a `flags` byte (bit 0 = `Force`, §5.4.1), ~14 bytes, well under `MAX_DATA`.
+- The CN `Report`s `ThermostatFirmware {FirmwareOp::Status, state, expectedOffset, lastError, fwVersion}` up the main bus, copied from the Thermostat's link `Status` (or from cache for a bare `Get`). This carries the Thermostat's running firmware version on demand — no separate "thermostat info" endpoint.
+- The CN keeps a small link cache of the Thermostat's `state` + `fwVersion` (+ `uid`, §5.6), refreshed by a periodic link `Get SystemInfo` / `Get Firmware`, so `Get ThermostatFirmware` is always answerable.
+- One 27-byte chunk crosses the CN at a time — no image staging. The CN does **not** forward frames between the two buses (`Node-Message-Model-Spec.md` §7): it terminates and re-originates.
+
+#### 5.4.1 Already-current guard
+
+With `Force` (bit 0 of `flags`) clear, if the CN's link cache shows the Thermostat already running the requested `fwVersion`, the CN does not disturb it: it skips `EnterBootloader` and immediately `Report`s `Status {state = app, lastError = AlreadyCurrent}`. A working Thermostat is never rebooted for a no-op update.
+
+The server makes the same check *before* creating the job — it has the Thermostat's version from `0x63` and the target from the uploaded image descriptor — and warns the operator rather than starting a pointless transfer. The CN guard is the backstop for a stale server cache. `Force` is set only on an explicit operator "re-flash anyway". Match is on `fwVersion` only (the cached `SystemInfo` carries no `buildId`).
+
+### 5.5 Bootloader — one binary, USART select by module
+
+`Modules/Bootloader/OtaUart.cpp` picks its USART and pins from the provisioned module type:
+
+| `ConfigStore::GetModule()` | link USART | TX / RX | DE |
+|---|---|---|---|
+| `Thermostat` | USART2 | PA2 / PA3 (AF1) | PA1 (AF1) |
+| everything else | USART1 | PB6 / PB7 (AF0) | PA12 (AF1) |
+
+Half-duplex 2-wire RS485 with hardware driver-enable (`USART_CR3_DEM`, `DEAT`/`DEDT`) in both cases — identical framing, baud and `FirmwareSlave` logic. `main.cpp`'s `StayResident()` routes a provisioned node (`ConfigStore::Valid()`) to `FirmwareSlave(BusBaud, NodeId(), module)`; a provisioned Thermostat lands there and serves the transfer on USART2. The "one bootloader binary, all four boards" property and the Thermostat pin map of §4.4 are unchanged.
+
+### 5.6 Server & MainController awareness
+
+The server models every `ControllerNode` as owning one Thermostat.
+
+- **Presence / version / identity:** uplink endpoint `0x63 ThermostatStatus`, MC→S `Report {controllerNodeId(1), linkUp(1), blState(1), fwMajor(1), fwMinor(1), uid[12]}` (17 B), on change + slow keepalive. The MC fills it from `Get RoomLink` + `Get ThermostatFirmware` on each ControllerNode.
+  - **`uid`** is the Thermostat MCU's 96-bit factory device ID (read-only at `0x1FFF_7590`, `Node-Flash-Layout-and-Bootloader-Spec.md` §2). The CN reads it once from the Thermostat's `SystemInfo` (`uid[12]`) over the link and caches it. Same role as `nodes.uid` for bus nodes: it names the physical unit independent of the assigned `nodeId`, so the server can tell a Thermostat behind a given CN was physically swapped (new `uid`, same id). Inventory / OTA-history signal, not used for routing.
+- **OTA target:** `0x65 OtaControl` Set gains no new field — `module == Thermostat (4)` in the payload means "`targetNodeId` is the owning ControllerNode; drive `ThermostatFirmware`, not `Firmware`". `0x66 OtaData` is byte-identical; the MC wraps each chunk into `ThermostatFirmware[Write]`. The `Force` flag (§5.4.1) rides in the `0x65` payload's spare byte.
+- **DB:** `thermostats(controller_node_id PK → nodes.id, module, uid, fw_version, bl_state, link_up, last_seen)`; `ota_jobs` has `target TEXT NOT NULL DEFAULT 'node'` (`'node'` | `'thermostat'`), `node_id` staying the bus node id in both cases.
+- **UI:** the Status page lists each Thermostat under its ControllerNode with its own fw version and an upload control; the building-map per-room badge renders `RoomLink`.
+
+### 5.7 Implementation status
+
+Built in firmware: the `EEndpoint`/`EFirmware` additions, the `NodeLib` framing use split (`LinkMaster` added alongside `Node`/`NodeMaster`), `OtaUart` module-aware USART select, and the `ControllerNode` and `Thermostat` modules — the ControllerNode carries the `Damper`, the Room* cache, `LinkMaster`, and the `ThermostatFirmware` relay; the Thermostat is a NodeLib slave on the link with the OLED / CHT40 sensor / buttons still stubbed (they need an I²C HAL).
+
+Not built yet: the MainController side (`0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, and the `Webserver` changes (`thermostats` table, `ota_jobs.target`, `0x63` decode, UI).
+
+---
+
+## 6. Open items
+
+1. **Cable/connector:** does this link ride on the same RJ45/Ethernet-cable infrastructure as the main bus (`Node-Bus-Hardware-Design-Spec.md` §3, spare conductors?) or a separate cable run entirely? The main-bus RJ45 pinout in that spec is already fully allocated (RS485 pair, 48V pair, GND pair, ENABLE pair) — there's no spare pair for a second differential link on the same cable.
+2. **Thermostat power:** does `Thermostat` draw power from `ControllerNode` over this same link/cable (see §4.5 for the current budget), or does it have its own local supply (e.g. mains-adjacent wall power, batteries)? Affects both this spec and a possible future `Thermostat` power-path spec.
+3. **Display part number** — §4 locks the room sensor (CHT40MEMS, `C54305346`) and button type; the OLED is still just "SSD1306/SSD1315 128×64" — pick a specific module vs. bare-controller + panel, and confirm no onboard high-Iq LDO on it.
+4. **Control loop location:** confirm — does `ControllerNode` itself run the room's thermostat control loop (compare `Thermostat`'s setpoint/room-temp against damper position and act locally), with `MainController` only seeing the results over the main bus? This is the assumption `MainController-Spec.md` §2 is currently built on.

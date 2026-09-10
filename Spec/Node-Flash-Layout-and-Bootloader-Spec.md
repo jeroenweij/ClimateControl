@@ -21,7 +21,7 @@ Three things, one flash design:
 
 **Non-goals (v1)**
 - Image signing / encryption — the bus is assumed trusted, same stance as `RS485-Node-Protocol-Spec-STM32G030.md` §1. Flagged in §8 as a later option (flash RDP).
-- Dual-slot A/B images — confirmed 2026-09-08: **single 52 KB app slot**, with the resident bootloader as the recovery path (§5). Revisit only if images that pass CRC yet fail to run become a real risk.
+- Dual-slot A/B images — confirmed 2026-09-08: **single 50 KB app slot**, with the resident bootloader as the recovery path (§5). Revisit only if images that pass CRC yet fail to run become a real risk.
 - Delta/compressed images.
 - A field-modifiable `NodeId` — confirmed 2026-09-08: identity is written **once at factory** and is read-only to firmware (§6.3).
 
@@ -44,9 +44,9 @@ Three things, one flash design:
 
 ```
 0x0800_0000  ┌────────────────────────────┐
-             │  Bootloader                │  8 KB   (4 pages)   — SWD-flashed only, never OTA
-0x0800_2000  ├────────────────────────────┤
-             │  Application               │  52 KB  (26 pages)  — OTA target; vector table at 0x0800_2000
+             │  Bootloader                │  10 KB  (5 pages)   — SWD-flashed only, never OTA
+0x0800_2800  ├────────────────────────────┤
+             │  Application               │  50 KB  (25 pages)  — OTA target; vector table at 0x0800_2800
              │                            │
 0x0800_F000  ├────────────────────────────┤
              │  Config page A             │  2 KB   (1 page)    ┐ ping-pong record log
@@ -57,8 +57,8 @@ Three things, one flash design:
 
 | Region | Base | Size | Written by | Notes |
 |---|---|---|---|---|
-| Bootloader | `0x0800_0000` | 8 KB | J-Link only | Holds the reset vector; runs first on every boot. 8 KB is a page-aligned ceiling — confirm actual size after the first build (§8 item 8); the +32 KB the G031 gave us over the G030 was bought for exactly this (`Node-Bus-Hardware-Design-Spec.md` §6). |
-| Application | `0x0800_2000` | 52 KB | Bootloader (OTA) | Linked with `FLASH ORIGIN = 0x08002000`. First 0xC0 bytes = vector table; image descriptor at fixed offset `0xC0` (§4). |
+| Bootloader | `0x0800_0000` | 10 KB | J-Link only | Holds the reset vector; runs first on every boot. Carries the full OTA slave (main bus + the Thermostat link on USART2, `ControllerNode-Thermostat-Link-Spec.md` §5.5), which needs the 5th page. |
+| Application | `0x0800_2800` | 50 KB | Bootloader (OTA) | Linked with `FLASH ORIGIN = 0x08002800`. First 0xC0 bytes = vector table; image descriptor at fixed offset `0xC0` (§4). The biggest module uses about half the slot. |
 | Config A | `0x0800_F000` | 2 KB | J-Link at factory only | A single static `ConfigRecord` at the page base — `NodeId` + per-node factory config. **Read-only to firmware** (§6.3). |
 | Config B | `0x0800_F800` | 2 KB | — (reserved) | Spare page, unused in v1 — held back for a future *runtime-writable* setting, which would turn A/B into a ping-pong log. |
 
@@ -68,7 +68,7 @@ Three things, one flash design:
 
 ## 4. Application image format
 
-The app is linked at `0x0800_2000`. Immediately after the Cortex-M0+ vector table (48 entries = `0xC0` bytes on the G031) the linker places a 32-byte **image descriptor** in a `.image_descriptor` section at fixed offset `0xC0`:
+The app is linked at `0x0800_2800`. Immediately after the Cortex-M0+ vector table (48 entries = `0xC0` bytes on the G031) the linker places a 32-byte **image descriptor** in a `.image_descriptor` section at fixed offset `0xC0`:
 
 ```cpp
 struct __attribute__((packed)) ImageDescriptor  // 32 bytes
@@ -76,7 +76,7 @@ struct __attribute__((packed)) ImageDescriptor  // 32 bytes
     uint32_t magic;          // 0x43436D67  ('CCmg') — ClimateControl image
     uint16_t headerVersion;  // 1
     uint16_t module;         // 1=ControllerNode 2=TemperatureNode 3=MainController 4=Thermostat
-    uint32_t imageSize;      // bytes from 0x08002000 to end of image, INCLUDING the trailing CRC32
+    uint32_t imageSize;      // bytes from 0x08002800 to end of image, INCLUDING the trailing CRC32
     uint16_t fwVersionMajor;
     uint16_t fwVersionMinor;
     uint32_t buildId;        // git short hash, for traceability
@@ -84,8 +84,8 @@ struct __attribute__((packed)) ImageDescriptor  // 32 bytes
 };
 ```
 
-- The **last 4 bytes** of the image are a `CRC32` over bytes `[0x08002000, 0x08002000 + imageSize - 4)`, appended by a post-build step on the `.bin`. **Decided 2026-09-08: CRC32, not CRC16** — a whole-image CRC16 has a ~1/65536 miss probability, not good enough for a 52 KB image; CRC32 is effectively free on the STM32 CRC unit. Config: STM32 CRC-unit **native** mode — poly `0x04C11DB7`, init `0xFFFF_FFFF`, **no input/output bit-reversal, no final XOR** (the post-build tool is set to match; this side-steps the zlib-vs-STM32 reflection mismatch). Needs a CRC32 entry point added to `Hal::Crc` (today CCITT-16 only).
-- **Bootloader validity check** — the *only* gate on whether the app runs, checked on every boot (a CRC32 sweep of ~52 KB by the hardware CRC unit, a few ms): `magic` matches **and** trailing CRC32 matches **and** `imageSize <= 52 KB`. Pass → runnable. Fail → stay in the bootloader (§5). No separate "app valid" flag — the CRC32 is it.
+- The **last 4 bytes** of the image are a `CRC32` over bytes `[0x08002800, 0x08002800 + imageSize - 4)`, appended by a post-build step on the `.bin`. **Decided 2026-09-08: CRC32, not CRC16** — a whole-image CRC16 has a ~1/65536 miss probability, not good enough for a 50 KB image; CRC32 is effectively free on the STM32 CRC unit. Config: STM32 CRC-unit **native** mode — poly `0x04C11DB7`, init `0xFFFF_FFFF`, **no input/output bit-reversal, no final XOR** (the post-build tool is set to match; this side-steps the zlib-vs-STM32 reflection mismatch). Needs a CRC32 entry point added to `Hal::Crc` (today CCITT-16 only).
+- **Bootloader validity check** — the *only* gate on whether the app runs, checked on every boot (a CRC32 sweep of ~50 KB by the hardware CRC unit, a few ms): `magic` matches **and** trailing CRC32 matches **and** `imageSize <= 50 KB`. Pass → runnable. Fail → stay in the bootloader (§5). No separate "app valid" flag — the CRC32 is it.
 - The OTA `Begin` command (§6.2) carries `imageSize` and the expected CRC32 so the bootloader can reject a wrong-size or truncated push early, and so the master (which parsed the `.bin`) and the node agree.
 
 ### 4.1 Jump to application
@@ -93,9 +93,9 @@ struct __attribute__((packed)) ImageDescriptor  // 32 bytes
 Bootloader, once the app is validated and no "stay in bootloader" condition holds:
 
 1. Deinit what it touched: `USART1` (disable + reset), CRC unit, SysTick IRQ, any GPIO AF back to analog, `HAL_RCC_DeInit()` back to HSI.
-2. `SCB->VTOR = 0x0800_2000;`
-3. `__set_MSP(*(uint32_t*)0x0800_2000);`
-4. Jump to `*(uint32_t*)0x0800_2004` (app reset vector).
+2. `SCB->VTOR = 0x0800_2800;`
+3. `__set_MSP(*(uint32_t*)0x0800_2800);`
+4. Jump to `*(uint32_t*)0x0800_2804` (app reset vector).
 
 The app does a full `Hal::System::Init()` + clock + peripheral bring-up as if from cold — it must not assume any bootloader state.
 
@@ -133,7 +133,7 @@ Bootloader entry (0x08000000)
 
 ### 6.1 What the bootloader implements
 
-Only entered when `ConfigStore::Valid()` (a provisioned node — see §7). A hand-written minimal slave loop — **framing layer only**, no `NodeMaster`, no `std::stringstream` `Logger` (too big for 8 KB):
+Only entered when `ConfigStore::Valid()` (a provisioned node — see §7). A hand-written minimal slave loop — **framing layer only**, no `NodeMaster`, no `std::stringstream` `Logger` (too big for the 10 KB region):
 
 - Reads its bus address from `ConfigStore` (§6.3) — same `NodeId` the app uses, so addressing is stable across the app↔bootloader transition.
 - Responds to `Discover` with `Announce` (so the master sees it and knows it is in the bootloader).
@@ -168,7 +168,7 @@ All OTA messages target `Endpoint::Firmware`. `data[0]` is a `FirmwareOp` sub-op
 
 **Flow:** `Begin` → poll until `state==bl-receiving` → stream a batch of `Write` frames (roughly a page's worth, then poll) → on each `Status`, if `expectedOffset` didn't advance as far as sent, **rewind and resend from `expectedOffset`** → repeat to `imageSize` → `End` → poll for `bl-valid` → `Activate`.
 
-**Sizing:** 52 KB ÷ 27 B/frame ≈ 1975 `Write` frames; a full-size update is ~10–20 s at 115200 baud (faster if §8 item 3 bumps the OTA baud). The rest of the bus keeps polling normally throughout.
+**Sizing:** 50 KB ÷ 27 B/frame ≈ 1900 `Write` frames; a full-size update is **~6 s at the 250 000 baud bus rate** (`RS485-Node-Protocol-Spec-STM32G030.md` §9). The rest of the bus keeps polling normally throughout.
 
 `MAX_DATA` stays **32** (`RS485-Node-Protocol-Spec-STM32G030.md` §9 default) — no node's RX buffer grows. The 27-byte `Write` payload is `32 − 1 (FirmwareOp) − 4 (offset)`.
 
@@ -229,15 +229,15 @@ The same check that decides *"can I be a bus node"* decides *"can I receive OTA 
 | Board | OTA path |
 |---|---|
 | `ControllerNode`, `TemperatureNode` | Main bus, exactly as §6. |
-| `Thermostat` | **Not on the main bus** (`ControllerNode-Thermostat-Link-Spec.md`). Its bootloader receives images over the point-to-point link from its paired `ControllerNode`, which relays from `MainController`. Same framing layer (the link already reuses `Id`/`Message`/CRC). Relay details → the link spec. Note: that spec's §4.1 still says "32 KB total" flash — stale, it is 64 KB on the G031; the layout here applies unchanged. |
+| `Thermostat` | **Not on the main bus** (`ControllerNode-Thermostat-Link-Spec.md`). This same bootloader binary serves the image over the point-to-point link — `OtaUart` selects USART2 when `ConfigStore::GetModule() == Thermostat`, everything else is unchanged. The paired `ControllerNode` **application** (not its bootloader) is the OTA master on the link, delegated from the main bus via a new `ThermostatFirmware` endpoint. Full design: `ControllerNode-Thermostat-Link-Spec.md` §5. |
 | `MainController` | It is the bus master — nothing pushes to it over the bus. Same flash map, same board-agnostic bootloader binary. Normal update path is **app-assisted over NINA/Wi-Fi** (§7.1); recovery from a failed one is **SWD/J-Link on site** — acceptable because the MainController is the one physically-accessible unit (screw terminals, enclosure), not a duct-buried node. |
 
 ### 7.1 MainController self-update over NINA (app-assisted)
 
-The bootloader stays dumb and board-agnostic — it does **not** grow a NINA/AT transport (that would blow the ~8 KB budget and the "one binary everywhere" property). Instead the **running app**, which already carries the full u-connectXpress driver, does the update:
+The bootloader stays dumb and board-agnostic — it does **not** grow a NINA/AT transport (that would blow the 10 KB budget and the "one binary everywhere" property). Instead the **running app**, which already carries the full u-connectXpress driver, does the update:
 
 1. App learns an image is available (mechanism = whatever MainController's outward interface ends up being — MQTT / HTTP / its cloud backend; `MainController-Spec.md` §4 open item 1) and downloads it over Wi-Fi in small blocks.
-2. App stops polling the bus (slaves ride out the gap on their heartbeat/resync), disables interrupts, and runs a **RAM-resident** erase+program routine (`__attribute__((section(".RamFunc")))`) — required because erasing the flash bank stalls instruction fetch for the whole ~40 ms/page, and on the G031 there is only one bank. It programs the 52 KB app slot block-by-block as blocks arrive (no staging area — there is no room for one).
+2. App stops polling the bus (slaves ride out the gap on their heartbeat/resync), disables interrupts, and runs a **RAM-resident** erase+program routine (`__attribute__((section(".RamFunc")))`) — required because erasing the flash bank stalls instruction fetch for the whole ~40 ms/page, and on the G031 there is only one bank. It programs the 50 KB app slot block-by-block as blocks arrive (no staging area — there is no room for one).
 3. `NVIC_SystemReset()`. On reboot the bootloader CRC-checks the new image (§4) and jumps to it.
 4. **If interrupted:** the half-written app fails its CRC32 check, the bootloader stays resident — but it has no Wi-Fi, so recovery is a J-Link visit. This is the accepted trade for keeping the bootloader small and uniform.
 
@@ -247,20 +247,20 @@ The RAM-resident flash helper lives in `Lib/HAL/Flash` as a `.RamFunc` variant a
 
 ## 8. Open items — need your input before finalizing
 
-**Resolved 2026-09-08:** single 52 KB app slot + resident-bootloader recovery (§3, §5); CRC32 for the whole-image check (§4); `NodeId` is factory-written and read-only (§6.3); `MainController` updates app-assisted over NINA with SWD as the recovery path (§7.1).
+**Resolved 2026-09-08:** single 50 KB app slot + resident-bootloader recovery (§3, §5); CRC32 for the whole-image check (§4); `NodeId` is factory-written and read-only (§6.3); `MainController` updates app-assisted over NINA with SWD as the recovery path (§7.1).
 
 1. **`ConfigRecord.settings[16]`** — is 16 bytes of per-node *factory* config enough (servo end-stop trim, room id, sensor offset…), or should the record grow to 48/64 bytes? Cheap to size generously now.
 2. **MainController Wi-Fi image source (§7.1 step 1)** — MQTT / HTTP GET / push from its own backend? Belongs in `MainController-Spec.md` §4 item 1, flagged here because it shapes the app-side updater.
-3. **OTA baud rate** — run the transfer at 115200 (bus default) or negotiate up (250k–1M, `RS485-Node-Protocol-Spec-STM32G030.md` §9 item 2) for the duration of an update? A 10–20 s update at 115200 is already tolerable — leaning "leave it at 115200".
+3. ~~**OTA baud rate**~~ — no OTA-specific rate. The whole bus runs **250 000 baud** (`RS485-Node-Protocol-Spec-STM32G030.md` §9), giving a ~6 s full-image transfer with no mid-session baud switching.
 4. **Boot-fail counter** (§5) — include the watchdog-style "app resets N times without going healthy → stay in bootloader" fallback in v1, or leave it out? Adds one backup register and a bit of app-side "I'm healthy" bookkeeping.
-5. **Bootloader size** — 8 KB reserved; the base skeleton (boot decision + validate + jump, no OTA loop yet) links at **~5.3 KB**, so there is headroom for the NodeLib-framing slave loop. Confirm again once that lands.
+5. ~~**Bootloader size**~~ — 10 KB reserved; the full image (boot decision + validate + jump + the OTA slave loop, main bus and Thermostat link) links at ~8.0 KB, ~2 KB headroom.
 6. **Flash RDP level 1** in production (blocks SWD image readout; reversible only via full mass-erase)? Default: no — revisit only if the image is considered sensitive.
 7. **New module / lib layout** — mostly built 2026-09-08:
     - ✅ `Lib/Board/MemoryMap.h` (partition constants) + `Board::EnterBootloaderMagic`
     - ✅ `Lib/Board/ImageDescriptor.h` — the §4 descriptor + `CC_IMAGE_DESCRIPTOR(...)` macro
     - ✅ `Lib/NodeLib/ConfigStore.{h,cpp}` (read-only identity accessor) + `Node` wiring
     - ✅ `Lib/HAL/Backup.{h,cpp}` (TAMP backup registers), `Hal::System::SetVectorTable` / `JumpToApplication`, `Hal::Crc::Poly::Ieee32` + `Compute32`
-    - ✅ `Lib/Startup/` — shared `startup_stm32g031xx.s` + `syscalls.c`; `Modules/*/*.ld` (bootloader 8 KB @ `0x0800_0000`, app 52 KB @ `0x0800_2000` with the descriptor at `0xC0`); `cmake/stm32.cmake` `add_stm32_executable()` (elf→bin/hex, size, `flash-<name>` J-Link target)
+    - ✅ `Lib/Startup/` — shared `startup_stm32g031xx.s` + `syscalls.c`; `Modules/*/*.ld` (bootloader 10 KB @ `0x0800_0000`, app 50 KB @ `0x0800_2800` with the descriptor at `0xC0`); `cmake/stm32.cmake` `add_stm32_executable()` (elf→bin/hex, size, `flash-<name>` J-Link target)
     - ✅ `Modules/Bootloader/` — base skeleton (`main.cpp` + `AppImage.{h,cpp}`); ✅ `Modules/MainController/` — base firmware (`main.cpp` runs `NodeMaster`, `ImageInfo.cpp` embeds the descriptor)
     - **still to build:** `Lib/HAL/Flash.{h,cpp}` (erase/program, `.RamFunc` variant for §7.1); the `Lib/NodeLib` framing/bus split so the bootloader can link the framer without `Node`/`NodeMaster`; the bootloader's OTA slave loop (§6); the post-build image-finalize step (patch `imageSize` + append CRC32 + set `FlagCrcPresent`)
 8. **Image-descriptor CRC gating** — the base accepts an app on `magic` alone when `FlagCrcPresent` is clear (raw SWD-flashed dev image). Confirm that's the right default, and that the finalize step (which sets the flag) is only ever run for OTA-distributed images.

@@ -46,7 +46,11 @@ enum class Endpoint : uint8_t
     SystemControl  = 0x12,  // WO  Set: 1=reset->app  2=reset->bootloader  3=identify(seconds)
 
     // 0x2_  firmware — every node; data[0] = FirmwareOp (Begin/Write/End/Activate/Abort/Status)
-    Firmware       = 0x20,
+    Firmware           = 0x20,
+    // ControllerNode only: relay an image to the paired Thermostat over the link
+    // (ControllerNode-Thermostat-Link-Spec.md §5.4). Same FirmwareOp sub-opcodes;
+    // app-delivered, not NodeLib-handled (§6.2).
+    ThermostatFirmware = 0x22,
 
     // 0x3_  application, ControllerNode
     DamperTarget   = 0x30,  // RW  uint8 %
@@ -78,7 +82,7 @@ enum class Endpoint : uint8_t
 |---|---|---|---|
 | Transport | `0x00` | all | consumed by `NodeLib` itself — never reaches application code. Today's `INTERNAL_MSG` + `DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ`. |
 | System | `0x10`–`0x1F` | all | identity, health, reset/bootloader entry, identify-blink. `NodeLib` can own the handler. |
-| Firmware | `0x20`–`0x2F` | all | OTA workflow — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2. |
+| Firmware | `0x20`–`0x2F` | all | OTA workflow — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2. `Firmware` (`0x20`) is NodeLib-owned; `ThermostatFirmware` (`0x22`) is app-owned on the ControllerNode (`ControllerNode-Thermostat-Link-Spec.md` §5.4). |
 | Application | `0x30`–`0x3F` | `ControllerNode`, `TemperatureNode` | the node's own function; per-module, non-overlapping within the block. |
 | Room | `0x40`–`0x4F` | `ControllerNode` | last-known Thermostat state; `Thermostat` itself stays non-addressable (`ControllerNode-Thermostat-Link-Spec.md`). |
 | Diagnostics | `0x50`–`0x5F` | all | bus/queue counters, last-error detail, log strings pulled over the bus. `NodeLib`-owned (§6); the app only feeds log lines. Confirmed in v1 2026-09-08. |
@@ -143,16 +147,16 @@ The `Firmware` endpoint's richer workflow lives in `data[0]` as a `FirmwareOp` s
 |---|---|
 | `Transport` | the master/slave state machine (today's `HandleInternalMessage`/`HandleMasterMessage`, ops renamed) |
 | `System*` | `ConfigStore` (module, uid), the app image descriptor (fwVersion), a `Node` uptime/error tally; `SystemControl` reset via the backup-register handoff in `Node-Flash-Layout-and-Bootloader-Spec.md` §5 |
-| `Firmware` | the OTA path — app running: persist the enter-bootloader flag + reset; bootloader: the transfer (that spec §6) |
+| `Firmware` (`0x20` only) | the OTA path — app running: persist the enter-bootloader flag + reset; bootloader: the transfer (that spec §6). `ThermostatFirmware` (`0x22`) is **not** intercepted — it reaches the ControllerNode's handler, which relays it over the link (`ControllerNode-Thermostat-Link-Spec.md` §5.4). |
 | `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains a small in-RAM log ring that `Tools::Logger` now writes into (§8) |
 
-The module's handler only ever receives its own application / `Room` endpoints:
+The module's handler only ever receives its own application / `Room` endpoints (plus `ThermostatFirmware` on the ControllerNode):
 
 ```cpp
 class INodeHandler
 {
   public:
-    virtual void ReceivedMessage(const Message& m) = 0;   // application + Room endpoints only
+    virtual void ReceivedMessage(const Message& m) = 0;   // application + Room endpoints
     virtual void ConnectionLost()                  = 0;    // transport liveness (unchanged)
 
     // Optional hooks -- NodeLib calls these while handling the blocks above.

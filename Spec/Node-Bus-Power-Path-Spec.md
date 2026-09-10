@@ -9,14 +9,14 @@
 ## 1. Topology
 
 ```
-RJ45 (48V, RS485) → [Input protection] → [Buck 48V→5V] → 5V servo rail
-                                                 │              │
-                                          (EN pin)◄── Enable   └→ [LDO 5V→3.3V] → 3.3V MCU rail
-                                                line (from RJ45)
+RJ45 (48V, RS485) → [Input protection] → [Buck 48V→5V] → 5V rail ─┬─[servo load switch]─► servo   (ControllerNode)
+                                                 │                │        ▲
+                                          (EN pin)◄── Enable      │   MCU GPIO, OFF by default (§3.1)
+                                                line (from RJ45)  └─→ [LDO 5V→3.3V] → 3.3V MCU rail
 ```
 
 Two regulation stages per node:
-1. **48V → 5V** synchronous-looking but actually **non-synchronous** buck (single integrated high-side FET + external catch diode) — feeds the servo.
+1. **48V → 5V** synchronous-looking but actually **non-synchronous** buck (single integrated high-side FET + external catch diode) — feeds the servo (via the §3.1 load switch on a `ControllerNode`) and the LDO.
 2. **5V → 3.3V** linear regulator (LDO) — feeds the STM32G031F8P6.
 
 The shared **ENABLE** control line (carried on the RJ45 green pair per the hardware spec) is wired into the buck's **EN pin**. See §5 for what this decision does and doesn't cover.
@@ -65,6 +65,18 @@ Order from the RJ45: **fuse → TVS → reverse-polarity diode → bulk cap → 
 | Soft-start capacitor | ~47nF | commodity, optional | Slows startup inrush, complements upstream PTC/diode protection |
 | RT resistor (switching frequency) | 49.9kΩ, 1% → sets fSW = 500kHz | commodity | Locked in 2026-09-06. 500kHz chosen to match the ripple assumption this doc's inductor sizing already used, and matches TI's own 5V/3A reference design (datasheet Table 8-1). RT value from datasheet Table 7-1 (typical fSW→RT table) and confirmed via Equation 5, `R_T(kΩ) = 42904 × f_SW(kHz)^-1.088` → 49.66kΩ calculated, 49.9kΩ standard value. |
 
+### 3.1 Servo rail gating (ControllerNode only)
+
+The servo is not wired straight to the 5 V rail — it sits behind a **high-side load switch** the STM32 controls (`Board::ServoEnable`, `Node-Bus-Hardware-Design-Spec.md` §6.2).
+
+- **Default off.** The switch is in the servo-off state whenever the MCU pin is Hi-Z — power-on, reset, unprogrammed board. The metal-geared damper actuator holds its last position unpowered.
+- **On only during a move.** Firmware asserts `ServoEnable`, drives the PWM to the new target, waits for the actuator to settle, then de-asserts. A damper that is merely *holding* a position draws no servo current.
+- **OTA / fault safe state.** `INodeHandler::PrepareForReset()` and any `ConnectionLost()` drive the damper to 50 % (neutral airflow), then de-assert `ServoEnable` before resetting (`ControllerNode-Thermostat-Link-Spec.md` §5.1). A hung or resetting node applies **no** drive rather than latching its last PWM.
+
+**Circuit:** high-side P-FET (source = 5 V, drain = servo connector), gate pulled up to 5 V, a small NMOS (2N7002) level-shifting the 3.3 V GPIO onto the gate — GPIO high → NMOS on → P-FET on; GPIO Hi-Z → gate at 5 V → P-FET off (reset-safe). The P-FET must carry the servo **stall** current continuously (jammed damper) — final part pending the real servo number (`Node-Bus-Hardware-Design-Spec.md` §7 item 1); a logic-level ~4 A / <50 mΩ part (AO3401A class, LCSC-stocked) covers the ~0.8–2.5 A of a typical metal-gear actuator with margin. An integrated load switch (AP22802 / TPS22918-class, ≥3 A, with slew + thermal control) is the tidier option if board area allows. A 10–47 µF reservoir on the switched side softens the start-of-move current step so it does not disturb the 5 V rail or RS-485.
+
+**Power-budget effect:** with the servo gated per node, the "all servos running" row in `Node-Bus-Hardware-Design-Spec.md` §4 (~12 A at 5 V / ~1.4 A at 48 V) becomes a **transient** bounded by how many dampers move at once, not a steady-state load. Resting bus current is ~20 × (MCU + transceiver) ≈ a few tens of mA total.
+
 ---
 
 ## 4. Stage 3 — 5V → 3.3V LDO
@@ -107,3 +119,4 @@ The ENABLE line (from the RJ45 green pair, bonded both conductors, per the hardw
 1. ~~**RT resistor value**~~ — resolved 2026-09-06: 500kHz / 49.9kΩ, see §3.
 2. ~~**Input capacitor stock**~~ — resolved 2026-09-06: switched to C920964 (see §3), the original C49326820 was confirmed out of stock.
 3. ~~**Fine-tune Rfbt**~~ — resolved 2026-09-07: 56.9kΩ → ~5.02V, deliberately a touch above 5.0V; servo rail tolerates 6V so no tight trim needed (§3).
+4. **Servo load-switch part (§3.1)** — discrete P-FET + 2N7002 vs. an integrated load switch, and its current rating, both wait on the real servo stall current (`Node-Bus-Hardware-Design-Spec.md` §7 item 1).
