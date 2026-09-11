@@ -1,7 +1,7 @@
 # Node Bus — Hardware Design Spec
 ### Power, connector, and node-schematic decisions for the STM32G031F8P6 RS485 node network
 
-**Status:** Draft — decisions locked from design discussion, pending your final servo current numbers and cable-run distances (see §7)
+**Status:** Draft — decisions locked from design discussion; servo selected and cable-run distance confirmed, one open item remains (see §7)
 **Companion doc:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol / framing / CRC — this doc is physical layer only)
 
 ---
@@ -49,9 +49,9 @@ Decided 2026-09-07, replacing the earlier single-master-pull-up scheme (2026-09-
 | Pull-down MOSFET | master | onsemi BSS123 (N-ch) | LCSC C513249 | SOT-23, 100V Vds (margin over 48V), Vgs(th) 1.7V (full turn-on from a 3.3V GPIO), 170mA (vs. ~1mA needed) |
 | Gate series resistor | master | 330Ω | commodity | |
 | Gate pull-down resistor | master | 10kΩ | commodity | Holds the MOSFET off if the master GPIO floats at boot → line not pulled low → **bus stays enabled** |
-| ENABLE pull-up | each node | **1.5MΩ** | FOJAN FRC1206F1504TS — LCSC C2933600 (1206 thick-film, 200V working voltage, 250mW, ±1%) | To the node's local 48V input. ~32µA/node; ~0.6mA / ~31mW across a full 20-node bus. Feeds the buck EN pin through a 10kΩ series + 10nF-to-GND filter (noise + EN abs-max protection). |
+| ENABLE pull-up | each node | **1MΩ** | LCSC `C17927` (`1206W4F1004T5E`, 1206 thick-film, 200V, 250mW, ±1%) — Basic part, same voltage/power rating as the original FOJAN pick it replaces (decided 2026-09-11) | To the node's local 48V input. ~48µA/node; ~0.96mA / ~46mW across a full 20-node bus. Feeds the buck EN pin through a 10kΩ series + 10nF-to-GND filter (noise + EN abs-max protection). |
 
-**Pull-up value — 1.5MΩ per node.** Across 20 nodes this parallels to ~75kΩ: ~0.6mA total draw, and a ~0.75ms enable-edge RC against ~10nF of bus capacitance — fine for a slow control line. Lower values just waste power; higher values get noise-sensitive for little gain. The full 48V sits across the pull-up whenever the line is held low, so the resistor's package voltage rating (not its value) is the real constraint — the selected 1206 part is rated 200V.
+**Pull-up value — 1MΩ per node** (revised 2026-09-11 from the original 1.5MΩ, to land on a JLCPCB Basic part instead of an Extended one — see part table above). Across 20 nodes this parallels to ~50kΩ: ~0.96mA total draw, and a ~0.5ms enable-edge RC against ~10nF of bus capacitance — still fine for a slow control line (if anything, a faster edge than the original 1.5MΩ pick). Lower values just waste power; higher values get noise-sensitive for little gain. The full 48V sits across the pull-up whenever the line is held low, so the resistor's package voltage rating (not its value) is the real constraint — the selected 1206 part is rated 200V, unchanged from the original pick.
 
 **Receiving end:** the LMR16030 EN pin tolerates 0–60V with a ~1.2V threshold (datasheet §6.1/§6.5), so no protection is needed. A per-node RC + Schmitt filter is cheap transient-noise insurance but not load-bearing (see §7 item 5).
 
@@ -73,6 +73,8 @@ Decided 2026-09-07, replacing the earlier single-master-pull-up scheme (2026-09-
 |---|---|---|
 | All servos running normally | ~12 A | **~1.4 A** |
 | All 20 servos stalled simultaneously (worst case) | ~40 A | **~4.7 A** |
+
+**Checked against the selected servo (§7 item 1):** `DS3225` stalls at ~1.9–2.3A depending on rail voltage (~2.0A at this design's actual 5.0–5.5V working point) — 20 × 2.0A = 40A, matching the placeholder this table was already built on almost exactly. No table change needed; the number just moved from assumed to confirmed.
 
 **Decision:**
 - Normal operation (~1.4A) is comfortably within a bonded-pair connector's safe range — no special handling needed for the typical case. The servo is per-node power-gated (`Node-Bus-Power-Path-Spec.md` §3.1), so both rows below are *transients* bounded by how many dampers move at once; the resting bus current is ~20 × (MCU + transceiver) ≈ tens of mA. The both-ends feed below is headroom for a coordinated multi-damper move.
@@ -209,10 +211,11 @@ Per-node A/B passives, **fit only where noted, DNP elsewhere:**
 
 | Part | Value | Populate |
 |---|---|---|
-| Termination | 120 Ω across A–B | only the two physical bus ends (DNP + jumper on every node) |
 | Fail-safe bias | A→3V3, B→GND, ~560 Ω each | once on the whole bus (at MainController); MAX3485 is not true-fail-safe |
 | ESD/surge | **SM712 RS-485 TVS** (SOT-23-3): **pin 1 → A, pin 2 → B, pin 3 → GND** (verified against the Bourns CDSOT23-SM712 datasheet — pin 3 is the common). Asymmetric −7 V/+12 V per line, matching the RS-485 window. LCSC `C5199207` (ElecSuper) or `C404012` (genuine Bourns). | every node, right at the RJ45; short traces, pin-3 ground straight to the connector-side ground/shield stitch |
 | Series R | 10 Ω in each of A/B | optional, tames ringing/EMI |
+
+**Termination — decided 2026-09-11: no on-board footprint, no per-node DNP/jumper.** 120 Ω A–B termination is provided by a **plug-in RJ45 terminator** (120 Ω across pins 4/5) inserted into the spare "out" jack of whichever node is physically last on the chain. This drops the per-node DNP-resistor-plus-jumper scheme entirely — every node's board is identical here, and moving/extending the bus end just means moving the terminator plug, not reworking a board.
 
 **Common-mode range check (§3 ground-offset):** MAX3485 has the standard EIA-485 receiver common-mode range **−7 V…+12 V** (abs. max −7.5…+12.5). Same shared-GND-return exposure as ENABLE. Single-end-fed estimate was ~3.45 V normal / ~11.6 V worst-case stall (the stall figure right at the +12 V edge); the **both-ends power feed (§4) cut worst-case IR drop to ~1/4**, revising these to **~0.86 V / ~2.9 V** — comfortably inside the window with >4× margin. RS-485's common-mode range is silicon-fixed (no "drive it higher" lever like ENABLE had), so §4's fix was the only route, and it works. §7 items 1–2 still matter for fuse/PTC and connector sizing but are no longer signal-integrity-critical.
 
@@ -250,7 +253,7 @@ Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader
 
 ## 7. Open items — need your input before finalizing
 
-1. **Real servo stall current** — §4's numbers use a generic placeholder. With both-ends power injection now committed (§4), this mainly affects fuse/PTC sizing and connector budget rather than signal integrity (§6's RS485 margin concern is resolved regardless, with >4x headroom even at the current placeholder stall estimate).
+1. ~~**Real servo stall current**~~ — resolved 2026-09-11: actuator selected, **DSSERVO `DS3225`**, 25 kg·cm metal-gear digital servo (coreless, "waterproof" housing, ~40×20×40.5 mm, 67 g). Datasheet numbers: operating voltage **4.8–6.8V**; stall torque 21 kg·cm @ 5.0V → 25 kg·cm @ 6.8V; stall current **~1.9A @ 5.0V → ~2.3A @ 6.8V**; PWM control, 500–2500µs pulse, 1500µs neutral, 3µs dead band, 50–333Hz. **Recommended operating point: run it at this board's existing 5.0–5.5V rail, not higher** — see `Node-Bus-Power-Path-Spec.md` §3's Rfbt row for why the ceiling is actually the shared-rail LDOs (`RT9080`/`XC6206`), not the servo's own 6.8V max; ~2.0A is the working stall-current number at that voltage. §4's connector-budget table already assumed almost exactly this, so no numbers there needed to change, just confirming: no longer a placeholder.
 2. **Whether simultaneous full-stall across all 20 nodes is a realistic scenario** for your application (e.g. synchronized power-on homing) or a non-issue because servos move independently — no longer signal-integrity-critical now that both-ends injection (§4) resolved the RS485 margin question (§6) with comfortable headroom either way. Still relevant for fuse/PTC and connector-current sizing.
 3. ~~**Cable run length per segment / RS485 baud rate**~~ — total bus length ~100 m. Not a factor for ENABLE (§3's per-node pull-up scheme removes the ground-offset exposure entirely). **Baud: 250 000** (`RS485-Node-Protocol-Spec-STM32G030.md` §9) — an exact integer USART divisor (zero baud-generator error, which matters because the HSI16 clock spread already spends most of the async-UART budget); length·rate = 2.5×10⁷ bit·m/s sits deep inside the safe region for 100 m of terminated twisted pair with 20 lightly-loaded stubs. 500 000 (also exact) is the next step only if bench-validated on the real cable; 1 Mbit is not recommended — too little margin against HSI16 spread + loaded edges for a duct-buried bus.
 4. ~~**Final connector choice**~~ — resolved 2026-09-06: C7501838, two single-port jacks per node (see §5). Footprint still needs verification against the board layout once you're at PCB stage.

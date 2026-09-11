@@ -9,7 +9,7 @@ See `Spec/` for the full design docs — read those before making architectural 
 ```
 ClimateControl/
 ├── Spec/                   # design specs — protocol, hardware, power, per-module, architecture
-├── Hardware/                # PCB/schematic sources
+├── Hardware/                # PCB/schematic sources — EasyEDA exports (SCH.pdf, Netlist.net, BOM.*): read-only from here, cannot be re-imported into EasyEDA. Never edit these directly — describe the needed change in words/values instead and let the change be made in EasyEDA, then re-exported for the next crosscheck.
 ├── Webserver/              # Go building server: MainController TCP uplink → SQLite + embedded SPA
 └── Software/
     ├── .clang-format       # copied verbatim from ~/git/rollercoaster — do not diverge, same style everywhere
