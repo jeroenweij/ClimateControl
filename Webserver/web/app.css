@@ -149,6 +149,18 @@ td .warn, td.warn { color: var(--warn); font-weight: 600; }
 .stage.editing { cursor: crosshair; }
 
 .node-dot { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
+.node-dot.selected { fill: var(--accent); stroke: var(--accent); stroke-width: 2; }
+.node-halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 0.7;
+  animation: node-pulse 1.4s ease-out infinite;
+}
+@keyframes node-pulse {
+  from { r: 6; opacity: 0.7; }
+  to { r: 18; opacity: 0; }
+}
 .node-label {
   font: 600 12px system-ui;
   fill: var(--ink);
@@ -157,6 +169,10 @@ td .warn, td.warn { color: var(--warn); font-weight: 600; }
   stroke-width: 3px;
 }
 .node-sub { font: 11px system-ui; fill: var(--muted); }
+
+.draft-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+.draft-outline-fill { fill: var(--accent); fill-opacity: 0.18; }
+.draft-vertex { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
 
 .empty { color: var(--muted); padding: 2rem; text-align: center; }
 .view[hidden] { display: none; }

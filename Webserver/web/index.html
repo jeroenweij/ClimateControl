@@ -103,8 +103,24 @@
     <div class="toolbar">
       <label>Floor <select id="setup-floor-select"></select></label>
       <label>Place node <select id="setup-node-select"></select></label>
-      <span class="hint">then click on the plan</span>
+      <label>Mode
+        <select id="setup-mode-select">
+          <option value="point">Point</option>
+          <option value="flood">Flood fill room</option>
+          <option value="manual">Manual outline</option>
+        </select>
+      </label>
+      <span id="setup-hint" class="hint">then click on the plan</span>
       <button id="floor-delete" type="button" class="danger">Delete this floor</button>
+    </div>
+    <div id="setup-outline-bar" class="toolbar" hidden>
+      <label id="setup-tolerance-label">Tolerance <input id="setup-tolerance" type="range" min="4" max="80" value="24"></label>
+      <button id="setup-outline-undo" type="button" hidden>Undo point</button>
+      <button id="setup-outline-finish" type="button" hidden>Finish shape</button>
+      <button id="setup-outline-accept" type="button" hidden>Accept outline</button>
+      <button id="setup-outline-manual" type="button" hidden>Draw manually instead</button>
+      <button id="setup-outline-cancel" type="button" class="danger" hidden>Cancel</button>
+      <span id="setup-outline-msg" class="msg"></span>
     </div>
     <div id="setup-stage" class="stage editing">
       <img id="setup-img" alt="floor plan">
