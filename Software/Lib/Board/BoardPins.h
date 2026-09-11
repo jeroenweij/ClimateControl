@@ -76,7 +76,7 @@ namespace Board
                                                        //     (ControllerNode-Thermostat-Link-Spec.md Sec3, open).
                                                        //   Main board: hardware RTS to the NINA -- same pin and AF,
                                                        //     aliased as NinaRts below.
-    constexpr uint8_t Usart2Af = 1;
+    constexpr uint8_t     Usart2Af = 1;
 
     // Thermostat link, ready for Hal::Uart::Init() (mirrors BusUart; the DE
     // entry is inert if the link is wired full-duplex / plain UART).
@@ -136,7 +136,7 @@ namespace Board
     inline const Hal::Pin I2cSda{GPIOB, GPIO_PIN_7}; // pin 1   I2C1_SDA (AF6)  SSD1306/SSD1315 OLED + CHT40MEMS sensor
     inline const Hal::Pin I2cScl{GPIOB, GPIO_PIN_6}; // pin 20  I2C1_SCL (AF6)
                                                      //   pin 1 bonds PB7/PB8; pin 20 bonds PB3/PB4/PB5/PB6.
-    constexpr uint8_t I2cAf = 6;
+    constexpr uint8_t     I2cAf = 6;
 
     inline const Hal::Pin Button2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
                                                        //   (button 1 is UserButton / PA11 above -- ErrorHandler ack
