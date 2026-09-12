@@ -1,6 +1,6 @@
 # CI for the STM32 firmware in Software/.
 #   format : clang-format check (make check)
-#   build  : cross-compile every module with arm-none-eabi-gcc
+#   build  : cross-compile every module with arm-none-eabi-gcc, Release + Debug
 #   test   : host-native unit tests (make test -> ctest)
 name: CMake on a single platform
 
@@ -11,10 +11,8 @@ on:
     branches: [ "main" ]
 
 env:
-  BUILD_TYPE: Release
   # CMakeLists.txt lives in Software/, not at the repo root.
   SOURCE_DIR: ${{ github.workspace }}/Software
-  BUILD_DIR: ${{ github.workspace }}/Software/build
 
 jobs:
   format:
@@ -38,6 +36,16 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    strategy:
+      # Both configurations matter here (Debug is what local `make build`
+      # produces day-to-day, Release is what factory `make flash-full`
+      # actually ships) -- fail-fast off so a break in one doesn't hide the
+      # other's result.
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    env:
+      BUILD_DIR: ${{ github.workspace }}/Software/build/${{ matrix.build_type }}
     steps:
       - uses: actions/checkout@v5
 
@@ -47,10 +55,10 @@ jobs:
           release: '14.2.Rel1'
 
       - name: Configure CMake
-        run: cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        run: cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
-        run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} -j
+        run: cmake --build ${{ env.BUILD_DIR }} --config ${{ matrix.build_type }} -j
 
       - name: Size report
         run: arm-none-eabi-size ${{ env.BUILD_DIR }}/Modules/*/*.elf
@@ -58,7 +66,7 @@ jobs:
       - name: Upload firmware images
         uses: actions/upload-artifact@v5
         with:
-          name: firmware-${{ env.BUILD_TYPE }}
+          name: firmware-${{ matrix.build_type }}
           path: |
             ${{ env.BUILD_DIR }}/Modules/*/*.elf
             ${{ env.BUILD_DIR }}/Modules/*/*.bin
