@@ -73,9 +73,34 @@ The servo is not wired straight to the 5 V rail — it sits behind a **high-side
 - **On only during a move.** Firmware asserts `ServoEnable`, drives the PWM to the new target, waits for the actuator to settle, then de-asserts. A damper that is merely *holding* a position draws no servo current.
 - **OTA / fault safe state.** `INodeHandler::PrepareForReset()` and any `ConnectionLost()` drive the damper to 50 % (neutral airflow), then de-assert `ServoEnable` before resetting (`ControllerNode-Thermostat-Link-Spec.md` §5.1). A hung or resetting node applies **no** drive rather than latching its last PWM.
 
-**Circuit:** high-side P-FET (source = 5 V, drain = servo connector), gate pulled up to 5 V, a small NMOS (2N7002) level-shifting the 3.3 V GPIO onto the gate — GPIO high → NMOS on → P-FET on; GPIO Hi-Z → gate at 5 V → P-FET off (reset-safe). The P-FET must carry the servo **stall** current continuously (jammed damper) — **servo selected 2026-09-11: DS3225** (`Node-Bus-Hardware-Design-Spec.md` §7 item 1 — 25 kg·cm metal-gear digital servo, stall current ~1.9 A @ 5.0 V / ~2.3 A @ 6.8 V across its datasheet operating range; at this board's actual 5.0–5.5 V rail, ~2.0 A is the working number). The already-chosen `AO3401A` (~4 A / <50 mΩ) comfortably covers this — **confirmed, no part change needed**. An integrated load switch (AP22802 / TPS22918-class, ≥3 A, with slew + thermal control) remains the tidier option if board area allows. A 10–47 µF reservoir on the switched side softens the start-of-move current step so it does not disturb the 5 V rail or RS-485.
+**Circuit:** high-side P-FET (source = 5 V, drain = servo connector), gate pulled up to 5 V, a small NMOS (2N7002) level-shifting the 3.3 V GPIO onto the gate — GPIO high → NMOS on → P-FET on; GPIO Hi-Z → gate at 5 V → P-FET off (reset-safe). The P-FET must carry the servo **stall** current continuously (jammed damper) — **servo selected 2026-09-11: DS3225** (`Node-Bus-Hardware-Design-Spec.md` §7 item 1). **Updated 2026-09-12 with the supplier's own spec sheet** (higher than the generic datasheet figure quoted 2026-09-11): stall current 2.2–2.6A @5.0V → 2.8–3.2A @6.8V; interpolated to this board's actual 5.0–5.5V rail, **~2.6–2.8A is the working number**, not ~2.0A. The already-chosen `AO3401A` (~4A / <50mΩ) still covers this — **~1.4× margin, down from ~2×, but not exceeded; no part change needed.** Worth confirming the firmware bounds how long a stall condition is allowed to persist (park-and-de-energize, not indefinite hold) — the P-FET's SOT-23 package makes continuous 2.8A a real thermal question (`I²R ≈ 0.39W`) if a jam were ever held rather than caught quickly. An integrated load switch (AP22802 / TPS22918-class, ≥3 A, with slew + thermal control) remains the tidier option if board area allows. A 10–47 µF reservoir on the switched side softens the start-of-move current step so it does not disturb the 5 V rail or RS-485.
 
 **Power-budget effect:** with the servo gated per node, the "all servos running" row in `Node-Bus-Hardware-Design-Spec.md` §4 (~12 A at 5 V / ~1.4 A at 48 V) becomes a **transient** bounded by how many dampers move at once, not a steady-state load. Resting bus current is ~20 × (MCU + transceiver) ≈ a few tens of mA total.
+
+#### 3.1.1 Stall detection — servo current sense
+
+Decided 2026-09-12. The servo has no position-feedback wire (plain 3-wire PWM hobby servo), so a fixed move timeout can only *bound* how long a stalled/jammed damper is driven — it cannot *detect* the difference between "reached the setpoint" and "jammed for the whole timeout." Current sensing is what closes that gap, and it also shrinks the P-FET's worst-case stall exposure below the full move-timeout (relevant given §3.1's tightened `AO3401A` margin above).
+
+**Circuit — low-side sense, into the ADC:**
+
+```
+Servo GND (H2 pin 3) ──[R22, 12mΩ shunt]── SERVO_GND net ── system GND
+                                │                              │
+                              IN+ (pin 3) ── INA180A1 ── IN− (pin 4)
+                                                │
+                                              OUT (pin 1) ── PA0 (ADC_IN0), net "SENSE"
+```
+
+| Part | Value | LCSC | Notes |
+|---|---|---|---|
+| `R22` shunt | 12mΩ, ±1%, 1W, 1206 (`RALEC LR1206-21R012F4`) | `C154636` | At worst-case stall (~2.8A): ~34mV drop (negligible tax on the servo supply), ~94mW dissipated (<10% of rating) — sized for margin, not to hit a round number. |
+| `U17` sense amp | `INA180A1IDBVR(LX)`, gain 20V/V, SOT-23-5, **Pinout A** | `C48533472` | Compatible/second-source part, not genuine TI — irrelevant here since this is a threshold detector, not a calibrated ammeter. **`INA180` ships in two different pinouts (A/B) depending on the part suffix — ours is `A1`, which is Pinout A** (`1=OUT, 2=GND, 3=IN+, 4=IN-, 5=VS`); verified against TI's own datasheet, not assumed. |
+
+At our ~5.0–5.5V rail, ~2.6–2.8A stall gives `OUT ≈ 0.67V`; typical unloaded-move current (~0.3–0.8A) gives `OUT ≈ 0.07–0.19V` — a 3.5–9× spread, comfortably resolved on the 12-bit ADC.
+
+**`VS` must be `+3.3V`, not `+5V`.** Checked directly against the STM32G031's own datasheet (DS12992): `PA0` is `FT_a` (5V-tolerant *digital* I/O with analog-switch function), and the general I/O input-voltage table does allow up to `Min(VDD+3.6, 5.5)V` — but the **ADC's own conversion range (`V_AIN`) is separately specified as `VSSA` to `VREF+`**, i.e. bounded by `VDDA` (≈3.3V here, no separate `VREF+` pin on this package), not extended by the digital FT tolerance. Powering the sense amp from `+5V` would let `OUT` swing toward ~5V under a fault condition, well outside the ADC's guaranteed range, even though normal operation never gets close (worst-case stall reading is only ~0.67V). Feeding it from the same `+3.3V` rail the ADC actually runs from removes the question entirely, at zero cost.
+
+**Firmware approach (ControllerNode module, not yet implemented):** sample `PA0` periodically while `ServoEnable` is asserted; require current to stay above a threshold for a sustained window (not a single sample) before declaring a stall — a raw instant threshold would false-trigger on the start-of-move current step the reservoir cap already exists to soften. On detection, de-energize immediately (faster than waiting out the full move timeout) and report a distinguishable fault via the `DamperMode`/status endpoint rather than silently disabling.
 
 ---
 
@@ -121,4 +146,4 @@ The ENABLE line (from the RJ45 green pair, bonded both conductors, per the hardw
 1. ~~**RT resistor value**~~ — resolved 2026-09-06: 500kHz / 49.9kΩ, see §3.
 2. ~~**Input capacitor stock**~~ — resolved 2026-09-06: switched to C920964 (see §3), the original C49326820 was confirmed out of stock.
 3. ~~**Fine-tune Rfbt**~~ — resolved 2026-09-07, revised 2026-09-11: now 75.0kΩ/12.0kΩ → ~5.44V, both Basic parts (§3); still inside the 5.0–5.5V window the shared-rail LDOs actually allow.
-4. ~~**Servo load-switch part (§3.1)**~~ — resolved 2026-09-11: servo is `DS3225` (~2.0 A working stall current on this rail); `AO3401A` discrete P-FET + 2N7002 confirmed adequate, no change from the original pick.
+4. ~~**Servo load-switch part (§3.1)**~~ — resolved 2026-09-11, updated 2026-09-12: servo is `DS3225` (~2.6–2.8A working stall current on this rail, per the supplier's own spec sheet); `AO3401A` discrete P-FET + 2N7002 still adequate (~1.4× margin), no part change, but see §3.1's note on confirming a firmware stall-timeout.

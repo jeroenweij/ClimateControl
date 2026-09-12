@@ -141,6 +141,14 @@ namespace Board
                                                           //   the 5V servo rail sits behind a MCU-gated high-side
                                                           //   switch, energised only for a move. See
                                                           //   Node-Bus-Power-Path-Spec.md §3.1.
+
+    // Decided 2026-09-12: stall detection, since the servo has no position
+    // feedback wire and a move timeout alone can't tell "reached" from
+    // "jammed". Net "SENSE" -- INA180A1 (low-side, 12mOhm shunt on the
+    // servo's own GND return) into this ADC channel. See
+    // Node-Bus-Power-Path-Spec.md §3.1.1 for the full circuit and the
+    // firmware-side threshold/timing approach (not yet implemented).
+    inline const Hal::Pin ServoCurrentSense{GPIOA, GPIO_PIN_0}; // pin 7  ADC_IN0
 #endif // CC_BOARD_ControllerNode
 
     // --- Thermostat board -- Thermostat ------------------------------

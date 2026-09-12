@@ -17,6 +17,12 @@
 // PWM generation on TIM3_CH1 (Board::ServoPwm) is not wired yet: SetPercent()
 // stores the target and drives the enable line; the actual timer output is a
 // TODO once a timer HAL exists. Value units are percent open (0..100).
+//
+// TODO: stall detection via Board::ServoCurrentSense (ADC_IN0). The servo has
+// no position feedback, so moveSettleMs alone can only bound how long a jam
+// is driven, not detect one -- sample current while powered() and de-energise
+// early on a sustained overcurrent read, rather than waiting out the full
+// settle time. See Node-Bus-Power-Path-Spec.md §3.1.1.
 class Damper
 {
   public:

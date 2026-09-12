@@ -41,10 +41,10 @@ Once a `VALUE` message arrives from a `ControllerNode` or `TemperatureNode`, som
 
 | Topology | Master fuse carries | Fuse |
 |---|---|---|
-| **Two PSUs** — one at each end of the bus | ~0.7 A normal / **~2.4–2.7 A** worst-case (all 20 servos stalled at once) | **T4 A** |
-| **One PSU at the master**, feeding the far end via a return cable | ~1.4 A normal / **~4.7 A** worst-case | **T6.3 A** — and size the master's +48 V copper for ~6 A |
+| **Two PSUs** — one at each end of the bus | ~0.7 A normal / **~3.2 A** worst-case (all 20 servos stalled at once) | **T4 A** — margin now ~1.25×, down from ~1.5× |
+| **One PSU at the master**, feeding the far end via a return cable | ~1.4 A normal / **~6.4 A** worst-case | **T6.3 A is no longer adequate** — the worst case now sits at the fuse's own rating. Step up to T8 A if this topology is ever used instead of the default; size the master's +48 V copper for ~7–8 A. |
 
-Full-system load is not the constraint the intuition suggests: 20 nodes + 20 servos + 20 thermostat displays, *all stalled simultaneously*, is ~4.7 A total at 48 V (that's the point of the 48 V rail — `Node-Bus-Power-Path-Spec.md` §2). Whether simultaneous full-stall is even realistic is still open (`Node-Bus-Power-Path-Spec.md` §7 item 2); a T-type fuse rides over a few-second synchronised-homing move regardless. **Default: two PSUs + T4 A ceramic.**
+Updated 2026-09-12 — was ~2.4–2.7 A / ~4.7 A, built on a generic servo datasheet figure; the actual supplier spec sheet for the `DS3225` units being bought (`Node-Bus-Hardware-Design-Spec.md` §7 item 1) gives a higher stall current, raising the full-aggregate worst case to ~6.4 A at 48 V (`Node-Bus-Hardware-Design-Spec.md` §4). Full-system load is still not the constraint the intuition suggests — 20 nodes + 20 servos + 20 thermostat displays, *all stalled simultaneously*, is ~6.4 A total at 48 V (that's the point of the 48 V rail — `Node-Bus-Power-Path-Spec.md` §2). Whether simultaneous full-stall is even realistic is still open (`Node-Bus-Power-Path-Spec.md` §7 item 2); a T-type fuse rides over a few-second synchronised-homing move regardless. **Default: two PSUs + T4 A ceramic** — still holds at the updated number, just with less headroom than before.
 
 Order fuse (T4 A ceramic 5×20, both-ends feed): ESKA 522.523 — <https://www.amazon.nl/G-veiligheidsinzet-zekering-5x20mm-522-523-drager/dp/B01MV3477I>
 
