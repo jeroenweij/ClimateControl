@@ -124,8 +124,10 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project
 | 16 / 17 | `KOUT1`/`KOUT2` from the BS212C-1 touch IC — was button 1/2 (PA11 / PA12) |
 | 14 | status LED (PA7) |
 | 6 / 18 / 19 | NRST + reset button / SWDIO / SWCLK |
+| 7 | OLED `RES#` (PA0) — GPIO output, decided 2026-09-12 |
+| 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, gates the `Q3`/`Q4` pair per §4.1's I²C reference circuit; decided 2026-09-12 |
 
-~8 of 15 usable GPIO — comfortable headroom.
+~10 of 15 usable GPIO — still comfortable headroom.
 
 ### 4.5 Power delivery
 

@@ -59,7 +59,10 @@ namespace Board
     inline const Hal::Pin ErrorLed{GPIOB, GPIO_PIN_0}; // pin 15  net "LED_ERROR"   (NodeLib errorLedPin)
                                                        //   pin 15 bonds PB0/PB1/PB2/PA8 -- configure PB0 only
     inline const Hal::Pin UserButton{GPIOA, GPIO_PIN_11}; // pin 16  net "USER_BUTTON" active-low, InputPullUp
-                                                          //   Thermostat board: this is "button 1" (see Button2)
+                                                          //   Thermostat board: this is "button 1" (see Button2) --
+                                                          //   driven by BS212C-1 KOUT1 (pin 3) there, not a switch;
+                                                          //   NMOS-with-internal-pullup output, same polarity as a
+                                                          //   plain switch-to-GND, so no firmware difference.
 
     // --- USART2 pin group (all three boards; role differs) ---------------
     //   Main board       : point-to-point link to the on-board NINA-W152
@@ -141,6 +144,19 @@ namespace Board
     inline const Hal::Pin Button2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
                                                        //   (button 1 is UserButton / PA11 above -- ErrorHandler ack
                                                        //    + clear link-lost). PA12 is USART1_DE on the other boards.
+                                                       //   Thermostat board: driven by BS212C-1 KOUT2 (pin 4), same
+                                                       //   NMOS-with-internal-pullup polarity, no firmware difference.
+
+    // Decided 2026-09-12, per the OLED datasheet's I2C-with-internal-charge-pump
+    // reference circuit (ControllerNode-Thermostat-Link-Spec.md §4.1):
+    inline const Hal::Pin OledReset{GPIOA, GPIO_PIN_0}; // pin 7   net "RES", OLED RES# -- active-low, hold low >=
+                                                        //   3us then release to run (datasheet §4.3 reset circuit).
+    inline const Hal::Pin OledPowerEnable{GPIOA, GPIO_PIN_4}; // pin 11  net "GPIO", gates the Q3/Q4 load-switch pair
+                                                              //   feeding the OLED's VBAT -- HIGH = VBAT on. Off by
+                                                              //   default (Hi-Z at reset), same reset-safe pattern as
+                                                              //   ServoEnable above. Required by the datasheet's own
+                                                              //   warning: without this switch, VBAT leaks current
+                                                              //   whenever the charge pump is enabled.
 
     // --- Fixed by silicon (no assignment choice) -----------------------
     //   NRST        pin 6
