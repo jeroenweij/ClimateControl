@@ -18,7 +18,7 @@ func u16(d []byte) uint16 { return binary.LittleEndian.Uint16(d) }
 func u32(d []byte) uint32 { return binary.LittleEndian.Uint32(d) }
 func i16(d []byte) int16  { return int16(binary.LittleEndian.Uint16(d)) }
 
-var damperModes = [...]string{"closed", "open", "auto", "manual"}
+var damperModes = [...]string{"closed", "open", "auto", "manual", "stalled"}
 
 func modeName(b byte) string {
 	if int(b) < len(damperModes) {

@@ -32,7 +32,7 @@ namespace NodeLib
         // 0x3_  application, ControllerNode
         DamperTarget = 0x30, // RW  uint8 %
         DamperActual = 0x31, // RO  uint8 %
-        DamperMode   = 0x32, // RW  enum: 0 closed 1 open 2 auto 3 manual
+        DamperMode   = 0x32, // RW  enum: 0 closed 1 open 2 auto 3 manual 4 stalled (RO fault code, Damper::ReportedMode -- never accepted by Set)
 
         // 0x3_  application, TemperatureNode
         SupplyTemp   = 0x38, // RO  int16 centi-degC

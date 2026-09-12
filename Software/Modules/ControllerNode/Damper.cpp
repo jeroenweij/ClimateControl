@@ -133,6 +133,11 @@ bool Damper::Stalled() const
     return stalled;
 }
 
+uint8_t Damper::ReportedMode() const
+{
+    return stalled ? StalledCode : static_cast<uint8_t>(mode);
+}
+
 void Damper::PowerOn()
 {
     powered = true;

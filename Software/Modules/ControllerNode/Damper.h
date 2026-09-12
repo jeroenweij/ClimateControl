@@ -59,6 +59,13 @@ class Damper
     // until the next SetTarget() gives the servo a fresh attempt.
     bool Stalled() const;
 
+    // Wire value for the DamperMode endpoint (Node-Message-Model-Spec.md §3):
+    // GetMode()'s coding, except while Stalled() -- reported as StalledCode
+    // instead, so the fault is visible on the Thermostat display and the main
+    // bus without a separate endpoint. RO-only: SetMode() never accepts
+    // StalledCode, it is not a commandable mode.
+    uint8_t ReportedMode() const;
+
     // Park at NeutralPercent and cut servo power -- for PrepareForReset() and
     // any loss of the room control input (ControllerNode-Thermostat-Link-Spec.md
     // §5.1).
@@ -79,6 +86,11 @@ class Damper
     // OUT ~= 0.67V -> ~831 counts at VDDA ~= 3.3V; ~0.3-0.8A running gives
     // ~0.07-0.19V -> ~90-240 counts. This sits comfortably between the two.
     static const uint16_t stallThresholdCounts = 500;
+
+    // DamperMode wire code for a stall (Node-Message-Model-Spec.md §3) --
+    // one past Mode's highest real value (Manual = 3), so it can never
+    // collide with a commandable mode.
+    static const uint8_t StalledCode = 4;
 
     void PowerOn();
     void PowerOff();

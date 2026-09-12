@@ -97,7 +97,7 @@ void ThermostatLink::PushDisplay()
         return;
     }
     const uint8_t actual = damper.Actual();
-    const uint8_t mode   = static_cast<uint8_t>(damper.GetMode());
+    const uint8_t mode   = damper.ReportedMode();
     if (actual != lastPushedActual)
     {
         link.SendToPeer(Endpoint::DamperActual, Operation::Set, &actual, 1);

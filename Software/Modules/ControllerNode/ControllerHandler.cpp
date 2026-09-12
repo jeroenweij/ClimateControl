@@ -48,7 +48,9 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     damper(damper),
     thermostatLink(link),
     reportedActual(0),
-    reportedActualValid(false)
+    reportedActualValid(false),
+    reportedMode(0),
+    reportedModeValid(false)
 {
 }
 
@@ -62,6 +64,14 @@ void ControllerHandler::Loop()
         reportedActual      = actual;
         reportedActualValid = true;
         Report(Endpoint::DamperActual, &actual, 1);
+    }
+
+    const uint8_t mode = damper.ReportedMode();
+    if (!reportedModeValid || mode != reportedMode)
+    {
+        reportedMode      = mode;
+        reportedModeValid = true;
+        Report(Endpoint::DamperMode, &mode, 1);
     }
 }
 
@@ -119,7 +129,7 @@ void ControllerHandler::HandleDamper(const Message& m)
         case Endpoint::DamperMode:
             if (m.id.operation == Operation::Get)
             {
-                const uint8_t v = static_cast<uint8_t>(damper.GetMode());
+                const uint8_t v = damper.ReportedMode();
                 Report(Endpoint::DamperMode, &v, 1);
             }
             else if (m.id.operation == Operation::Set && m.len >= 1 && m.data[0] <= 3)
@@ -242,6 +252,7 @@ void ControllerHandler::ConnectionLost()
 {
     LOG_WARN("Main bus connection lost");
     reportedActualValid = false;
+    reportedModeValid   = false;
 }
 
 void ControllerHandler::PrepareForReset()

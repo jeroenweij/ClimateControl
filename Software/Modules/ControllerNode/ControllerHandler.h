@@ -49,4 +49,6 @@ class ControllerHandler : public NodeLib::INodeHandler
 
     uint8_t reportedActual;
     bool    reportedActualValid;
+    uint8_t reportedMode;
+    bool    reportedModeValid;
 };
