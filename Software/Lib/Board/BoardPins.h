@@ -24,10 +24,14 @@
 //   - "Node" board        -> ControllerNode (damper servo, main-bus slave)
 //   - "Thermostat" board  -> Thermostat (room UI, I2C OLED + sensor + 2 buttons)
 //
-// Nothing here is board-conditional: a firmware image simply doesn't reference
-// the pins it doesn't use. Where one physical pin has a different role per board
-// the comment says so, and both names are defined at the same pin (e.g. pin 13
-// is ServoPwm on the Node board and NinaReset on the Main board).
+// Shared pins (main bus, status LEDs, USART2 group) are always visible --
+// NodeLib and the bootloader use only these, and link into every board.
+// Everything board-specific is behind #if defined(CC_BOARD_<Module>), set by
+// add_stm32_executable()'s MODULE argument (cmake/stm32.cmake) -- so using a
+// Thermostat pin from ControllerNode firmware is a compile error, not a wiring
+// mistake found at bring-up. Where one physical pin has a different role per
+// board (e.g. pin 13 is ServoPwm on the Node board and NinaReset on the Main
+// board), each name lives in its own board's guard, at the same GPIO/pin.
 //
 // ST's GPIOx macros are pointer casts and can't be constexpr, so these are
 // inline const (one shared definition, trivial load-time init).
@@ -59,7 +63,7 @@ namespace Board
     inline const Hal::Pin ErrorLed{GPIOB, GPIO_PIN_0}; // pin 15  net "LED_ERROR"   (NodeLib errorLedPin)
                                                        //   pin 15 bonds PB0/PB1/PB2/PA8 -- configure PB0 only
     inline const Hal::Pin UserButton{GPIOA, GPIO_PIN_11}; // pin 16  net "USER_BUTTON" active-low, InputPullUp
-                                                          //   Thermostat board: this is "button 1" (see Button2) --
+                                                          //   Thermostat board: this is "button 1" (see UserButton2) --
                                                           //   driven by BS212C-1 KOUT1 (pin 3) there, not a switch;
                                                           //   NMOS-with-internal-pullup output, same polarity as a
                                                           //   plain switch-to-GND, so no firmware difference.
@@ -79,7 +83,7 @@ namespace Board
                                                        //     (ControllerNode-Thermostat-Link-Spec.md Sec3, open).
                                                        //   Main board: hardware RTS to the NINA -- same pin and AF,
                                                        //     aliased as NinaRts below.
-    constexpr uint8_t     Usart2Af = 1;
+    constexpr uint8_t Usart2Af = 1;
 
     // Thermostat link, ready for Hal::Uart::Init() (mirrors BusUart; the DE
     // entry is inert if the link is wired full-duplex / plain UART).
@@ -90,6 +94,7 @@ namespace Board
     };
 
     // --- Main board -- MainController ------------------------------------
+#if defined(CC_BOARD_MainController)
 
     // Bus disable. Moved here from PA0 on 2026-09-08 to free PA0/PA1 for the
     // NINA's USART2 flow-control lines.
@@ -116,13 +121,18 @@ namespace Board
     // spare hardware UART for a debug console. Options: bit-bang Tools::Logger
     // on a free pin (PC15 pin 3, PA4 pin 11, PA5 pin 12) or drop the console.
 
+#endif // CC_BOARD_MainController
+
     // --- Main board -- TemperatureNode variant -------------------------
     //   Same PCB with the 48V-injection front-end and NINA DNP, DS18B20 1-Wire
     //   populated instead. PA0/PA1/PA6/PB9 above are unused on this variant.
+#if defined(CC_BOARD_TemperatureNode)
     inline const Hal::Pin OneWire1{GPIOA, GPIO_PIN_5}; // pin 12  net "ONEWIRE"   open-drain, 4.7k pull-up on board
     inline const Hal::Pin OneWire2{GPIOA, GPIO_PIN_4}; // pin 11  net "ONEWIRE2"  open-drain, 4.7k pull-up on board
+#endif // CC_BOARD_TemperatureNode
 
     // --- Node board -- ControllerNode ---------------------------------
+#if defined(CC_BOARD_ControllerNode)
     inline const Hal::Pin ServoPwm{GPIOA, GPIO_PIN_6}; // pin 13  net "PWM", TIM3_CH1 (AF1)
                                                        //   externally pulled to the safe damper position.
                                                        //   Same physical pin as the Main board's NinaReset.
@@ -131,21 +141,23 @@ namespace Board
                                                           //   the 5V servo rail sits behind a MCU-gated high-side
                                                           //   switch, energised only for a move. See
                                                           //   Node-Bus-Power-Path-Spec.md §3.1.
+#endif // CC_BOARD_ControllerNode
 
     // --- Thermostat board -- Thermostat ------------------------------
     //   No main bus: USART1's PB6/PB7 become I2C1 for the OLED + room sensor;
     //   USART2 (Usart2Tx/Rx, + Usart2De if half-duplex) is the link to this
     //   room's ControllerNode.
+#if defined(CC_BOARD_Thermostat)
     inline const Hal::Pin I2cSda{GPIOB, GPIO_PIN_7}; // pin 1   I2C1_SDA (AF6)  SSD1306/SSD1315 OLED + CHT40MEMS sensor
     inline const Hal::Pin I2cScl{GPIOB, GPIO_PIN_6}; // pin 20  I2C1_SCL (AF6)
                                                      //   pin 1 bonds PB7/PB8; pin 20 bonds PB3/PB4/PB5/PB6.
-    constexpr uint8_t     I2cAf = 6;
+    constexpr uint8_t I2cAf = 6;
 
-    inline const Hal::Pin Button2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
-                                                       //   (button 1 is UserButton / PA11 above -- ErrorHandler ack
-                                                       //    + clear link-lost). PA12 is USART1_DE on the other boards.
-                                                       //   Thermostat board: driven by BS212C-1 KOUT2 (pin 4), same
-                                                       //   NMOS-with-internal-pullup polarity, no firmware difference.
+    inline const Hal::Pin UserButton2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
+                                                           //   (button 1 is UserButton / PA11 above -- ErrorHandler ack
+                                                           //    + clear link-lost). PA12 is USART1_DE on the other boards.
+                                                           //   Thermostat board: driven by BS212C-1 KOUT2 (pin 4), same
+                                                           //   NMOS-with-internal-pullup polarity, no firmware difference.
 
     // Decided 2026-09-12, per the OLED datasheet's I2C-with-internal-charge-pump
     // reference circuit (ControllerNode-Thermostat-Link-Spec.md §4.1):
@@ -157,6 +169,7 @@ namespace Board
                                                               //   ServoEnable above. Required by the datasheet's own
                                                               //   warning: without this switch, VBAT leaks current
                                                               //   whenever the charge pump is enabled.
+#endif // CC_BOARD_Thermostat
 
     // --- Fixed by silicon (no assignment choice) -----------------------
     //   NRST        pin 6

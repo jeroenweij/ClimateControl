@@ -11,9 +11,12 @@
 # prints the size, and adds a `flash-<name>` target that drives JLinkExe.
 #
 # With MODULE <type>, also bakes ${CC_FW_VERSION} into the image descriptor
-# (CC_FW_VERSION_MAJOR / _MINOR compile definitions, read by CC_IMAGE_DESCRIPTOR)
-# and copies the raw .bin to <type>_<version>.bin -- the OTA image whose name
-# the server's firmware repository parses for module + version.
+# (CC_FW_VERSION_MAJOR / _MINOR compile definitions, read by CC_IMAGE_DESCRIPTOR),
+# copies the raw .bin to <type>_<version>.bin -- the OTA image whose name the
+# server's firmware repository parses for module + version -- and defines
+# CC_BOARD_<type> (e.g. CC_BOARD_ControllerNode), which Lib/Board/BoardPins.h
+# uses to compile out every other board's pins: using a Thermostat pin from
+# ControllerNode firmware is a build error, not a runtime surprise.
 #
 # With BOOTLOADER <tgt>, also emits <name>-full.hex -- that bootloader's hex
 # merged with this app's hex, for one-shot factory programming over SWD -- plus
@@ -45,7 +48,8 @@ function(add_stm32_executable NAME)
         endif()
         target_compile_definitions(${NAME} PRIVATE
             CC_FW_VERSION_MAJOR=${_ver_major}
-            CC_FW_VERSION_MINOR=${_ver_minor})
+            CC_FW_VERSION_MINOR=${_ver_minor}
+            CC_BOARD_${ARG_MODULE})
     endif()
 
     target_link_options(${NAME} PRIVATE
