@@ -12,12 +12,19 @@ address (`NodeId`) and module type; firmware only ever reads it
 
 ```
 # 1. bootloader + application, once per board type (identical across units)
-make -C Software build
-JLinkExe ... flash-temperatureNode-full        # or: cmake --build build --target flash-temperatureNode-full
+#    Release by default -- add BUILD_TYPE=Debug for a debug unit instead.
+make -C Software flash-full MODULE=temperatureNode
 
 # 2. identity, once per unit
 Software/tools/provision.py --node-id 7 --module temperature
 ```
+
+`flash-full` builds into `Software/build/release/` (or `build/debug/` with
+`BUILD_TYPE=Debug`) and merges bootloader + app before flashing -- see
+`make -C Software help` for the equivalent `flash` (app only, no bootloader
+merge) and plain `build`/`release` targets. `provision.py` itself doesn't
+care which build type the board was flashed with -- it only ever touches the
+32-byte config page below, never the application image.
 
 `provision.py` builds the record, writes `config-nodeN-<module>.hex` + a J-Link
 commander script, then runs `JLinkExe` to erase the config page and program it.
