@@ -4,6 +4,8 @@ add_library(Hal STATIC
     Pin.h
     Gpio.h
     Gpio.cpp
+    Adc.h
+    Adc.cpp
     Uart.h
     Uart.cpp
     OneWire.h

@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "Adc.h"
 #include "DelayTimer.h"
 #include "Gpio.h"
 
@@ -18,11 +19,14 @@
 // stores the target and drives the enable line; the actual timer output is a
 // TODO once a timer HAL exists. Value units are percent open (0..100).
 //
-// TODO: stall detection via Board::ServoCurrentSense (ADC_IN0). The servo has
-// no position feedback, so moveSettleMs alone can only bound how long a jam
-// is driven, not detect one -- sample current while powered() and de-energise
-// early on a sustained overcurrent read, rather than waiting out the full
-// settle time. See Node-Bus-Power-Path-Spec.md §3.1.1.
+// Stall detection (Node-Bus-Power-Path-Spec.md §3.1.1): the servo has no
+// position feedback, so moveSettleMs alone can only bound how long a jam is
+// driven, not detect one. Loop() samples Board::ServoCurrentSense (ADC_IN0,
+// the INA180A1/shunt circuit) while powered, and de-energises early -- well
+// before moveSettleMs -- once current has stayed above stallThresholdCounts
+// for stallConfirmMs. That early cutoff is the point: it is what keeps the
+// AO3401A load-switch's worst-case stall exposure to a detection window
+// instead of the full settle time.
 class Damper
 {
   public:
@@ -51,6 +55,10 @@ class Damper
     Mode    GetMode() const;
     bool    Moving() const;
 
+    // True from the moment a sustained overcurrent is detected (see Loop())
+    // until the next SetTarget() gives the servo a fresh attempt.
+    bool Stalled() const;
+
     // Park at NeutralPercent and cut servo power -- for PrepareForReset() and
     // any loss of the room control input (ControllerNode-Thermostat-Link-Spec.md
     // §5.1).
@@ -60,13 +68,28 @@ class Damper
     // Time the servo is held powered after a commanded move.
     static const uint32_t moveSettleMs = 1500;
 
+    // Sustained-overcurrent window before a stall is declared. Long enough to
+    // ride out the start-of-move current step the switched-side reservoir cap
+    // already softens (Node-Bus-Power-Path-Spec.md §3.1); short next to
+    // moveSettleMs is the whole point (see the class comment above).
+    static const uint32_t stallConfirmMs = 200;
+
+    // Raw 12-bit ADC code, not a calibrated current -- this is a threshold
+    // detector, not an ammeter. Derivation (§3.1.1): ~2.6-2.8A stall gives
+    // OUT ~= 0.67V -> ~831 counts at VDDA ~= 3.3V; ~0.3-0.8A running gives
+    // ~0.07-0.19V -> ~90-240 counts. This sits comfortably between the two.
+    static const uint16_t stallThresholdCounts = 500;
+
     void PowerOn();
     void PowerOff();
 
     Hal::Gpio         enable;
+    Hal::Adc          currentSense;
     uint8_t           target;
     uint8_t           actual;
     Mode              mode;
     bool              powered;
+    bool              stalled;
     Tools::DelayTimer settleTimer;
+    Tools::DelayTimer stallTimer;
 };

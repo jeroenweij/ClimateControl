@@ -83,7 +83,7 @@ namespace Board
                                                        //     (ControllerNode-Thermostat-Link-Spec.md Sec3, open).
                                                        //   Main board: hardware RTS to the NINA -- same pin and AF,
                                                        //     aliased as NinaRts below.
-    constexpr uint8_t Usart2Af = 1;
+    constexpr uint8_t     Usart2Af = 1;
 
     // Thermostat link, ready for Hal::Uart::Init() (mirrors BusUart; the DE
     // entry is inert if the link is wired full-duplex / plain UART).
@@ -146,9 +146,12 @@ namespace Board
     // feedback wire and a move timeout alone can't tell "reached" from
     // "jammed". Net "SENSE" -- INA180A1 (low-side, 12mOhm shunt on the
     // servo's own GND return) into this ADC channel. See
-    // Node-Bus-Power-Path-Spec.md §3.1.1 for the full circuit and the
-    // firmware-side threshold/timing approach (not yet implemented).
+    // Node-Bus-Power-Path-Spec.md §3.1.1 for the full circuit and
+    // Modules/ControllerNode/Damper.cpp for the threshold/timing logic.
     inline const Hal::Pin ServoCurrentSense{GPIOA, GPIO_PIN_0}; // pin 7  ADC_IN0
+    // Hal::Adc takes the ADC_IN channel index, not the Pin above -- same
+    // split as Board::I2cAf alongside Board::I2cSda/I2cScl.
+    constexpr uint8_t ServoCurrentSenseChannel = 0;
 #endif // CC_BOARD_ControllerNode
 
     // --- Thermostat board -- Thermostat ------------------------------
@@ -159,7 +162,7 @@ namespace Board
     inline const Hal::Pin I2cSda{GPIOB, GPIO_PIN_7}; // pin 1   I2C1_SDA (AF6)  SSD1306/SSD1315 OLED + CHT40MEMS sensor
     inline const Hal::Pin I2cScl{GPIOB, GPIO_PIN_6}; // pin 20  I2C1_SCL (AF6)
                                                      //   pin 1 bonds PB7/PB8; pin 20 bonds PB3/PB4/PB5/PB6.
-    constexpr uint8_t I2cAf = 6;
+    constexpr uint8_t     I2cAf = 6;
 
     inline const Hal::Pin UserButton2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
                                                            //   (button 1 is UserButton / PA11 above -- ErrorHandler ack

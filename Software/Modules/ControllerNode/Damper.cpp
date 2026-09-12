@@ -17,11 +17,14 @@ namespace
 
 Damper::Damper() :
     enable(Board::ServoEnable, Hal::Gpio::Mode::Output),
+    currentSense(Board::ServoCurrentSenseChannel),
     target(NeutralPercent),
     actual(NeutralPercent),
     mode(Mode::Auto),
     powered(false),
-    settleTimer()
+    stalled(false),
+    settleTimer(),
+    stallTimer()
 {
 }
 
@@ -32,7 +35,31 @@ void Damper::Init()
 
 void Damper::Loop()
 {
-    if (powered && settleTimer.Finished())
+    if (!powered)
+    {
+        return;
+    }
+
+    if (currentSense.Read() >= stallThresholdCounts)
+    {
+        if (!stallTimer.IsRunning())
+        {
+            stallTimer.Start(stallConfirmMs);
+        }
+        else if (stallTimer.Finished())
+        {
+            LOG_WARN("Damper stall detected, cutting servo power early");
+            stalled = true;
+            PowerOff();
+            return;
+        }
+    }
+    else
+    {
+        stallTimer.Stop(); // current dropped back down -- not a sustained stall
+    }
+
+    if (settleTimer.Finished())
     {
         // Move settle time elapsed -- assume the actuator reached the target and
         // drop servo power; the gearing holds it there.
@@ -49,7 +76,8 @@ void Damper::SetTarget(const uint8_t percent)
         return;
     }
     LOG_INFO("Damper target " << clamped << "%");
-    target = clamped;
+    target  = clamped;
+    stalled = false; // a fresh move gets a fresh attempt
     PowerOn();
     // TODO: program TIM3_CH1 pulse width for 'target' once a timer HAL exists.
 }
@@ -100,11 +128,17 @@ bool Damper::Moving() const
     return powered;
 }
 
+bool Damper::Stalled() const
+{
+    return stalled;
+}
+
 void Damper::PowerOn()
 {
     powered = true;
     enable.Write(true);
     settleTimer.Start(moveSettleMs);
+    stallTimer.Stop(); // no stale overcurrent window carried over from last time
 }
 
 void Damper::PowerOff()
@@ -112,4 +146,5 @@ void Damper::PowerOff()
     powered = false;
     enable.Write(false);
     settleTimer.Stop();
+    stallTimer.Stop();
 }
