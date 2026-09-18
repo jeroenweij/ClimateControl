@@ -69,9 +69,16 @@ namespace Board
                                                           //   plain switch-to-GND, so no firmware difference.
 
     // --- USART2 pin group (all three boards; role differs) ---------------
-    //   Main board       : point-to-point link to the on-board NINA-W152
-    //                      (u-connectXpress AT firmware, 115200 8N1, 4-wire HW
-    //                      flow control -- see NinaCts / NinaRts / NinaReset).
+    //   Main board (MainController) : point-to-point link to the on-board
+    //                      NINA-W152 (u-connectXpress AT firmware, 115200
+    //                      8N1, 4-wire HW flow control -- see NinaCts /
+    //                      NinaRts / NinaReset).
+    //   Main board (TemperatureNode): NINA DNP on this variant, so these two
+    //                      pins are otherwise idle -- Tools::Logger uses them
+    //                      as a plain debug console instead (Modules/
+    //                      TemperatureNode/DebugLog.cpp), no bit-banging
+    //                      needed (contrast MainController's DebugLog.cpp,
+    //                      which has no free UART left for one).
     //   Node board        : point-to-point link to this room's Thermostat.
     //   Thermostat board  : point-to-point link to its ControllerNode.
     //   All USART2 signals are AF1 on this package.
