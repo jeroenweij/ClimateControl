@@ -20,6 +20,13 @@
 //   - bus -> uplink: registered as the NodeMaster's INodeHandler, so every
 //     frame NodeMaster sees reaches ReceivedMessage() (NodeMaster.cpp already
 //     forwards there for anything past its own Transport bookkeeping).
+//     ReceivedMessage() only enqueues -- it must never block, since NodeMaster
+//     calls it synchronously from inside its own byte-at-a-time bus receive
+//     loop (Node::PumpRx()); a blocking NINA write there, multiplied by a
+//     burst of several queued node messages arriving back-to-back, previously
+//     stalled bus servicing long enough to miss bytes (and the terminating
+//     Done) on a real bus with real traffic. The actual NINA writes happen
+//     from Loop()/DrainDataMode() instead, decoupled from bus reception.
 //   - uplink -> bus: relayed-range frames decoded from the NINA UART are
 //     pushed onto the bus via NodeMaster::QueueMessage().
 //
@@ -71,12 +78,25 @@ class UplinkHandler : public NodeLib::INodeHandler
     void HandleCommandFailure();
 
     void DrainDataMode();
+    void DrainOutboundQueue(); // writes everything ReceivedMessage() has queued to NINA
     void HandleUplinkFrame(const NodeLib::Message& message);
     void SendUplinkHello();
     void SendRoster();
     void SendKeepalive();
+    void EnqueueUplink(const NodeLib::Message& message); // used by Send* above too, for the same reason
 
     NodeLib::NodeMaster& master;
+
+    // Bus-side relayed messages, staged here by ReceivedMessage() (called
+    // synchronously from the bus receive path -- see the class comment) and
+    // written out to NINA from DrainDataMode() instead. Sized well above what
+    // one flushQueue() burst from a single node realistically queues
+    // (NodeLib::Node::queueSize is 25); a still-full queue just drops the
+    // newest message, same backstop policy as MainController-Server-Link-
+    // Spec.md §7.2's bus-bound queue.
+    static const uint8_t outboundQueueSize = 32;
+    NodeLib::Message     outboundQueue[outboundQueueSize];
+    uint8_t              outboundQueued;
 
     NinaAt nina;
 

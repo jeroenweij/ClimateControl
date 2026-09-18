@@ -69,6 +69,8 @@ namespace
 
 UplinkHandler::UplinkHandler(NodeMaster& master) :
     master(master),
+    outboundQueue{},
+    outboundQueued(0),
     nina(),
     uplinkCrc(),
     uplinkFrame(uplinkCrc),
@@ -362,6 +364,8 @@ void UplinkHandler::DrainDataMode()
     }
     uplinkFrame.Update();
 
+    DrainOutboundQueue();
+
     if (sawByte)
     {
         linkWatchdog.Start(LinkWatchdogMs);
@@ -380,6 +384,26 @@ void UplinkHandler::DrainDataMode()
     }
 }
 
+void UplinkHandler::DrainOutboundQueue()
+{
+    for (uint8_t i = 0; i < outboundQueued; i++)
+    {
+        uplinkFrame.Write(nina.RawUart(), outboundQueue[i]);
+    }
+    outboundQueued = 0;
+}
+
+void UplinkHandler::EnqueueUplink(const Message& message)
+{
+    if (outboundQueued < outboundQueueSize)
+    {
+        outboundQueue[outboundQueued] = message;
+        outboundQueued++;
+    }
+    // else: drop -- queue full, same backstop as the bus-bound queue
+    // (MainController-Server-Link-Spec.md §7.2).
+}
+
 void UplinkHandler::HandleUplinkFrame(const Message& message)
 {
     if (IsRelayedEndpoint(message.id.endpoint))
@@ -393,7 +417,7 @@ void UplinkHandler::HandleUplinkFrame(const Message& message)
     // MainController-Server-Link-Spec.md §11).
     if (message.id.endpoint == Endpoint::Keepalive && message.id.operation == Operation::Get)
     {
-        uplinkFrame.Write(nina.RawUart(), Message(Id(0, Endpoint::Keepalive, Operation::Report)));
+        EnqueueUplink(Message(Id(0, Endpoint::Keepalive, Operation::Report)));
     }
 }
 
@@ -416,24 +440,25 @@ void UplinkHandler::SendUplinkHello()
     {
         hello.data[i] = payload[i];
     }
-    uplinkFrame.Write(nina.RawUart(), hello);
+    EnqueueUplink(hello);
 }
 
 void UplinkHandler::SendRoster()
 {
     // No physical nodes on this bus yet -- an empty roster is just the
     // terminator (MainController-Server-Link-Spec.md §5).
-    uplinkFrame.Write(nina.RawUart(),
-                      Message(Id(0, Endpoint::Roster, Operation::Report), static_cast<uint8_t>(0xFF)));
+    EnqueueUplink(Message(Id(0, Endpoint::Roster, Operation::Report), static_cast<uint8_t>(0xFF)));
 }
 
 void UplinkHandler::SendKeepalive()
 {
-    uplinkFrame.Write(nina.RawUart(), Message(Id(0, Endpoint::Keepalive, Operation::Get)));
+    EnqueueUplink(Message(Id(0, Endpoint::Keepalive, Operation::Get)));
 }
 
 void UplinkHandler::ReceivedMessage(const Message& message)
 {
+    // Called synchronously from NodeMaster's bus receive path (see the class
+    // comment in UplinkHandler.h) -- must only enqueue, never block on NINA.
     if (!nina.InDataMode())
     {
         return; // uplink down -- dropped, not queued (MainController-Server-Link-Spec.md §10)
@@ -442,7 +467,7 @@ void UplinkHandler::ReceivedMessage(const Message& message)
     {
         return; // NodeLib-internal traffic (Transport etc.) never relays
     }
-    uplinkFrame.Write(nina.RawUart(), message);
+    EnqueueUplink(message);
 }
 
 void UplinkHandler::ConnectionLost()
