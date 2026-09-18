@@ -70,10 +70,10 @@ u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, 
 |---|---|---|
 | VCC (10) + VCC_IO (9) | `+3v3 P` rail — dedicated RT9080-33GJ5 LDO off the 5 V buck | see `Node-Bus-Power-Path-Spec.md` §4.1. ~120 mA avg / ~350 mA peak. **Bulk: 22 µF at the LDO + ≥10 µF right at the NINA VCC pins** (NINA is in the opposite board corner) + 100 nF. RT9080 populated on both Main-board build variants. |
 | GND + centre pad | solid ground pour | |
-| RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull. Add a 10 kΩ pull-up to `+3v3 P` + a test point (defensive; `Hal::Gpio::Mode` needs an open-drain option added). |
+| RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull — `Hal::Gpio::Mode::OpenDrain` (`Write(false)` = drive low, `Write(true)` = release to Hi-Z). Add a 10 kΩ pull-up to `+3v3 P` + a test point. |
 | UART_RXD (23) | STM32 `PA2` (USART2_TX, AF1) | |
 | UART_TXD (22) | STM32 `PA3` (USART2_RX, AF1) | |
-| UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control (on by default in u-connectXpress) |
+| UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control, **on by default in u-connectXpress**: the module will not transmit at all until this line is driven low by the STM32 (push-pull output, held low) — there is nothing else on the link to assert it. |
 | UART_RTS (20) | STM32 `PA0` (USART2_CTS, AF1) | freed by moving RESET_NODES to `PB9` |
 | boot pins 27/32/36 | leave unconnected | internally strapped; pin 36 must not be pulled low |
 | SWITCH_1 (7), SWITCH_2 (18) | 2 test pads each (or 0 Ω-DNP to GND) | SWITCH_1 low at boot = restore UART defaults; SWITCH_1+2 low = enter serial bootloader. Recovery path if FW/baud is lost |
@@ -83,3 +83,5 @@ u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, 
 **Consequence:** both USARTs are now committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.
 
 **Board-rev review (2026-09-08, `Hardware/Main/*_PCB1_1_2026-09-08`):** pin map and NINA/RT9080 wiring verified correct. Open before fab: (1) confirm the NINA antenna keep-out and clearances above; (2) move ≥10 µF of the NINA bulk to the module's VCC pins; (3) add the SWITCH_1/2 and RESET_N pads above; (4) commit a schematic PDF alongside the layout; (5) confirm the orderable NINA-W152 variant (BOM shows `-04B`; datasheet current production is `-06B`).
+
+**Bench-validated (2026-09-18):** `RESET_N` release + `NinaRts` (`PA1`) held low bring the module up to a fully responsive AT interface at 115200 8N1 — `Software/NinaEnable` does exactly this for standalone bench access. Firmware baseline is u-connectXpress **6.4.1-001**; factory/sample units may ship on much older firmware (`1.0.0-126` seen) and should be updated via s-center before deployment. Wi-Fi station join and a TCP connection to the server's uplink port have both been verified end-to-end against real hardware — command sequence in `MainController-Server-Link-Spec.md` §3.

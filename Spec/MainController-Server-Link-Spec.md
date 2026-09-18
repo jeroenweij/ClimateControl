@@ -47,10 +47,11 @@ The server implements the `NodeLib` wire format (§6); it is a small, fixed, alr
 
 ## 3. Transport — NINA socket
 
-- NINA-W152 on USART2, u-connectXpress AT firmware, 115200 8N1, 4-wire hardware flow control (RTS/CTS per `MainController-Spec.md` §5).
-- Socket: `AT+USOCR=6` (TCP) → `AT+USOCO=<s>,"<host>",<port>`. Send with `AT+USOWR=<s>,<len>` (binary mode). Inbound data is signalled by `+UUSORD:<s>,<len>` and read with `AT+USORD=<s>,<n>`, `n` ≤ 256 so a read fits a small buffer.
+- NINA-W152 on USART2, u-connectXpress AT firmware (bench-validated on **6.4.1-001**), 115200 8N1, 4-wire hardware flow control (RTS/CTS per `MainController-Spec.md` §5) — the STM32 must hold `NinaRts` (`PA1`) low or the module never transmits.
+- **Wi-Fi join:** `AT+UWSC=0,2,"<ssid>"` / `AT+UWSC=0,5,2` (WPA/WPA2-PSK) / `AT+UWSC=0,8,"<passphrase>"` configure station profile 0; `AT+UWSCA=0,3` activates it. `+UUWLE` (link up) / `+UUNU` (IP up) report readiness; `+UUWLD` / `+UUND` report loss and drive the same reconnect logic as the socket below.
+- **Socket:** u-connectXpress models the server as a **peer**, not a BSD-style socket — there is no `+USOCR`/`+USOCO` family on this firmware. `AT+UDCP="tcp://<host>:<port>/"` opens it: `+UDCP:<peer_handle>` on write, then an unsolicited `+UUDPC:<peer_handle>,<type>,<flags>,<local_ip>,<local_port>,<remote_ip>,<remote_port>` once the TCP handshake completes. `ATO` then switches the UART into **data mode** — a transparent byte pipe to the connected peer — for the life of the connection. `+UUDPD:<peer_handle>` reports a close (drops the module back to command mode); `AT+UDCPC=<peer_handle>` closes it explicitly.
 - The **AT engine is a non-blocking state machine** ticked from the same super-loop as `master.Loop()`: it issues one command and returns, collecting the response over later iterations. A stalled uplink never delays a bus `Poll` / `Done`.
-- **Reconnect:** exponential backoff, 1 s → 30 s cap. The MCU keeps no uplink send queue — a `Report` produced during an outage is dropped; the value re-reports on its next change or periodic refresh, leaving only a gap in stored history.
+- **Reconnect:** exponential backoff, 1 s → 30 s cap, re-triggered by `+UUWLD` / `+UUND` / `+UUDPD`. The MCU keeps no uplink send queue — a `Report` produced during an outage is dropped; the value re-reports on its next change or periodic refresh, leaving only a gap in stored history.
 
 ---
 
@@ -235,7 +236,7 @@ The MainController image is ~20 KB in a 52 KB slot. `Frame` / `Message` / `Id` /
 
 ## 11. Open items
 
-1. **NINA bring-up** — confirm the u-connectXpress AT command set on the actual NINA-W152 variant (socket create / connect / write / read, `+UUSORD`, reset). Nothing here needs MQTT or HTTP from the module.
-2. **`readings` retention** — when and how to downsample stored history.
-3. **OTA rewind frame** — exact fields of the `0x65 OtaControl Report` the MC uses to request a resend from `nextOffset`.
-4. **Map polygon editor** — whether v1 ships the room-polygon drawing tool or point placement only.
+1. **`readings` retention** — when and how to downsample stored history.
+2. **OTA rewind frame** — exact fields of the `0x65 OtaControl Report` the MC uses to request a resend from `nextOffset`.
+3. **Map polygon editor** — whether v1 ships the room-polygon drawing tool or point placement only.
+4. **`ATO` data-mode relay** — bring-up confirmed Wi-Fi join and the `+UDCP` TCP peer connect end-to-end against the real server (§3); not yet exercised: the `ATO` transparent byte pipe itself, and the `UplinkHello` token handshake (§5) that authenticates it. Both are firmware work rather than bring-up.
