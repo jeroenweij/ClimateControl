@@ -54,6 +54,12 @@ jobs:
         with:
           release: '14.2.Rel1'
 
+      # Secrets.h is gitignored (real Wi-Fi/server credentials) -- CI only
+      # needs the module to compile and link, so use the placeholder values
+      # from the checked-in template.
+      - name: Generate placeholder Secrets.h
+        run: cp ${{ env.SOURCE_DIR }}/Modules/MainController/Secrets.example.h ${{ env.SOURCE_DIR }}/Modules/MainController/Secrets.h
+
       - name: Configure CMake
         run: cmake -S ${{ env.SOURCE_DIR }} -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
