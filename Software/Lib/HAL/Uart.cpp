@@ -36,6 +36,44 @@ namespace
 
         HAL_GPIO_Init(pin.port, &init);
     }
+
+    // Shared by both Init() overloads: clocks, TX/RX pin mux, and the common
+    // UART_InitTypeDef fields. Returns the handle for the caller to finish
+    // (RS485Ex vs. plain HAL_UART_Init).
+    UART_HandleTypeDef& ConfigureHandle(const uint32_t       baudRate,
+                                        const Uart::Instance instance,
+                                        const Hal::UartPin&  tx,
+                                        const Hal::UartPin&  rx)
+    {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        if (instance == Uart::Instance::Usart2)
+        {
+            __HAL_RCC_USART2_CLK_ENABLE();
+        }
+        else
+        {
+            __HAL_RCC_USART1_CLK_ENABLE();
+        }
+
+        ConfigureAfPin(tx.pin, tx.alternateFunction);
+        ConfigureAfPin(rx.pin, rx.alternateFunction);
+
+        UART_HandleTypeDef& handle         = Handle(instance);
+        handle.Instance                    = Regs(instance);
+        handle.Init.BaudRate               = baudRate;
+        handle.Init.WordLength             = UART_WORDLENGTH_8B;
+        handle.Init.StopBits               = UART_STOPBITS_1;
+        handle.Init.Parity                 = UART_PARITY_NONE;
+        handle.Init.Mode                   = UART_MODE_TX_RX;
+        handle.Init.HwFlowCtl              = UART_HWCONTROL_NONE;
+        handle.Init.OverSampling           = UART_OVERSAMPLING_16;
+        handle.Init.OneBitSampling         = UART_ONE_BIT_SAMPLE_DISABLE;
+        handle.Init.ClockPrescaler         = UART_PRESCALER_DIV1;
+        handle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+
+        return handle;
+    }
 } // namespace
 
 // Clock + GPIO are brought up in Init() below (per instance, no shared state),
@@ -52,33 +90,8 @@ void Uart::Init(const uint32_t baudRate, const Instance instance, const UartPins
 {
     this->instance = instance;
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    if (instance == Instance::Usart2)
-    {
-        __HAL_RCC_USART2_CLK_ENABLE();
-    }
-    else
-    {
-        __HAL_RCC_USART1_CLK_ENABLE();
-    }
-
-    ConfigureAfPin(pins.tx.pin, pins.tx.alternateFunction);
-    ConfigureAfPin(pins.rx.pin, pins.rx.alternateFunction);
+    UART_HandleTypeDef& handle = ConfigureHandle(baudRate, instance, pins.tx, pins.rx);
     ConfigureAfPin(pins.de.pin, pins.de.alternateFunction);
-
-    UART_HandleTypeDef& handle         = Handle(instance);
-    handle.Instance                    = Regs(instance);
-    handle.Init.BaudRate               = baudRate;
-    handle.Init.WordLength             = UART_WORDLENGTH_8B;
-    handle.Init.StopBits               = UART_STOPBITS_1;
-    handle.Init.Parity                 = UART_PARITY_NONE;
-    handle.Init.Mode                   = UART_MODE_TX_RX;
-    handle.Init.HwFlowCtl              = UART_HWCONTROL_NONE;
-    handle.Init.OverSampling           = UART_OVERSAMPLING_16;
-    handle.Init.OneBitSampling         = UART_ONE_BIT_SAMPLE_DISABLE;
-    handle.Init.ClockPrescaler         = UART_PRESCALER_DIV1;
-    handle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
 
     // DEAT/DEDT are in bit-periods (5-bit fields). 1 bit-period is a
     // conservative placeholder -- not yet tuned against real bus/transceiver
@@ -88,9 +101,31 @@ void Uart::Init(const uint32_t baudRate, const Instance instance, const UartPins
     HAL_RS485Ex_Init(&handle, UART_DE_POLARITY_HIGH, assertionTime, deassertionTime);
 }
 
+void Uart::Init(const uint32_t baudRate, const Instance instance, const UartPin& tx, const UartPin& rx)
+{
+    this->instance = instance;
+
+    UART_HandleTypeDef& handle = ConfigureHandle(baudRate, instance, tx, rx);
+    HAL_UART_Init(&handle);
+}
+
 bool Uart::Available() const
 {
-    return __HAL_UART_GET_FLAG(&Handle(instance), UART_FLAG_RXNE);
+    UART_HandleTypeDef& handle = Handle(instance);
+
+    // STM32G0's USART is the ISR/ICR-style peripheral (not the older SR/DR
+    // one where reading DR auto-clears error flags) -- an overrun (RDR is a
+    // single byte deep, no FIFO) leaves ORE set and RXNE stuck low until ORE
+    // is explicitly cleared, permanently deafening this port otherwise. Any
+    // data still in RDR when this happens is lost either way, so just clear
+    // it and let framing resync (as designed, RS485-Node-Protocol-Spec-
+    // STM32G030.md §5) or the caller's own line/response parsing recover.
+    if (__HAL_UART_GET_FLAG(&handle, UART_FLAG_ORE))
+    {
+        __HAL_UART_CLEAR_OREFLAG(&handle);
+    }
+
+    return __HAL_UART_GET_FLAG(&handle, UART_FLAG_RXNE);
 }
 
 uint8_t Uart::ReadByte()

@@ -51,6 +51,11 @@ namespace Hal
 
         void Init(const uint32_t baudRate, const Instance instance, const UartPins& pins);
 
+        // Plain 2-wire UART, no RS485 DE timing -- e.g. the NINA-W152 link, whose
+        // one flow-control line (Board::NinaRts) is driven as a plain GPIO rather
+        // than the peripheral's hardware DE/RTS, per MainController-Spec.md §5.
+        void Init(const uint32_t baudRate, const Instance instance, const UartPin& tx, const UartPin& rx);
+
         bool    Available() const;
         uint8_t ReadByte();
         void    WriteBytes(const uint8_t* const data, const size_t len);

@@ -52,6 +52,17 @@ namespace NodeLib
         DiagLastError  = 0x52, // RO  code(1) uptimeAtFault(4) context(2)
         DiagLog        = 0x53, // RO  Get -> Report next buffered log line
         DiagReset      = 0x54, // WO  Set -> clear the counters
+
+        // 0x6_  uplink -- MainController (node 0) <-> server only, never on the
+        // RS485 bus (MainController-Server-Link-Spec.md §5).
+        UplinkHello      = 0x60, // MC->S  Report  fwVersion(2) uptimeSec(4) nodeCount(1) authToken(16)
+        Roster           = 0x61, // S<->MC Get/Report  one {nodeId,module,state,lastSeenMs} per frame, 0xFF node terminates
+        NodePresence     = 0x62, // MC->S  Report  nodeId(1) module(1) up(1)
+        ThermostatStatus = 0x63, // MC->S  Report  controllerNodeId(1) linkUp(1) blState(1) fwMajor(1) fwMinor(1) uid[12]
+        Keepalive        = 0x64, // MC<->S Get/Report  no payload
+        OtaControl       = 0x65, // S<->MC Set/Report  image push start/abort/progress
+        OtaData          = 0x66, // S->MC  Set  offset(4) bytes(<=27)
+        MainStatus       = 0x67, // MC->S  Report  rxFrames(4) crcErrors(4) resyncs(4) txDrops(4) downlinkDrops(4) wifiRssi(1) freeHeap(2)
     };
 
     inline std::stringstream& operator<<(std::stringstream& oStrStream, const Endpoint endpoint)
@@ -123,6 +134,30 @@ namespace NodeLib
                 break;
             case Endpoint::DiagReset:
                 oStrStream << "DiagReset";
+                break;
+            case Endpoint::UplinkHello:
+                oStrStream << "UplinkHello";
+                break;
+            case Endpoint::Roster:
+                oStrStream << "Roster";
+                break;
+            case Endpoint::NodePresence:
+                oStrStream << "NodePresence";
+                break;
+            case Endpoint::ThermostatStatus:
+                oStrStream << "ThermostatStatus";
+                break;
+            case Endpoint::Keepalive:
+                oStrStream << "Keepalive";
+                break;
+            case Endpoint::OtaControl:
+                oStrStream << "OtaControl";
+                break;
+            case Endpoint::OtaData:
+                oStrStream << "OtaData";
+                break;
+            case Endpoint::MainStatus:
+                oStrStream << "MainStatus";
                 break;
         }
 

@@ -11,6 +11,8 @@
 
 #include "NodeMaster.h"
 
+#include "UplinkHandler.h"
+
 namespace
 {
     constexpr uint32_t BusBaud = Board::BusBaudRate;
@@ -27,14 +29,19 @@ int main()
     // now -- 16 MHz / 250000 = 64 exact, so the bus baud is fine either way.
 
     NodeLib::NodeMaster master(BusBaud);
+    UplinkHandler       uplink(master);
+
+    uplink.Init();
+    master.RegisterHandler(&uplink);
     master.Init();
     master.StartPollingNodes();
 
     while (true)
     {
+        uplink.Loop();
         master.Loop();
 
-        // TODO: NINA-W152 link (MainController-Spec.md §5) and supervisory
-        // logic (§2) -- aggregate temperatures, expose state, detect faults.
+        // TODO: supervisory logic (MainController-Spec.md §2) -- aggregate
+        // temperatures, expose state, detect faults.
     }
 }

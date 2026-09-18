@@ -55,6 +55,9 @@ compile_commands.json
 !/Software/Makefile
 !/Software/NinaEnable/Makefile
 
+# Wi-Fi/server credentials -- see Secrets.example.h
+/Software/Modules/MainController/Secrets.h
+
 # Temporary files
 *.tmp
 *.log
