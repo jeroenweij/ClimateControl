@@ -77,10 +77,10 @@ uint8_t Uart::ReadByte()
 
 bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    // Unlike the real Hal::Uart, this writes straight into the fake bus
-    // synchronously -- FakeBus::Tx()/TxLen() are meant to see the bytes
-    // immediately after Write() returns, and the 4096-byte buffer is never
-    // realistically exhausted by a test. Pump() is a no-op below to match.
+    // Unlike the real Hal::Uart (interrupt-drained), this writes straight
+    // into the fake bus synchronously -- FakeBus::Tx()/TxLen() are meant to
+    // see the bytes immediately after Write() returns, and the 4096-byte
+    // buffer is never realistically exhausted by a test.
     if (len > bufferSize - txLength)
     {
         return false;
@@ -90,8 +90,4 @@ bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
         txBuffer[txLength++] = data[i];
     }
     return true;
-}
-
-void Uart::Pump()
-{
 }

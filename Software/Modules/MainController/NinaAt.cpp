@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "BoardPins.h"
-#include "Tick.h"
 
 #include "NinaAt.h"
 
@@ -24,7 +23,9 @@ NinaAt::NinaAt() :
     dataMode(false),
     commandPending(false),
     pendingResult(Result::Timeout),
-    commandTimeout()
+    commandTimeout(),
+    resetPending(false),
+    resetTimer()
 {
 }
 
@@ -44,11 +45,15 @@ void NinaAt::Init()
 void NinaAt::PulseReset()
 {
     // Active-low, open-drain; >=50 us low per the module's datasheet
-    // (MainController-Spec.md §5). A generous 100 ms here costs nothing at
-    // boot and is what the documented wedge-recovery path also needs.
+    // (MainController-Spec.md §5). Async -- see the resetPending/resetTimer
+    // comment in NinaAt.h -- Loop() releases it once resetPulseMs elapses.
+    // The 100 ms margin is generous but no longer costs anything: nothing
+    // else here blocks waiting for it.
+    const uint32_t resetPulseMs = 100;
+
     ninaReset.Write(false);
-    Hal::Tick::DelayMs(100);
-    ninaReset.Write(true);
+    resetTimer.Start(resetPulseMs);
+    resetPending = true;
 
     dataMode       = false;
     commandPending = false;
@@ -58,10 +63,11 @@ void NinaAt::PulseReset()
 
 void NinaAt::Loop()
 {
-    // Ahead of the dataMode early-return -- queued TX bytes (AT commands or,
-    // in data mode, UplinkHandler's relayed frames written via RawUart())
-    // need pumping out either way.
-    uart.Pump();
+    if (resetPending && resetTimer.Finished())
+    {
+        ninaReset.Write(true);
+        resetPending = false;
+    }
 
     if (dataMode)
     {

@@ -110,7 +110,6 @@ void NodeMaster::PollNextNode(const int prevNodeId)
             }
 
         } while (!activeNodes[nodeId - 1]);
-        LOG_INFO("PN" << nodeId);
         const Message poll(static_cast<uint8_t>(nodeId), Operation::Poll);
         WriteMessage(poll);
 
@@ -130,7 +129,6 @@ void NodeMaster::HandleInternalOperation(const Message& m)
         }
         case Operation::Done:
         {
-            LOG_INFO("D");
             PollNextNode(m.id.node);
             ResetHearthBeat();
             break;

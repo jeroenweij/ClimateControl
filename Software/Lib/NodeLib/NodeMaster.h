@@ -48,7 +48,7 @@ namespace NodeLib
         // real Done arrives (HandleInternalOperation restarts it for the
         // next node) or this fires first and Loop() treats the timeout the
         // same as a Done -- move on, same self-healing every round.
-        static const uint32_t pollTimeoutMs = 100;
+        static const uint32_t pollTimeoutMs = 10000;
         Tools::DelayTimer     pollTimeout;
         int                   pendingPollNode;
     };

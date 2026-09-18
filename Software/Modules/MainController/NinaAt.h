@@ -81,4 +81,15 @@ class NinaAt
     bool              commandPending;
     Result            pendingResult;
     Tools::DelayTimer commandTimeout;
+
+    // PulseReset() used to hold RESET_NINA low via a blocking
+    // Hal::Tick::DelayMs(100) -- harmless the one time Init() calls it before
+    // the super-loop starts, but UplinkHandler::Fail() also calls it live,
+    // every time a bring-up attempt fails (empirically, reliably at least
+    // once on every boot on this network) -- a 100ms stall with nothing else
+    // running is enough to blow through an entire bus poll/reply cycle and
+    // lose a node's Done. Async now: PulseReset() only asserts reset and
+    // arms this timer; Loop() releases it once the timer's done.
+    bool              resetPending;
+    Tools::DelayTimer resetTimer;
 };

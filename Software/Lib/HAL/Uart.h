@@ -38,6 +38,21 @@ namespace Hal
     // Two instances coexist on a ControllerNode: USART1 for the main bus and
     // USART2 for the point-to-point Thermostat link
     // (ControllerNode-Thermostat-Link-Spec.md §5).
+    //
+    // Both directions are interrupt-driven, backed by a small per-instance
+    // ring buffer each (see Uart.cpp) -- not polled from Loop() at all. RX:
+    // Init() enables RXNEIE once and leaves it on; USARTx_IRQHandler empties
+    // RDR into the RX ring buffer the moment each byte lands, so a byte
+    // survives however long the main loop takes to get back around to
+    // Available()/ReadByte() (bounded by the ring buffer's depth, not by a
+    // single-byte hardware window -- what actually caused dropped bus bytes
+    // this project hit earlier: something elsewhere in the shared super-loop,
+    // e.g. a blocking NINA write or bit-banged log line, ran long enough to
+    // miss the old single-byte-deep RDR). TX: WriteBytes() copies into the TX
+    // ring buffer and arms TXEIE; USARTx_IRQHandler feeds TDR one byte at a
+    // time and disables TXEIE once the buffer drains. RS485 DE assertion
+    // stays peripheral hardware driven off transmit-register activity
+    // (DEAT/DEDT, set in Init()) either way, interrupt- or polling-fed.
     class Uart
     {
       public:
@@ -56,35 +71,19 @@ namespace Hal
         // than the peripheral's hardware DE/RTS, per MainController-Spec.md §5.
         void Init(const uint32_t baudRate, const Instance instance, const UartPin& tx, const UartPin& rx);
 
+        // Non-blocking; reads straight from the RX ring buffer the ISR fills.
         bool    Available() const;
         uint8_t ReadByte();
 
         // Queues 'data' for transmission and returns immediately -- never
         // blocks on the wire (contrast the old HAL_UART_Transmit(...,
         // HAL_MAX_DELAY) behaviour, which stalled the caller for the whole
-        // transfer and, since this firmware is single-threaded with no RX
-        // FIFO, silently dropped bytes arriving on *any* other UART meanwhile
-        // -- e.g. NINA writes blocking the bus RX poll long enough to lose a
-        // node's reply). Copies into a small per-instance ring buffer; bytes
-        // actually reach the wire incrementally via Pump(). Atomic: if 'len'
-        // doesn't fully fit, nothing is queued (never emits a half-written,
-        // unparseable frame) -- returns false, caller's own retry/backstop
-        // policy (e.g. NodeLib's queue-drop, MainController-Server-Link-
-        // Spec.md §7.2) applies same as any other dropped message.
+        // transfer). Atomic: if 'len' doesn't fully fit in the TX ring
+        // buffer, nothing is queued (never emits a half-written, unparseable
+        // frame) -- returns false, caller's own retry/backstop policy (e.g.
+        // NodeLib's queue-drop, MainController-Server-Link-Spec.md §7.2)
+        // applies same as any other dropped message.
         bool WriteBytes(const uint8_t* const data, const size_t len);
-
-        // Pushes one queued byte onto the wire if the hardware's transmit
-        // register is free right now; a no-op otherwise. Never blocks. Must
-        // be called every Loop() iteration (Node::Loop() and NinaAt::Loop()
-        // already do) for queued bytes to actually go out -- RS485 DE
-        // assertion is peripheral hardware driven off transmit-register
-        // activity (DEAT/DEDT, set in Init()), not this function, so feeding
-        // one byte at a time here keeps DE correctly asserted for the whole
-        // frame as long as Pump() is called well within one byte time of the
-        // previous byte (comfortably true for an idle super-loop; a blocking
-        // call elsewhere in the loop, e.g. bit-banged console logging, can
-        // still starve this -- see Tools::Logger's board-specific backends).
-        void Pump();
 
       private:
         Instance instance = Instance::Usart1;

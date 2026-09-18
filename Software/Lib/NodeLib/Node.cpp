@@ -118,7 +118,6 @@ void Node::PumpRx()
 
 void Node::Loop()
 {
-    uart.Pump();
     PumpRx();
     ServiceIdentify();
 

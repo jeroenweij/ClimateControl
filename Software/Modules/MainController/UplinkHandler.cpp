@@ -95,7 +95,7 @@ void UplinkHandler::Init()
 
 void UplinkHandler::TransitionTo(const State next)
 {
-    LOG_INFO("Uplink: state " << static_cast<int>(state) << " -> " << static_cast<int>(next));
+    LOG_DEBUG("Uplink: state " << static_cast<int>(state) << " -> " << static_cast<int>(next));
     state           = next;
     commandSent     = false;
     attemptsInState = 0;
