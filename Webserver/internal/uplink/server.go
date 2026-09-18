@@ -131,16 +131,24 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn) {
 	c.readLoop(s.h)
 
 	s.mu.Lock()
-	if s.active == c {
+	wasActive := s.active == c
+	if wasActive {
 		s.active = nil
 	}
 	s.mu.Unlock()
 	c.close()
-	if s.onState != nil {
-		s.onState(false)
+	// A connection superseded by a newer one (see s.active.close() above)
+	// unblocks from readLoop with an error too, reaching this same teardown
+	// path -- only the still-active connection's exit is a real disconnect.
+	// Firing onState/OnDisconnect unconditionally here clobbers the new
+	// connection's "up" state with a stale "down" from the one it replaced.
+	if wasActive {
+		if s.onState != nil {
+			s.onState(false)
+		}
+		s.h.OnDisconnect()
+		s.log.Info("uplink disconnected", "remote", nc.RemoteAddr().String())
 	}
-	s.h.OnDisconnect()
-	s.log.Info("uplink disconnected", "remote", nc.RemoteAddr().String())
 }
 
 // --- per-connection ---------------------------------------------------------
