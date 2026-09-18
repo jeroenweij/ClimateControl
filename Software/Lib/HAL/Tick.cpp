@@ -6,6 +6,15 @@
 
 #include "Tick.h"
 
+// startup_stm32g031xx.s leaves SysTick_Handler weakly aliased to
+// Default_Handler (an infinite-loop trap) -- without this, the first SysTick
+// interrupt HAL_InitTick() arms (in HAL_Init(), via System::Init()) freezes
+// the CPU the moment it fires, hanging any HAL_Delay()/DelayMs() caller.
+extern "C" void SysTick_Handler()
+{
+    HAL_IncTick();
+}
+
 uint32_t Hal::Tick::Millis()
 {
     return HAL_GetTick();
