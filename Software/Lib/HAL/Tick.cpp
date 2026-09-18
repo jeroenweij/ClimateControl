@@ -25,6 +25,26 @@ void Hal::Tick::DelayMs(const uint32_t ms)
     HAL_Delay(ms);
 }
 
+uint32_t Hal::Tick::Micros()
+{
+    uint32_t ms;
+    uint32_t val;
+    uint32_t ms2;
+
+    do
+    {
+        ms  = HAL_GetTick();
+        val = SysTick->VAL;
+        ms2 = HAL_GetTick();
+    } while (ms != ms2); // retry if the 1 ms tick rolled over mid-read
+
+    const uint32_t reload        = SysTick->LOAD + 1U;
+    const uint32_t ticksPerUs    = SystemCoreClock / 1000000U;
+    const uint32_t elapsedInTick = (reload - 1U - val) / ticksPerUs; // counts down from reload-1
+
+    return ms * 1000U + elapsedInTick;
+}
+
 void Hal::Tick::DelayUs(const uint32_t us)
 {
     if (us == 0U)

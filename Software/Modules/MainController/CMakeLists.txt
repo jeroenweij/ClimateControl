@@ -5,6 +5,7 @@ add_stm32_executable(mainController
         NinaLineParser.cpp
         NinaAt.cpp
         UplinkHandler.cpp
+        DebugLog.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/mainController.ld
     MODULE MainController
     LIBRARIES

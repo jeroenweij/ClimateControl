@@ -10,6 +10,8 @@ add_library(Hal STATIC
     Uart.cpp
     OneWire.h
     OneWire.cpp
+    BitBangSerial.h
+    BitBangSerial.cpp
     Flash.h
     Flash.cpp
     Crc.h
