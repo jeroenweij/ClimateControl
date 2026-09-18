@@ -20,8 +20,7 @@ using NodeLib::Operation;
 
 namespace
 {
-    const uint32_t baud   = 250000;
-    const uint8_t  peerId = 6; // ControllerNode id, shared with its Thermostat
+    const uint8_t peerId = 6; // ControllerNode id, shared with its Thermostat
 
     struct RecordingHandler : NodeLib::INodeHandler
     {
@@ -60,7 +59,7 @@ namespace
 CC_TEST(LinkMaster, IsAMasterAndDiscoversOnInit)
 {
     ResetWorld();
-    LinkMaster       link(baud);
+    LinkMaster       link;
     RecordingHandler handler;
     link.RegisterHandler(&handler);
     link.Init();
@@ -77,7 +76,7 @@ CC_TEST(LinkMaster, IsAMasterAndDiscoversOnInit)
 CC_TEST(LinkMaster, PollsThePeerOnTheInterval)
 {
     ResetWorld();
-    LinkMaster link(baud);
+    LinkMaster link;
     link.Init();
 
     FakeBus::Reset();
@@ -95,7 +94,7 @@ CC_TEST(LinkMaster, PollsThePeerOnTheInterval)
 CC_TEST(LinkMaster, ForwardsAPeerReportToTheHandler)
 {
     ResetWorld();
-    LinkMaster       link(baud);
+    LinkMaster       link;
     RecordingHandler handler;
     link.RegisterHandler(&handler);
     link.Init();
@@ -115,7 +114,7 @@ CC_TEST(LinkMaster, ForwardsAPeerReportToTheHandler)
 CC_TEST(LinkMaster, LearnsBootloaderStateFromAnnounce)
 {
     ResetWorld();
-    LinkMaster link(baud);
+    LinkMaster link;
     link.Init();
 
     Message announce(peerId, Operation::Announce);
@@ -131,7 +130,7 @@ CC_TEST(LinkMaster, LearnsBootloaderStateFromAnnounce)
 CC_TEST(LinkMaster, DropsTheLinkAfterMissedPolls)
 {
     ResetWorld();
-    LinkMaster       link(baud);
+    LinkMaster       link;
     RecordingHandler handler;
     link.RegisterHandler(&handler);
     link.Init();
@@ -151,7 +150,7 @@ CC_TEST(LinkMaster, DropsTheLinkAfterMissedPolls)
 CC_TEST(LinkMaster, InjectedSetReachesThePeerOnTheNextPoll)
 {
     ResetWorld();
-    LinkMaster link(baud);
+    LinkMaster link;
     link.Init();
 
     const uint8_t open = 100;

@@ -22,7 +22,7 @@ int main()
 
     // TODO: clock tree to 64 MHz (HSI16 -> PLL). 16 MHz / 250000 = 64 exact.
 
-    NodeLib::Node     node(Board::BusBaudRate, Hal::Uart::Instance::Usart2, Board::LinkUart);
+    NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart);
     ThermostatHandler handler(node);
 
     handler.Init();

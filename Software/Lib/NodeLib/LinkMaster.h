@@ -23,7 +23,7 @@ namespace NodeLib
     class LinkMaster : public Node
     {
       public:
-        explicit LinkMaster(const uint32_t baudRate);
+        explicit LinkMaster();
 
         void Init();
         void Loop();

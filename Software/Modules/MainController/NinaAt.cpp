@@ -58,6 +58,11 @@ void NinaAt::PulseReset()
 
 void NinaAt::Loop()
 {
+    // Ahead of the dataMode early-return -- queued TX bytes (AT commands or,
+    // in data mode, UplinkHandler's relayed frames written via RawUart())
+    // need pumping out either way.
+    uart.Pump();
+
     if (dataMode)
     {
         return; // caller drains raw bytes itself

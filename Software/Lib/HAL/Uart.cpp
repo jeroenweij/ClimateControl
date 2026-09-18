@@ -15,6 +15,24 @@ namespace
     // state lives here keyed by Instance.
     UART_HandleTypeDef handles[2] = {};
 
+    // Non-blocking TX ring buffer, one per instance, same keyed-by-Instance
+    // pattern as 'handles' above. Sized to comfortably hold the largest
+    // single enqueue used anywhere: a full NodeLib frame (2 sync + 1 len + 3
+    // header + 32 data + 2 crc = 40 bytes, Id.h's MAX_DATA) or the longest AT
+    // command MainController sends NINA (AT+UWSC's SSID/PSK strings, under
+    // 100 bytes) -- with headroom to queue a couple of those before a
+    // WriteBytes() call has to reject for lack of room.
+    const size_t txBufferSize = 128;
+
+    struct TxRingBuffer
+    {
+        uint8_t buffer[txBufferSize];
+        size_t  head; // next write index
+        size_t  tail; // next read index
+        size_t  count;
+    };
+    TxRingBuffer txBuffers[2] = {};
+
     USART_TypeDef* Regs(const Uart::Instance instance)
     {
         return instance == Uart::Instance::Usart2 ? USART2 : USART1;
@@ -23,6 +41,11 @@ namespace
     UART_HandleTypeDef& Handle(const Uart::Instance instance)
     {
         return handles[static_cast<int>(instance)];
+    }
+
+    TxRingBuffer& TxBuffer(const Uart::Instance instance)
+    {
+        return txBuffers[static_cast<int>(instance)];
     }
 
     void ConfigureAfPin(const Hal::Pin pin, const uint8_t alternateFunction)
@@ -133,7 +156,39 @@ uint8_t Uart::ReadByte()
     return static_cast<uint8_t>(Regs(instance)->RDR);
 }
 
-void Uart::WriteBytes(const uint8_t* const data, const size_t len)
+bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    HAL_UART_Transmit(&Handle(instance), data, static_cast<uint16_t>(len), HAL_MAX_DELAY);
+    TxRingBuffer& tx = TxBuffer(instance);
+
+    if (len > txBufferSize - tx.count)
+    {
+        return false; // wouldn't fully fit -- reject atomically, queue nothing
+    }
+
+    for (size_t i = 0; i < len; i++)
+    {
+        tx.buffer[tx.head] = data[i];
+        tx.head            = (tx.head + 1) % txBufferSize;
+    }
+    tx.count += len;
+    return true;
+}
+
+void Uart::Pump()
+{
+    UART_HandleTypeDef& handle = Handle(instance);
+    TxRingBuffer&       tx     = TxBuffer(instance);
+
+    if (tx.count == 0)
+    {
+        return;
+    }
+    if (!__HAL_UART_GET_FLAG(&handle, UART_FLAG_TXE))
+    {
+        return;
+    }
+
+    Regs(instance)->TDR = tx.buffer[tx.tail];
+    tx.tail             = (tx.tail + 1) % txBufferSize;
+    tx.count--;
 }

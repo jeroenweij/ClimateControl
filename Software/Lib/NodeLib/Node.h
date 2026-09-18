@@ -41,8 +41,8 @@ namespace NodeLib
         // The 1-arg form binds the RS485 main bus (USART1 / Board::BusUart). The
         // 3-arg form lets a ControllerNode also drive USART2 for its Thermostat
         // link (ControllerNode-Thermostat-Link-Spec.md §5).
-        Node(const uint32_t baudRate);
-        Node(const uint32_t baudRate, const Hal::Uart::Instance instance, const Hal::UartPins& pins);
+        Node();
+        Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins);
 
         void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
@@ -101,7 +101,6 @@ namespace NodeLib
         void              StartIdentify(uint8_t seconds);
         void              ServiceIdentify();
 
-        uint32_t            baudRate;
         Hal::Uart::Instance busInstance;
         const Hal::UartPins busPins;
 

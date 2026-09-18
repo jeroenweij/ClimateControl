@@ -36,9 +36,6 @@ using NodeLib::ConfigStore;
 
 namespace
 {
-    // One baud everywhere -- the OTA transfer runs at the normal bus rate.
-    constexpr uint32_t BusBaud = Board::BusBaudRate;
-
     bool EnterBootloaderRequested()
     {
         if (Backup::Read(Backup::Reg::Boot) != Board::EnterBootloaderMagic)
@@ -67,7 +64,7 @@ namespace
         {
             // Provisioned node: serve a firmware image over RS485 at
             // ConfigStore::NodeId() (Node-Flash spec §6).
-            Boot::FirmwareSlave slave(BusBaud, ConfigStore::NodeId(), static_cast<uint8_t>(ConfigStore::GetModule()));
+            Boot::FirmwareSlave slave(ConfigStore::NodeId(), static_cast<uint8_t>(ConfigStore::GetModule()));
             slave.Init();
             while (true)
             {

@@ -56,7 +56,7 @@ namespace Board
     // Wire bit rate for the RS485 main bus and the ControllerNode<->Thermostat
     // link -- an exact integer USART divisor, well within range for the ~100 m /
     // 20-node terminated bus. See RS485-Node-Protocol-Spec-STM32G030.md §9.
-    constexpr uint32_t BusBaudRate = 250000;
+    constexpr uint32_t BusBaudRate = 115200;
 
     // --- Status indicators & user button (all three boards) ---------------
     inline const Hal::Pin ActivityLed{GPIOA, GPIO_PIN_7}; // pin 14  net "LED"         (NodeLib ledPin)

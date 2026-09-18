@@ -75,10 +75,23 @@ uint8_t Uart::ReadByte()
     return rxCursor < rxLength ? rxBuffer[rxCursor++] : 0u;
 }
 
-void Uart::WriteBytes(const uint8_t* const data, const size_t len)
+bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    for (size_t i = 0; i < len && txLength < bufferSize; i++)
+    // Unlike the real Hal::Uart, this writes straight into the fake bus
+    // synchronously -- FakeBus::Tx()/TxLen() are meant to see the bytes
+    // immediately after Write() returns, and the 4096-byte buffer is never
+    // realistically exhausted by a test. Pump() is a no-op below to match.
+    if (len > bufferSize - txLength)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++)
     {
         txBuffer[txLength++] = data[i];
     }
+    return true;
+}
+
+void Uart::Pump()
+{
 }

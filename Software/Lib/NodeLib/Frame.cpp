@@ -163,10 +163,22 @@ void Frame::Write(Hal::Uart& uart, const Message& message) const
     const uint8_t  headerAndDataLen = static_cast<uint8_t>(3 + message.len);
     const uint16_t computedCrc      = crc.Compute(headerAndDataBuffer, headerAndDataLen);
 
-    uart.WriteBytes(frameStart, sizeof(frameStart));
-    uart.WriteBytes(&message.len, 1);
-    uart.WriteBytes(headerAndDataBuffer, headerAndDataLen);
+    // Built into one buffer and queued with a single WriteBytes() call so the
+    // whole frame is enqueued atomically -- Hal::Uart::WriteBytes() rejects
+    // (queues nothing) rather than partially accept, so four separate calls
+    // here could leave a truncated, unparseable frame sitting in the ring
+    // buffer if a later call didn't fit.
+    uint8_t wireBytes[sizeof(frameStart) + 1 + 3 + MAX_DATA + 2];
+    size_t  index      = 0;
+    wireBytes[index++] = frameStart[0];
+    wireBytes[index++] = frameStart[1];
+    wireBytes[index++] = message.len;
+    for (uint8_t i = 0; i < headerAndDataLen; i++)
+    {
+        wireBytes[index++] = headerAndDataBuffer[i];
+    }
+    wireBytes[index++] = static_cast<uint8_t>(computedCrc & 0xFF);
+    wireBytes[index++] = static_cast<uint8_t>(computedCrc >> 8);
 
-    const uint8_t crcBytes[2] = {static_cast<uint8_t>(computedCrc & 0xFF), static_cast<uint8_t>(computedCrc >> 8)};
-    uart.WriteBytes(crcBytes, sizeof(crcBytes));
+    uart.WriteBytes(wireBytes, index);
 }

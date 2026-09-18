@@ -13,11 +13,6 @@
 
 #include "UplinkHandler.h"
 
-namespace
-{
-    constexpr uint32_t BusBaud = Board::BusBaudRate;
-} // namespace
-
 int main()
 {
     // App sits above the bootloader -- point the vector table at ourselves
@@ -28,7 +23,7 @@ int main()
     // TODO: clock tree to 64 MHz (HSI16 -> PLL). Running on HSI16 (16 MHz) for
     // now -- 16 MHz / 250000 = 64 exact, so the bus baud is fine either way.
 
-    NodeLib::NodeMaster master(BusBaud);
+    NodeLib::NodeMaster master;
     UplinkHandler       uplink(master);
 
     uplink.Init();

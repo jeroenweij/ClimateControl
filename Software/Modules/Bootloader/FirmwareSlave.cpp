@@ -67,11 +67,10 @@ namespace
     }
 } // namespace
 
-FirmwareSlave::FirmwareSlave(const uint32_t baudRate, const uint8_t nodeId, const uint8_t module) :
+FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     uart(),
     crc(Hal::Crc::Poly::Ccitt16),
     frame(crc),
-    baudRate(baudRate),
     nodeId(nodeId),
     module(module),
     state(State::Idle),
@@ -90,7 +89,7 @@ FirmwareSlave::FirmwareSlave(const uint32_t baudRate, const uint8_t nodeId, cons
 
 void FirmwareSlave::Init()
 {
-    uart.Init(baudRate, module);
+    uart.Init(Board::BusBaudRate, module);
     heartbeatTimer.Start(HeartbeatMs);
     led.Write(true);
 }

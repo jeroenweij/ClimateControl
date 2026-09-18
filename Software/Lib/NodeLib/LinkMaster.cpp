@@ -14,8 +14,8 @@ using NodeLib::LinkMaster;
 using NodeLib::Message;
 using NodeLib::Operation;
 
-LinkMaster::LinkMaster(const uint32_t baudRate) :
-    Node(baudRate, Hal::Uart::Instance::Usart2, Board::LinkUart),
+LinkMaster::LinkMaster() :
+    Node(Hal::Uart::Instance::Usart2, Board::LinkUart),
     peerId(0),
     linkUp(false),
     peerInBootloader(false),

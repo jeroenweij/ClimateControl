@@ -29,7 +29,7 @@ namespace Boot
     class FirmwareSlave
     {
       public:
-        FirmwareSlave(const uint32_t baudRate, const uint8_t nodeId, const uint8_t module);
+        FirmwareSlave(const uint8_t nodeId, const uint8_t module);
 
         void Init();
         void Loop();
@@ -70,9 +70,8 @@ namespace Boot
         Hal::Crc       crc; // CRC-16/CCITT for the frame CRC; re-init to CRC-32 at End
         NodeLib::Frame frame; // RX parser only -- TX is SendFrame()
 
-        const uint32_t baudRate;
-        const uint8_t  nodeId;
-        const uint8_t  module;
+        const uint8_t nodeId;
+        const uint8_t module;
 
         State    state;
         uint8_t  lastError;

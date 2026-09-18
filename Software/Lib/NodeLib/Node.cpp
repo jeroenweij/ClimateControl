@@ -40,17 +40,16 @@ namespace
     }
 } // namespace
 
-Node::Node(const uint32_t baudRate) :
-    Node(baudRate, Hal::Uart::Instance::Usart1, Board::BusUart)
+Node::Node() :
+    Node(Hal::Uart::Instance::Usart1, Board::BusUart)
 {
 }
 
-Node::Node(const uint32_t baudRate, const Hal::Uart::Instance instance, const Hal::UartPins& pins) :
+Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins) :
     errorHandler(),
     handler(nullptr),
     nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
     messagesQueued(0),
-    baudRate(baudRate),
     busInstance(instance),
     busPins(pins),
     txFrames(0),
@@ -101,7 +100,7 @@ void Node::Init()
         }
     }
 
-    uart.Init(baudRate, busInstance, busPins);
+    uart.Init(Board::BusBaudRate, busInstance, busPins);
 }
 
 void Node::PumpRx()
@@ -119,6 +118,7 @@ void Node::PumpRx()
 
 void Node::Loop()
 {
+    uart.Pump();
     PumpRx();
     ServiceIdentify();
 

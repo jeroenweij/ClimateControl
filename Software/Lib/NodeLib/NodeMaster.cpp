@@ -12,11 +12,13 @@ using NodeLib::Message;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
-NodeMaster::NodeMaster(const uint32_t baudRate) :
-    Node(baudRate),
+NodeMaster::NodeMaster() :
+    Node(),
     activeNodes{},
     nodeModules{},
-    nodesFound(false)
+    nodesFound(false),
+    pollTimeout(),
+    pendingPollNode(0)
 {
     nodeId = masterNodeId;
 }
@@ -40,6 +42,12 @@ void NodeMaster::Init()
 void NodeMaster::Loop()
 {
     Node::Loop();
+
+    if (pollTimeout.Finished())
+    {
+        LOG_WARN("Poll timeout waiting on node " << pendingPollNode << ", moving on");
+        PollNextNode(pendingPollNode);
+    }
 }
 
 void NodeLib::NodeMaster::FlushNow(const bool force)
@@ -102,9 +110,12 @@ void NodeMaster::PollNextNode(const int prevNodeId)
             }
 
         } while (!activeNodes[nodeId - 1]);
-
+        LOG_INFO("PN" << nodeId);
         const Message poll(static_cast<uint8_t>(nodeId), Operation::Poll);
         WriteMessage(poll);
+
+        pendingPollNode = nodeId;
+        pollTimeout.Start(pollTimeoutMs);
     }
 }
 
@@ -119,6 +130,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
         }
         case Operation::Done:
         {
+            LOG_INFO("D");
             PollNextNode(m.id.node);
             ResetHearthBeat();
             break;

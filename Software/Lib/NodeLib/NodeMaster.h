@@ -11,7 +11,7 @@ namespace NodeLib
     class NodeMaster : public Node
     {
       public:
-        NodeMaster(const uint32_t baudRate);
+        NodeMaster();
 
         void Init();
         void Loop();
@@ -38,5 +38,18 @@ namespace NodeLib
         bool    activeNodes[maxNodes];
         uint8_t nodeModules[maxNodes];
         bool    nodesFound;
+
+        // A node's reply can still be lost outright (a real bus always has
+        // some residual risk -- electrical noise, a marginal edge case, even
+        // with the write path non-blocking) -- without this, PollNextNode()
+        // only ever re-fires on that node's own Done, so one lost reply
+        // wedges the whole round-robin forever. Started on every poll sent,
+        // stopped by DelayTimer::Finished() itself the moment either the
+        // real Done arrives (HandleInternalOperation restarts it for the
+        // next node) or this fires first and Loop() treats the timeout the
+        // same as a Done -- move on, same self-healing every round.
+        static const uint32_t pollTimeoutMs = 100;
+        Tools::DelayTimer     pollTimeout;
+        int                   pendingPollNode;
     };
 } // namespace NodeLib

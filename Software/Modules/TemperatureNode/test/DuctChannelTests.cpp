@@ -84,7 +84,7 @@ namespace
 CC_TEST(DuctChannel, BecomesPresentWithTheDecodedValue)
 {
     ResetWorld();
-    Node node(115200);
+    Node node;
     node.Init();
 
     DuctChannel channel(node, Endpoint::SupplyTemp, line);
@@ -104,7 +104,7 @@ CC_TEST(DuctChannel, BecomesPresentWithTheDecodedValue)
 CC_TEST(DuctChannel, EmitsAReportAfterTheFirstSample)
 {
     ResetWorld();
-    Node node(115200);
+    Node node;
     node.Init();
 
     DuctChannel channel(node, Endpoint::SupplyTemp, line);
@@ -125,7 +125,7 @@ CC_TEST(DuctChannel, EmitsAReportAfterTheFirstSample)
 CC_TEST(DuctChannel, AbsentSensorStaysNotPresent)
 {
     ResetWorld();
-    Node node(115200);
+    Node node;
     node.Init();
 
     DuctChannel channel(node, Endpoint::ReturnTemp, line);
@@ -146,7 +146,7 @@ CC_TEST(DuctChannel, AbsentSensorStaysNotPresent)
 CC_TEST(DuctChannel, InvalidateForcesAFreshReportOfAnUnchangedValue)
 {
     ResetWorld();
-    Node node(115200);
+    Node node;
     node.Init();
 
     DuctChannel channel(node, Endpoint::SupplyTemp, line);

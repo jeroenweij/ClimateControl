@@ -17,8 +17,6 @@ using NodeLib::Operation;
 
 namespace
 {
-    const uint32_t baud = 115200;
-
     void ResetWorld()
     {
         FakeBus::Reset();
@@ -39,14 +37,14 @@ namespace
 CC_TEST(NodeMaster, StartsWithTheReservedMasterAddress)
 {
     ResetWorld();
-    NodeMaster master(baud);
+    NodeMaster master;
     CC_CHECK_EQ(master.GetId(), 0);
 }
 
 CC_TEST(NodeMaster, BuildsATypedRosterFromAnnounces)
 {
     ResetWorld();
-    NodeMaster master(baud);
+    NodeMaster master;
 
     Announce(3, 2); // TemperatureNode
     Announce(1, 1); // ControllerNode
@@ -62,7 +60,7 @@ CC_TEST(NodeMaster, BuildsATypedRosterFromAnnounces)
 CC_TEST(NodeMaster, PollsOnlyDiscoveredNodesInOrder)
 {
     ResetWorld();
-    NodeMaster master(baud);
+    NodeMaster master;
 
     Announce(2, 2);
     Announce(5, 2);
@@ -101,7 +99,7 @@ CC_TEST(NodeMaster, PollsOnlyDiscoveredNodesInOrder)
 CC_TEST(NodeMaster, IgnoresAnnounceForAnOutOfRangeNode)
 {
     ResetWorld();
-    NodeMaster master(baud);
+    NodeMaster master;
 
     Announce(0, 2);
     Announce(240, 2);

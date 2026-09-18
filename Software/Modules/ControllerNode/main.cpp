@@ -27,8 +27,8 @@ int main()
 
     Damper damper;
 
-    NodeLib::Node       busNode(Board::BusBaudRate);
-    NodeLib::LinkMaster link(Board::BusBaudRate);
+    NodeLib::Node       busNode;
+    NodeLib::LinkMaster link;
 
     ThermostatLink    thermostatLink(link, damper);
     ControllerHandler handler(busNode, damper, thermostatLink);
