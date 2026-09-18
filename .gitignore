@@ -75,3 +75,5 @@ Testing/
 .cache/
 
 Software/CMakeLists.txt.user
+
+Software/.qtcreator/
