@@ -124,6 +124,10 @@ func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	_ = s.st.UpsertNode(context.Background(), int(e.NodeID), e.Module, true)
 	s.warnIfUnexpected(int(e.NodeID), e.Module)
 	s.hb.PublishPresence(int(e.NodeID), e.Module, true)
+	// SystemInfo (running firmware version) is Get-only on the node side --
+	// it's never self-reported (Node.cpp's HandleSystemMessage), so the
+	// Firmware tab's "Installed" column stays unknown unless something asks.
+	s.send.SendGet(int(e.NodeID), nodelib.EndpointSystemInfo)
 }
 
 // OnPresence records a node up/down transition.
@@ -133,6 +137,7 @@ func (s *Service) OnPresence(p nodelib.NodePresence) {
 	if p.Up {
 		s.warnIfUnexpected(int(p.NodeID), p.Module)
 		s.reassertOverrides(int(p.NodeID))
+		s.send.SendGet(int(p.NodeID), nodelib.EndpointSystemInfo)
 	}
 }
 
