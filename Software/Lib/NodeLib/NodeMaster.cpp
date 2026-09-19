@@ -15,8 +15,7 @@ using NodeLib::Operation;
 NodeMaster::NodeMaster() :
     Node(),
     state(EMasterState::Start),
-    activeNodes{},
-    nodeModules{},
+    slaveNodes{},
     nodesFound(false),
     pollTimeout(),
     pendingPollNode(0),
@@ -27,13 +26,20 @@ NodeMaster::NodeMaster() :
     nodeId = masterNodeId;
 }
 
+NodeMaster::SNode::SNode() :
+    active(false),
+    moduleType(0),
+    inBootloader(false)
+{
+}
+
 uint8_t NodeMaster::NodeModule(const uint8_t nodeId) const
 {
     if (nodeId < 1 || nodeId > maxNodes)
     {
         return 0;
     }
-    return nodeModules[nodeId - 1];
+    return slaveNodes[nodeId - 1].moduleType;
 }
 
 void NodeMaster::Init()
@@ -85,9 +91,16 @@ void NodeMaster::Loop()
         case EMasterState::Polling:
             if (pollTimeout.Finished())
             {
-                activeNodes[pendingPollNode - 1] = false;
-                nodesFound                       = ActiveNodeCount() > 0;
-                state                            = EMasterState::Flush;
+                if (slaveNodes[pendingPollNode - 1].inBootloader)
+                {
+                    state = EMasterState::Flush;
+                    ResetHearthBeat();
+                    break;
+                }
+                LOG_WARN("Lost Node " << pendingPollNode);
+                slaveNodes[pendingPollNode - 1].active = false;
+                nodesFound                             = ActiveNodeCount() > 0;
+                state                                  = EMasterState::Flush;
             }
 
             break;
@@ -108,9 +121,9 @@ void NodeMaster::DetectNodes()
 const uint8_t NodeMaster::ActiveNodeCount() const
 {
     uint8_t nodeCount = 0;
-    for (const auto& nodeActive : activeNodes)
+    for (const auto& nodeActive : slaveNodes)
     {
-        if (nodeActive)
+        if (nodeActive.active)
         {
             nodeCount++;
         }
@@ -140,7 +153,7 @@ void NodeMaster::PollNextNode(const int prevNodeId)
                 nodeId = 1;
             }
 
-        } while (!activeNodes[nodeId - 1]);
+        } while (!slaveNodes[nodeId - 1].active);
         const Message poll(static_cast<uint8_t>(nodeId), Operation::Poll);
         WriteMessage(poll);
 
@@ -159,7 +172,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
     {
         case Operation::Announce:
         {
-            NodeHello(m.id.node, m.len >= 1 ? m.data[0] : 0);
+            NodeHello(m.id.node, m.len >= 1 ? m.data[0] : 0, m.len >= 2 ? m.data[1] > 0 : false);
             break;
         }
         case Operation::Done:
@@ -191,13 +204,14 @@ void NodeMaster::HandleMasterMessage(const Message& m)
     }
 }
 
-void NodeMaster::NodeHello(int nodeId, uint8_t module)
+void NodeMaster::NodeHello(int nodeId, uint8_t module, bool bootloader)
 {
     if (nodeId > 0 && nodeId <= maxNodes)
     {
-        LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " module " << module);
-        activeNodes[nodeId - 1] = true;
-        nodeModules[nodeId - 1] = module;
-        nodesFound              = true;
+        LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? 'B' : 'A'));
+        slaveNodes[nodeId - 1].active       = true;
+        slaveNodes[nodeId - 1].moduleType   = module;
+        slaveNodes[nodeId - 1].inBootloader = bootloader;
+        nodesFound                          = true;
     }
 }

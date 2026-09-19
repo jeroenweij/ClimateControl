@@ -34,19 +34,27 @@ namespace NodeLib
             Polling
         };
 
+        struct SNode
+        {
+            SNode();
+
+            bool    active;
+            uint8_t moduleType;
+            bool    inBootloader;
+        };
+
         void DetectNodes();
         void PollNextNode(const int prevNodeId);
         void HandleMasterMessage(const Message& m) override;
-        void NodeHello(int nodeId, uint8_t module);
+        void NodeHello(int nodeId, uint8_t module, bool bootloader);
         void HandleInternalOperation(const Message& m);
 
         EMasterState state;
 
         // Sized at the compile-time maxNodes cap, not the runtime numNodes -- see
         // Node.h's comment on that split.
-        bool    activeNodes[maxNodes];
-        uint8_t nodeModules[maxNodes];
-        bool    nodesFound;
+        SNode slaveNodes[maxNodes];
+        bool  nodesFound;
 
         // A node's reply can still be lost outright (a real bus always has
         // some residual risk -- electrical noise, a marginal edge case, even
@@ -57,7 +65,7 @@ namespace NodeLib
         // real Done arrives (HandleInternalOperation restarts it for the
         // next node) or this fires first and Loop() treats the timeout the
         // same as a Done -- move on, same self-healing every round.
-        static const uint32_t pollTimeoutMs = 1000;
+        static const uint32_t pollTimeoutMs = 200;
         Tools::DelayTimer     pollTimeout;
         int                   pendingPollNode;
 
@@ -66,7 +74,7 @@ namespace NodeLib
         // so a node plugged in after the initial DetectNodes() in Init() would
         // otherwise stay invisible forever. Re-run DetectNodes() on this
         // cadence to pick up newly plugged nodes.
-        static const uint32_t detectIntervalMs = 1000;
+        static const uint32_t detectIntervalMs = 15000;
         Tools::DelayTimer     timeoutTimer;
         Tools::DelayTimer     detectTimer;
 

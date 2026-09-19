@@ -311,6 +311,21 @@ void Node::HandleFirmwareMessage(const Message& m)
         static_cast<FirmwareOp>(m.data[0]) == FirmwareOp::EnterBootloader)
     {
         SendAck(m);
+
+        // Tell the master we're heading into the bootloader *before* it
+        // actually happens, piggybacked on this same poll response --
+        // otherwise the only way it finds out is a timeout on the very next
+        // poll racing this node's reboot (NodeMaster.h's inBootloader
+        // comment), indistinguishable from a genuinely lost node. Reuses the
+        // same Announce shape (module + bootloader-state byte)
+        // NodeMaster::NodeHello() already parses from a real rediscovery, and
+        // that Boot::FirmwareSlave::SendAnnounce() already sends once
+        // resident (Modules/Bootloader/FirmwareSlave.cpp) -- this just gets
+        // the master there one round-trip sooner instead of waiting for it
+        // to notice on its own.
+        const uint8_t announceData[2] = {static_cast<uint8_t>(ConfigStore::GetModule()), 1};
+        QueueMessage(Id(nodeId, Endpoint::Transport, Operation::Announce), announceData, 2);
+
         RequestReset(true);
         return;
     }
@@ -519,10 +534,15 @@ void Node::HandlePollRequest()
     {
         // Announce carries the module type (data[0]) so one discovery sweep
         // gives the master a typed roster -- no per-node SystemInfo round-trip
-        // (Spec/Node-Message-Model-Spec.md §4).
+        // (Spec/Node-Message-Model-Spec.md §4) -- plus a bootloader-state byte
+        // (data[1], 0 here: a running app is never in the bootloader) in the
+        // same shape Boot::FirmwareSlave::SendAnnounce() uses for its own
+        // (always-nonzero) state, so NodeMaster::NodeHello() can tell the two
+        // apart from either one without a separate message.
         Message m(nodeId, Operation::Announce);
         m.data[0] = static_cast<uint8_t>(ConfigStore::GetModule());
-        m.len     = 1;
+        m.data[1] = 0;
+        m.len     = 2;
         Hal::Tick::DelayMs(static_cast<uint32_t>((nodeId - 1) * nodeSpacing));
         LOG_INFO("Return Announce");
         WriteMessage(m);
