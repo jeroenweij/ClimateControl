@@ -17,33 +17,33 @@ namespace Tools
     } // namespace Logger
 } // namespace Tools
 
-#define LOG_ERROR(message)                              \
-    {                                                   \
-        std::stringstream logStream;                    \
-        logStream << message;                           \
-        Tools::Logger::Write("ERROR", logStream.str()); \
+#define LOG_ERROR(message)                          \
+    {                                               \
+        std::stringstream logStream;                \
+        logStream << message;                       \
+        Tools::Logger::Write("E", logStream.str()); \
     }
 
-#define LOG_WARN(message)                                 \
-    {                                                     \
-        std::stringstream logStream;                      \
-        logStream << message;                             \
-        Tools::Logger::Write("WARNING", logStream.str()); \
+#define LOG_WARN(message)                           \
+    {                                               \
+        std::stringstream logStream;                \
+        logStream << message;                       \
+        Tools::Logger::Write("W", logStream.str()); \
     }
 
-#define LOG_INFO(message)                              \
-    {                                                  \
-        std::stringstream logStream;                   \
-        logStream << message;                          \
-        Tools::Logger::Write("INFO", logStream.str()); \
+#define LOG_INFO(message)                           \
+    {                                               \
+        std::stringstream logStream;                \
+        logStream << message;                       \
+        Tools::Logger::Write("I", logStream.str()); \
     }
 
 #ifdef DEBUG
-#define LOG_DEBUG(message)                              \
-    {                                                   \
-        std::stringstream logStream;                    \
-        logStream << message;                           \
-        Tools::Logger::Write("DEBUG", logStream.str()); \
+#define LOG_DEBUG(message)                          \
+    {                                               \
+        std::stringstream logStream;                \
+        logStream << message;                       \
+        Tools::Logger::Write("D", logStream.str()); \
     }
 #else
 #define LOG_DEBUG(message) \

@@ -129,7 +129,7 @@ void Node::Loop()
 
 void Node::ResetHearthBeat()
 {
-    hearthBeatTimer.Start(500);
+    hearthBeatTimer.Start(1000);
 }
 
 bool Node::ReadMessage(const Message& m)

@@ -18,7 +18,8 @@ NodeMaster::NodeMaster() :
     nodeModules{},
     nodesFound(false),
     pollTimeout(),
-    pendingPollNode(0)
+    pendingPollNode(0),
+    detectTimer()
 {
     nodeId = masterNodeId;
 }
@@ -37,6 +38,7 @@ void NodeMaster::Init()
     Node::Init();
 
     DetectNodes();
+    detectTimer.Start(detectIntervalMs);
 }
 
 void NodeMaster::Loop()
@@ -46,7 +48,19 @@ void NodeMaster::Loop()
     if (pollTimeout.Finished())
     {
         LOG_WARN("Poll timeout waiting on node " << pendingPollNode << ", moving on");
+        activeNodes[pendingPollNode - 1] = false;
+        nodesFound                       = ActiveNodeCount() > 0;
         PollNextNode(pendingPollNode);
+    }
+
+    if (!nodesFound && detectTimer.Finished())
+    {
+        detectTimer.Start(detectIntervalMs);
+        DetectNodes();
+        if (nodesFound)
+        {
+            StartPollingNodes();
+        }
     }
 }
 
@@ -76,7 +90,7 @@ void NodeMaster::DetectNodes()
         Node::Loop();
     }
 
-    LOG_INFO("Done Detecting Nodes");
+    LOG_INFO("Done Detecting Nodes " << ActiveNodeCount());
 }
 
 const uint8_t NodeMaster::ActiveNodeCount() const
@@ -96,6 +110,12 @@ void NodeMaster::PollNextNode(const int prevNodeId)
 {
     // Flush any queued messages
     flushQueue();
+
+    if (detectTimer.Finished())
+    {
+        detectTimer.Start(detectIntervalMs);
+        DetectNodes();
+    }
 
     if (nodesFound)
     {
@@ -129,8 +149,11 @@ void NodeMaster::HandleInternalOperation(const Message& m)
         }
         case Operation::Done:
         {
-            PollNextNode(m.id.node);
-            ResetHearthBeat();
+            if (m.id.node == pendingPollNode)
+            {
+                PollNextNode(m.id.node);
+                ResetHearthBeat();
+            }
             break;
         }
         default:
