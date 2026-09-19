@@ -86,7 +86,8 @@ namespace Boot
 
         bool statusPending;
 
-        Hal::Gpio         led;
+        Hal::Gpio         activityLed;
+        Hal::Gpio         errorLed;
         Tools::DelayTimer heartbeatTimer;
     };
 } // namespace Boot

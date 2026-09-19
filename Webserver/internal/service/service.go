@@ -127,6 +127,12 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 
 	switch f.Operation {
 	case nodelib.OpReport:
+		if f.Endpoint == nodelib.EndpointFirmware || f.Endpoint == nodelib.EndpointThermostatFirmware {
+			// OTA progress, not sensor data -- hand it to the driver instead
+			// of the readings store (ota.go).
+			s.onFirmwareReport(f)
+			return
+		}
 		v := nodelib.DecodeValue(f.Endpoint, f.Data)
 		now := time.Now().UnixMilli()
 		if err := s.st.InsertReading(ctx, now, node, f.Endpoint, f.Data, v); err != nil {
@@ -189,13 +195,14 @@ func (s *Service) OnThermostatStatus(t nodelib.ThermostatStatus) {
 	s.hb.PublishThermostat(int(t.ControllerNodeID), t.LinkUp)
 }
 
-// OnOtaReport feeds the firmware-push driver.
-func (s *Service) OnOtaReport(r nodelib.OtaControlReport) {
+// onFirmwareReport feeds a relayed Firmware / ThermostatFirmware Report to
+// the active push driver, if this frame belongs to it.
+func (s *Service) onFirmwareReport(f nodelib.Frame) {
 	s.mu.Lock()
 	d := s.ota
 	s.mu.Unlock()
 	if d != nil {
-		d.onReport(r)
+		d.onReport(f)
 	}
 }
 

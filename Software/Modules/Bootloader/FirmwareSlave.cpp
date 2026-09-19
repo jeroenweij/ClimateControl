@@ -82,7 +82,8 @@ FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     pageBase(Board::Flash::AppBase),
     pageLen(0),
     statusPending(false),
-    led(Board::ErrorLed, Hal::Gpio::Mode::Output),
+    activityLed(Board::ActivityLed, Hal::Gpio::Mode::Output), // TEMP DEBUG -- revert after triage
+    errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
     heartbeatTimer()
 {
 }
@@ -91,7 +92,8 @@ void FirmwareSlave::Init()
 {
     uart.Init(Board::BusBaudRate, module);
     heartbeatTimer.Start(HeartbeatMs);
-    led.Write(true);
+    activityLed.Write(false);
+    errorLed.Write(false);
 }
 
 void FirmwareSlave::Loop()
@@ -110,6 +112,8 @@ void FirmwareSlave::Loop()
 
 void FirmwareSlave::OnMessage(const Message& m)
 {
+    activityLed.Write(!activityLed.Read()); // TEMP DEBUG -- revert after triage: toggles on every parsed frame
+
     if (m.id.operation == Operation::Discover)
     {
         SendAnnounce();
@@ -415,7 +419,8 @@ void FirmwareSlave::Heartbeat()
 {
     if (heartbeatTimer.Finished())
     {
-        led.Write(state == State::Error ? true : !led.Read());
+        errorLed.Write(state == State::Error ? !errorLed.Read() : false);
+        activityLed.Write(state == State::Error ? false : !activityLed.Read());
         heartbeatTimer.Start(state == State::Receiving ? 80 : HeartbeatMs);
     }
 }

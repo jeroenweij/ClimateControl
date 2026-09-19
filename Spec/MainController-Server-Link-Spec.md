@@ -87,11 +87,9 @@ Transport verbs (`Discover` / `Announce` / `Poll` / `Done`) are bus-internal and
 | `0x62` `NodePresence` | MC→S | `Report` | `nodeId(1) · module(1) · up(1)` | A node joined discovery (`up = 1`) or missed its heartbeat (`up = 0`). |
 | `0x63` `ThermostatStatus` | MC→S | `Report` | `controllerNodeId(1) · linkUp(1) · blState(1) · fwMajor(1) · fwMinor(1) · uid[12]` (17 B) | The paired Thermostat behind one ControllerNode — link state + running firmware + identity. On change + slow keepalive; the MC fills it from `Get RoomLink` + `Get ThermostatFirmware`. See `ControllerNode-Thermostat-Link-Spec.md` §5.6. |
 | `0x64` `Keepalive` | ↔ | `Get` / `Report` | none | Idle liveness, ~30 s interval. A missed round trip triggers reconnect. |
-| `0x65` `OtaControl` | S→MC / MC→S | `Set` / `Report` | Set: `targetNodeId(1) · imageSize(4) · imageCrc32(4) · fwVersion(2) · module(1)`. Report: `state(1) · targetNodeId(1) · nextOffset(4) · lastError(1)` | Start / abort / progress of an image push (§8). `targetNodeId = 0` = `MainController` self-update. |
-| `0x66` `OtaData` | S→MC | `Set` | `offset(4) · bytes(≤27)` — identical layout to the bus `Firmware Write` payload | One image chunk; the bridge rewrites the header and forwards it (§8). |
 | `0x67` `MainStatus` | MC→S | `Report` | `rxFrames(4) · crcErrors(4) · resyncs(4) · txDrops(4) · downlinkDrops(4) · wifiRssi(1, int8) · freeHeap(2)` | `MainController` + bus health, ~10 s. `downlinkDrops` counts commands shed by the outbound queue (§7). |
 
-`OtaControl` / `OtaData` share the exact sub-opcode and payload shapes of the bus `Firmware` endpoint, so relaying is a header rewrite rather than a repack.
+Firmware pushes to a bus node do **not** go through this block — see §8. There used to be a `0x65 OtaControl` / `0x66 OtaData` wrapper pair here that the MC rewrote into bus `Firmware` frames; it's gone. `Firmware` (`0x20`) and `ThermostatFirmware` (`0x22`) are already ordinary relayed endpoints (block `0x10`-`0x50`, §6), so the server drives the OTA sequence directly against them — the MC needed no OTA-specific code for that case, since the generic relay already carries it both ways. The wrapper only ever justified itself for a target the relay *can't* reach: `targetNodeId == 0` (§8 step 7, `Firmware` addressed to the MC's own reserved node id — an Open item, not yet handled either way).
 
 ---
 
@@ -193,17 +191,17 @@ The bus is a round-robin poll cycle into which the master injects its own `Set`s
 
 ## 8. Firmware update
 
-Drives the bus OTA sequence in `Node-Flash-Layout-and-Bootloader-Spec.md` §6; the link only feeds it.
+Drives the bus OTA sequence in `Node-Flash-Layout-and-Bootloader-Spec.md` §6 **directly** — `Firmware` (`0x20`) is an ordinary relayed endpoint (§6), so the server is the one running this state machine, addressing the target node id over the socket exactly like any other `Set`/`Get`. The MC does no OTA-specific translation for this path; it's the same generic relay it already does for `SystemInfo`, `DamperTarget`, etc.
 
 1. Operator uploads `<module>.bin` on the Status page. The server validates the `ImageDescriptor` (magic, module, size) and computes the CRC-32.
-2. Server → MC: `Set 0x65 OtaControl {targetNodeId, imageSize, imageCrc32, fwVersion, module}`.
-3. MC puts the target into its bootloader: relay `Set Firmware[EnterBootloader]` on the bus (the app parks outputs, sets the backup magic, resets — `INodeHandler::PrepareForReset`), then poll `Firmware Get` until the node answers `Status` from the bootloader.
-4. MC issues bus `Firmware[Begin]`; the node erases its app slot and reports `bl-receiving`.
-5. Server streams `Set 0x66 OtaData {offset, bytes≤27}`. For each, MC rewrites the header to a bus `Firmware[Write]` (payload copied verbatim) and sends it in the target's poll window. MC relays each `Firmware Status` up as `0x65 OtaControl Report`; if `nextOffset` stalls, MC reports the wanted offset for the server to rewind to.
-6. At `imageSize`, server sends the end marker (`0x65`) → MC issues bus `Firmware[End]` → polls for `bl-valid` → `Firmware[Activate]`. The node clears its magic, resets into the new app, re-announces; the server reads the new `fwVersion` from `SystemInfo`.
-7. **`targetNodeId == 0`** — same `0x65` / `0x66` frames, but MC writes its own application slot with a RAM-resident flash routine (`Node-Flash` §7.1) instead of relaying, then resets. The uplink drops during the write and reconnects on the new image.
+2. Server → bus (relayed): `Set Firmware[EnterBootloader]` addressed to the target node id (the app parks outputs, sets the backup magic, resets — `INodeHandler::PrepareForReset`). Server then polls `Get Firmware` on that node id until it gets back any `Firmware Status` Report — only the bootloader ever sends one, the running app only `Ack`/`Nack`s `Firmware`, so any reply confirms the reset landed.
+3. Server → bus: `Set Firmware[Begin] {module, imageSize, imageCrc32, fwVersion}`; the node erases its app slot and reports `bl-receiving`.
+4. Server streams `Set Firmware[Write] {offset, bytes≤27}` in the target's poll window, watching each relayed `Firmware Status` Report for progress; if `expectedOffset` stalls, the server just resumes writing from whatever offset the node's own Status last reported — no separate rewind signal needed.
+5. At `imageSize`: `Set Firmware[End]` → poll for `bl-valid` → `Set Firmware[Activate]`. The node clears its magic, resets into the new app, re-announces; the server reads the new `fwVersion` from `SystemInfo`.
+6. **Thermostat target** — same steps 3-5, but addressed to `ThermostatFirmware` (`0x22`) on the *owning ControllerNode's* node id instead of `Firmware` on the target's own id, and step 2 is skipped: `ThermostatFirmware[Begin]` does the `EnterBootloader` + bootloader-wait itself, CN-side (`ControllerNode-Thermostat-Link-Spec.md` §5.4).
+7. **`targetNodeId == 0`** — MainController self-update. Not reachable via any relay (the MC doesn't relay to itself); needs a dedicated `Firmware`-addressed-to-node-0 special case in `UplinkHandler` that writes the MC's own application slot with a RAM-resident flash routine (`Node-Flash` §7.1) instead of forwarding onto the bus, then resets. The uplink drops during the write and reconnects on the new image. **Open item — not yet implemented.**
 
-The STM32 working buffer stays ~32 B (one `OtaData` payload); no whole image is buffered.
+The STM32 working buffer stays ~32 B (one `Write` payload); no whole image is buffered.
 
 ---
 
@@ -214,8 +212,9 @@ The STM32 working buffer stays ~32 B (one `OtaData` payload); no whole image is 
 | AT command / response / URC engine | ~2–3 KB | ~0.3 KB line buffer |
 | Socket bridge (open / reconnect / two `Frame` pumps) | ~1–2 KB | ~0.1 KB |
 | `0x60` block handlers (roster, presence, keepalive, status) | ~1 KB | — |
-| OTA glue (`0x65` / `0x66` ↔ bus `Firmware`) | ~1–2 KB | ~32 B chunk |
-| **Total** | **~5–8 KB** | **< 1 KB** |
+| **Total** | **~4–6 KB** | **< 1 KB** |
+
+Firmware pushes no longer cost the MC anything beyond the generic relay it already has — no separate OTA glue line item (§8).
 
 The MainController image is ~20 KB in a 52 KB slot. `Frame` / `Message` / `Id` / `Crc` / `NodeMaster` are already linked.
 
@@ -237,6 +236,6 @@ The MainController image is ~20 KB in a 52 KB slot. `Frame` / `Message` / `Id` /
 ## 11. Open items
 
 1. **`readings` retention** — when and how to downsample stored history.
-2. **OTA rewind frame** — exact fields of the `0x65 OtaControl Report` the MC uses to request a resend from `nextOffset`.
+2. **MainController self-update** — `targetNodeId == 0` (§8 step 7) needs `UplinkHandler` to recognize `Firmware` addressed to node 0 as itself and write its own application slot with a RAM-resident flash routine (`Node-Flash` §7.1), instead of the (nonexistent, for node 0) relay path. Not yet implemented.
 3. **Map polygon editor** — whether v1 ships the room-polygon drawing tool or point placement only.
 4. **`ATO` data-mode relay** — bring-up confirmed Wi-Fi join and the `+UDCP` TCP peer connect end-to-end against the real server (§3); not yet exercised: the `ATO` transparent byte pipe itself, and the `UplinkHello` token handshake (§5) that authenticates it. Both are firmware work rather than bring-up.

@@ -70,9 +70,25 @@ void OtaUart::Init(const uint32_t baudRate, const uint8_t module)
         | USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
 }
 
-bool OtaUart::Available() const
+bool OtaUart::Available()
 {
-    return (Regs(bus)->ISR & USART_ISR_RXNE_RXFNE) != 0;
+    USART_TypeDef* const usart = Regs(bus);
+
+    // Found on the bench: once ORE (or FE/NE alongside it) latches, the
+    // shift register stops handing new bytes to RDR at all -- RXNE never
+    // sets again for anything that follows, including a later, perfectly
+    // clean frame. Reading RDR clears RXNE, but not ORE/FE/NE -- those need
+    // an explicit ICR write, which nothing was doing, so one glitch (e.g. a
+    // byte arriving while Loop() was busy elsewhere and didn't get back to
+    // Available() before the next one landed) meant this receiver never
+    // heard another word until the next power-on reset. Clear them on every
+    // poll so a transient overrun doesn't cost the whole session.
+    if ((usart->ISR & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE)) != 0)
+    {
+        usart->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NECF;
+    }
+
+    return (usart->ISR & USART_ISR_RXNE_RXFNE) != 0;
 }
 
 uint8_t OtaUart::Read()

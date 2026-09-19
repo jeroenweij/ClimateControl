@@ -29,7 +29,6 @@ type Handler interface {
 	OnPresence(p nodelib.NodePresence)
 	OnMainStatus(s nodelib.MainStatus)
 	OnThermostatStatus(t nodelib.ThermostatStatus)
-	OnOtaReport(r nodelib.OtaControlReport)
 }
 
 // Server accepts one MainController connection at a time.
@@ -240,10 +239,6 @@ func (c *conn) dispatch(f nodelib.Frame, h Handler) {
 	case f.Endpoint == nodelib.EndpointThermostatStatus && f.Operation == nodelib.OpReport:
 		if t, ok := nodelib.ParseThermostatStatus(f.Data); ok {
 			h.OnThermostatStatus(t)
-		}
-	case f.Endpoint == nodelib.EndpointOtaControl && f.Operation == nodelib.OpReport:
-		if r, ok := nodelib.ParseOtaControlReport(f.Data); ok {
-			h.OnOtaReport(r)
 		}
 	case f.Endpoint == nodelib.EndpointKeepalive:
 		c.send(nodelib.Frame{Node: nodelib.NodeMaster, Endpoint: nodelib.EndpointKeepalive, Operation: nodelib.OpReport})

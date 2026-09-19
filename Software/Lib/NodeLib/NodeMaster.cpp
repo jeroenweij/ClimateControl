@@ -14,12 +14,15 @@ using NodeLib::Operation;
 
 NodeMaster::NodeMaster() :
     Node(),
+    state(EMasterState::Start),
     activeNodes{},
     nodeModules{},
     nodesFound(false),
     pollTimeout(),
     pendingPollNode(0),
-    detectTimer()
+    timeoutTimer(),
+    detectTimer(),
+    pollGapTimer()
 {
     nodeId = masterNodeId;
 }
@@ -38,59 +41,68 @@ void NodeMaster::Init()
     Node::Init();
 
     DetectNodes();
-    detectTimer.Start(detectIntervalMs);
 }
 
 void NodeMaster::Loop()
 {
     Node::Loop();
 
-    if (pollTimeout.Finished())
+    switch (state)
     {
-        LOG_WARN("Poll timeout waiting on node " << pendingPollNode << ", moving on");
-        activeNodes[pendingPollNode - 1] = false;
-        nodesFound                       = ActiveNodeCount() > 0;
-        PollNextNode(pendingPollNode);
-    }
+        case EMasterState::Start:
+            break;
 
-    if (!nodesFound && detectTimer.Finished())
-    {
-        detectTimer.Start(detectIntervalMs);
-        DetectNodes();
-        if (nodesFound)
+        case EMasterState::Detecting:
+            if (timeoutTimer.Finished())
+            {
+                state = EMasterState::Flush;
+                LOG_INFO("Done Detecting Nodes " << ActiveNodeCount());
+            }
+            break;
+
+        case EMasterState::Flush:
         {
-            StartPollingNodes();
+            if (messagesQueued > 0)
+            {
+                flushQueue();
+                state = EMasterState::Pollgap;
+                pollGapTimer.Start(pollGapMs);
+            }
+            else
+            {
+                PollNextNode(pendingPollNode);
+            }
+            break;
         }
-    }
-}
 
-void NodeLib::NodeMaster::FlushNow(const bool force)
-{
-    if (force || messagesQueued > (queueSize * 8 / 10))
-    {
-        flushQueue();
-    }
-}
+        case EMasterState::Pollgap:
+            if (pollGapTimer.Finished())
+            {
+                PollNextNode(pendingPollNode);
+            }
+            break;
 
-void NodeMaster::StartPollingNodes()
-{
-    // Start polling nodes
-    PollNextNode(0);
+        case EMasterState::Polling:
+            if (pollTimeout.Finished())
+            {
+                activeNodes[pendingPollNode - 1] = false;
+                nodesFound                       = ActiveNodeCount() > 0;
+                state                            = EMasterState::Flush;
+            }
+
+            break;
+    }
 }
 
 void NodeMaster::DetectNodes()
 {
     LOG_INFO("Detecting Nodes");
+    state = EMasterState::Detecting;
+    detectTimer.Start(detectIntervalMs);
     const Message poll(BROADCAST_NODE, Operation::Discover);
     WriteMessage(poll);
 
-    Tools::DelayTimer timeout(static_cast<Tools::time_a>(nodeSpacing * (maxNodes + 1)));
-    while (timeout.IsRunning() && !timeout.Finished())
-    {
-        Node::Loop();
-    }
-
-    LOG_INFO("Done Detecting Nodes " << ActiveNodeCount());
+    timeoutTimer.Start(static_cast<Tools::time_a>(nodeSpacing * (maxNodes + 1)));
 }
 
 const uint8_t NodeMaster::ActiveNodeCount() const
@@ -108,17 +120,16 @@ const uint8_t NodeMaster::ActiveNodeCount() const
 
 void NodeMaster::PollNextNode(const int prevNodeId)
 {
-    // Flush any queued messages
-    flushQueue();
-
     if (detectTimer.Finished())
     {
-        detectTimer.Start(detectIntervalMs);
         DetectNodes();
+        return;
     }
 
     if (nodesFound)
     {
+        state = EMasterState::Polling;
+
         // Determine next active node
         int nodeId = prevNodeId;
         do
@@ -136,6 +147,10 @@ void NodeMaster::PollNextNode(const int prevNodeId)
         pendingPollNode = nodeId;
         pollTimeout.Start(pollTimeoutMs);
     }
+    else
+    {
+        state = EMasterState::Flush;
+    }
 }
 
 void NodeMaster::HandleInternalOperation(const Message& m)
@@ -151,7 +166,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
         {
             if (m.id.node == pendingPollNode)
             {
-                PollNextNode(m.id.node);
+                state = EMasterState::Flush;
                 ResetHearthBeat();
             }
             break;

@@ -1,7 +1,5 @@
 package nodelib
 
-import "encoding/binary"
-
 // Helpers for the 0x60 uplink endpoint block
 // (MainController-Server-Link-Spec.md §5). These frames travel only on the
 // MainController <-> server socket, never on the RS485 bus.
@@ -121,54 +119,4 @@ func ParseMainStatus(data []byte) (MainStatus, bool) {
 		WifiRSSI:      int8(data[20]),
 		FreeHeap:      u16(data[21:]),
 	}, true
-}
-
-// OtaControlSet is the server -> MC start/abort payload for 0x65.
-type OtaControlSet struct {
-	TargetNodeID uint8
-	ImageSize    uint32
-	ImageCRC32   uint32
-	FWVersion    uint16
-	Module       Module
-}
-
-// Encode returns the 12-byte 0x65 Set payload.
-func (o OtaControlSet) Encode() []byte {
-	b := make([]byte, 0, 12)
-	b = append(b, o.TargetNodeID)
-	b = binary.LittleEndian.AppendUint32(b, o.ImageSize)
-	b = binary.LittleEndian.AppendUint32(b, o.ImageCRC32)
-	b = binary.LittleEndian.AppendUint16(b, o.FWVersion)
-	b = append(b, byte(o.Module))
-	return b
-}
-
-// OtaControlReport is the MC -> server progress payload for 0x65.
-type OtaControlReport struct {
-	State        uint8  `json:"state"`
-	TargetNodeID uint8  `json:"targetNodeId"`
-	NextOffset   uint32 `json:"nextOffset"`
-	LastError    uint8  `json:"lastError"`
-}
-
-// ParseOtaControlReport decodes a 0x65 Report payload.
-func ParseOtaControlReport(data []byte) (OtaControlReport, bool) {
-	if len(data) < 7 {
-		return OtaControlReport{}, false
-	}
-	return OtaControlReport{
-		State:        data[0],
-		TargetNodeID: data[1],
-		NextOffset:   u32(data[2:]),
-		LastError:    data[6],
-	}, true
-}
-
-// EncodeOtaData builds a 0x66 Set payload: offset(4 LE) then up to 27 bytes.
-func EncodeOtaData(offset uint32, chunk []byte) []byte {
-	if len(chunk) > 27 {
-		chunk = chunk[:27]
-	}
-	b := binary.LittleEndian.AppendUint32(nil, offset)
-	return append(b, chunk...)
 }

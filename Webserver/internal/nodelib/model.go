@@ -24,7 +24,8 @@ const (
 	EndpointSystemStatus  Endpoint = 0x11
 	EndpointSystemControl Endpoint = 0x12
 
-	EndpointFirmware Endpoint = 0x20
+	EndpointFirmware           Endpoint = 0x20
+	EndpointThermostatFirmware Endpoint = 0x22
 
 	EndpointDamperTarget Endpoint = 0x30
 	EndpointDamperActual Endpoint = 0x31
@@ -53,41 +54,38 @@ const (
 	EndpointNodePresence     Endpoint = 0x62
 	EndpointThermostatStatus Endpoint = 0x63
 	EndpointKeepalive        Endpoint = 0x64
-	EndpointOtaControl       Endpoint = 0x65
-	EndpointOtaData          Endpoint = 0x66
 	EndpointMainStatus       Endpoint = 0x67
 )
 
 var endpointNames = map[Endpoint]string{
-	EndpointTransport:        "Transport",
-	EndpointSystemInfo:       "SystemInfo",
-	EndpointSystemStatus:     "SystemStatus",
-	EndpointSystemControl:    "SystemControl",
-	EndpointFirmware:         "Firmware",
-	EndpointDamperTarget:     "DamperTarget",
-	EndpointDamperActual:     "DamperActual",
-	EndpointDamperMode:       "DamperMode",
-	EndpointSupplyTemp:       "SupplyTemp",
-	EndpointReturnTemp:       "ReturnTemp",
-	EndpointSensorStatus:     "SensorStatus",
-	EndpointRoomSetpoint:     "RoomSetpoint",
-	EndpointRoomTemp:         "RoomTemp",
-	EndpointRoomHumidity:     "RoomHumidity",
-	EndpointRoomMode:         "RoomMode",
-	EndpointRoomLink:         "RoomLink",
-	EndpointDiagRxCounters:   "DiagRxCounters",
-	EndpointDiagTxCounters:   "DiagTxCounters",
-	EndpointDiagLastError:    "DiagLastError",
-	EndpointDiagLog:          "DiagLog",
-	EndpointDiagReset:        "DiagReset",
-	EndpointUplinkHello:      "UplinkHello",
-	EndpointRoster:           "Roster",
-	EndpointNodePresence:     "NodePresence",
-	EndpointThermostatStatus: "ThermostatStatus",
-	EndpointKeepalive:        "Keepalive",
-	EndpointOtaControl:       "OtaControl",
-	EndpointOtaData:          "OtaData",
-	EndpointMainStatus:       "MainStatus",
+	EndpointTransport:          "Transport",
+	EndpointSystemInfo:         "SystemInfo",
+	EndpointSystemStatus:       "SystemStatus",
+	EndpointSystemControl:      "SystemControl",
+	EndpointFirmware:           "Firmware",
+	EndpointThermostatFirmware: "ThermostatFirmware",
+	EndpointDamperTarget:       "DamperTarget",
+	EndpointDamperActual:       "DamperActual",
+	EndpointDamperMode:         "DamperMode",
+	EndpointSupplyTemp:         "SupplyTemp",
+	EndpointReturnTemp:         "ReturnTemp",
+	EndpointSensorStatus:       "SensorStatus",
+	EndpointRoomSetpoint:       "RoomSetpoint",
+	EndpointRoomTemp:           "RoomTemp",
+	EndpointRoomHumidity:       "RoomHumidity",
+	EndpointRoomMode:           "RoomMode",
+	EndpointRoomLink:           "RoomLink",
+	EndpointDiagRxCounters:     "DiagRxCounters",
+	EndpointDiagTxCounters:     "DiagTxCounters",
+	EndpointDiagLastError:      "DiagLastError",
+	EndpointDiagLog:            "DiagLog",
+	EndpointDiagReset:          "DiagReset",
+	EndpointUplinkHello:        "UplinkHello",
+	EndpointRoster:             "Roster",
+	EndpointNodePresence:       "NodePresence",
+	EndpointThermostatStatus:   "ThermostatStatus",
+	EndpointKeepalive:          "Keepalive",
+	EndpointMainStatus:         "MainStatus",
 }
 
 var endpointByName = func() map[string]Endpoint {

@@ -17,6 +17,11 @@ using NodeLib::Operation;
 
 namespace
 {
+    // DetectNodes()'s discovery window is nodeSpacing(25) * (maxNodes(25)+1) =
+    // 650ms (Node.h / Id.h::MAX_NODES) -- advancing past it lets the
+    // Detecting state's timeoutTimer fire.
+    const uint32_t discoveryWindowMs = 700;
+
     void ResetWorld()
     {
         FakeBus::Reset();
@@ -31,6 +36,18 @@ namespace
         m.data[0] = module;
         m.len     = 1;
         bus::InjectFrame(m);
+    }
+
+    // DetectNodes() is async: Init() only fires the broadcast and arms
+    // timeoutTimer. Advancing the clock past the window and running Loop()
+    // twice -- once for Detecting -> Flush, once for Flush -> PollNextNode()
+    // -- gets a freshly Init()'d master to actually send its first Poll,
+    // mirroring what the real super-loop does one tick at a time.
+    void FinishDetectionAndStartPolling(NodeMaster& master)
+    {
+        FakeClock::Advance(discoveryWindowMs);
+        master.Loop(); // Detecting -> Flush
+        master.Loop(); // Flush -> PollNextNode()
     }
 } // namespace
 
@@ -61,13 +78,13 @@ CC_TEST(NodeMaster, PollsOnlyDiscoveredNodesInOrder)
 {
     ResetWorld();
     NodeMaster master;
+    master.Init(); // broadcasts Discover, starts the async detection window
+    FakeBus::Reset(); // clear the Discover broadcast bytes before injecting replies
 
     Announce(2, 2);
     Announce(5, 2);
-    master.Loop();
 
-    FakeBus::Reset();
-    master.StartPollingNodes(); // polls the first active node
+    FinishDetectionAndStartPolling(master); // polls the first active node
 
     Message tx[4];
     int     n = bus::DecodeTx(tx, 4);
@@ -100,13 +117,13 @@ CC_TEST(NodeMaster, IgnoresAnnounceForAnOutOfRangeNode)
 {
     ResetWorld();
     NodeMaster master;
+    master.Init();
+    FakeBus::Reset(); // clear the Discover broadcast bytes before injecting replies
 
     Announce(0, 2);
     Announce(240, 2);
-    master.Loop();
 
-    FakeBus::Reset();
-    master.StartPollingNodes();
+    FinishDetectionAndStartPolling(master);
 
     // No node was actually registered -> nothing to poll.
     Message tx[4];

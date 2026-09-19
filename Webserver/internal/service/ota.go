@@ -11,21 +11,30 @@ import (
 	"github.com/jweij/climatecontrol/webserver/internal/store"
 )
 
-// Bootloader states reported in OtaControlReport.State, mirroring
-// Modules/Bootloader/FirmwareSlave.h.
 const (
-	blIdle      = 1
-	blErasing   = 2
-	blReceiving = 3
-	blValid     = 4
-	blError     = 5
-)
-
-const (
-	otaChunk      = 27               // bytes per OtaData frame (spec §5)
-	otaWindow     = 16               // frames sent before waiting for a report
+	otaChunk = 27 // bytes per Write frame (spec §5)
+	// Found on the bench: the bootloader's UART is plain polling, no
+	// interrupt-driven buffer like the app's Hal::Uart -- bursting many
+	// Write frames back-to-back (the old otaWindow=16) can outrun it and
+	// overwrite the single-deep receive register before Loop() reads it,
+	// desyncing the stream badly enough that it stops answering anything,
+	// including a plain Discover, until the desync clears. One at a time,
+	// paced by waiting for that write's own status report (which itself
+	// only arrives on the next round-robin Poll) before sending the next.
+	otaWindow     = 1
 	otaReportWait = 3 * time.Second  // per-report timeout
 	otaStepWait   = 20 * time.Second // per-phase timeout
+	otaBootPoll   = 1 * time.Second  // Firmware Get cadence while waiting for the bootloader
+
+	// Found on the bench, even past the ORE/pacing fixes above: an
+	// occasional single write's status report still goes missing outright --
+	// the same residual risk NodeMaster.pollTimeout's own comment
+	// acknowledges for a normal Poll reply on a real bus. Resending the same
+	// chunk is safe either way: FirmwareSlave.HandleWrite ignores an offset
+	// that doesn't match its own expectedOffset, so a resend after a report
+	// (not the write) was the one actually lost is just silently dropped as
+	// stale.
+	otaWriteRetries = 3
 )
 
 // StartOTA validates the uploaded image and records a job. Only one push runs
@@ -36,8 +45,7 @@ const (
 // target is "node" (flash the bus node itself) or "thermostat" (flash the
 // Thermostat paired to the ControllerNode at nodeID, relayed over its private
 // link — ControllerNode-Thermostat-Link-Spec.md §5). For a thermostat push the
-// image's descriptor module must be Thermostat; the MainController routes on
-// the module byte in the 0x65 OtaControl frame (spec §5.7).
+// image's descriptor module must be Thermostat.
 func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename string, bin []byte, imageDir string) (int64, error) {
 	if target == "" {
 		target = "node"
@@ -55,9 +63,6 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 	if (target == "thermostat") != isThermImage {
 		return 0, ErrOtaTargetMismatch
 	}
-	// The module byte carried in 0x65 OtaControl is what tells the
-	// MainController to drive ThermostatFirmware instead of Firmware; a
-	// Thermostat image already carries module=Thermostat, but be explicit.
 	pushModule := desc.Module
 	if target == "thermostat" {
 		pushModule = nodelib.ModuleThermostat
@@ -126,11 +131,12 @@ func (s *Service) kickOta() {
 			svc:     s,
 			jobID:   job.ID,
 			nodeID:  job.NodeID,
+			target:  job.Target,
 			image:   bin,
 			crc32:   job.CRC32,
 			fw:      uint16(job.FWVersion),
 			module:  nodelib.Module(job.Module),
-			reports: make(chan nodelib.OtaControlReport, 8),
+			reports: make(chan nodelib.FirmwareStatusReport, 8),
 			doneCh:  make(chan struct{}),
 		}
 		s.ota = d
@@ -139,21 +145,56 @@ func (s *Service) kickOta() {
 	}
 }
 
+// otaDriver drives one push directly over the bus's ordinary Endpoint::Firmware
+// / Endpoint::ThermostatFirmware sequence -- both are plain relayed endpoints
+// (block 0x10-0x50), so this needs nothing from the MainController beyond the
+// generic relay it already does for every other endpoint. See the "why not a
+// wrapper endpoint" discussion this replaces: MainController-Server-Link-
+// Spec.md §8 used to route this through a 0x65/0x66 uplink-only pair that the
+// MC had to rewrite into bus Firmware frames; the MC never actually needed
+// that translation for a plain node push (Firmware already relays), so it's
+// gone. targetNodeId == 0 (MainController self-update) still isn't handled --
+// Open item, needs a RAM-resident self-flash routine, not a relay at all.
 type otaDriver struct {
 	svc    *Service
 	jobID  int64
 	nodeID int
+	target string // "node" | "thermostat"
 	image  []byte
 	crc32  uint32
 	fw     uint16
 	module nodelib.Module
 
-	reports chan nodelib.OtaControlReport
+	reports chan nodelib.FirmwareStatusReport
 	doneCh  chan struct{}
 	once    sync.Once
 }
 
-func (d *otaDriver) onReport(r nodelib.OtaControlReport) {
+// endpoint is Endpoint::Firmware for a "node" push, or Endpoint::
+// ThermostatFirmware -- addressed to the *owning ControllerNode's* node id --
+// for a "thermostat" push (ControllerNode-Thermostat-Link-Spec.md §5.4).
+func (d *otaDriver) endpoint() nodelib.Endpoint {
+	if d.target == "thermostat" {
+		return nodelib.EndpointThermostatFirmware
+	}
+	return nodelib.EndpointFirmware
+}
+
+func (d *otaDriver) sendSet(data []byte) {
+	d.svc.send.Send(nodelib.Frame{Node: uint8(d.nodeID), Endpoint: d.endpoint(), Operation: nodelib.OpSet, Data: data})
+}
+
+// onReport is called by Service.onFirmwareReport for every relayed Firmware /
+// ThermostatFirmware report; it filters to this job's node+endpoint and feeds
+// the decoded Status onto the channel run() reads from.
+func (d *otaDriver) onReport(f nodelib.Frame) {
+	if int(f.Node) != d.nodeID || f.Endpoint != d.endpoint() {
+		return
+	}
+	r, ok := nodelib.ParseFirmwareStatusReport(f.Data)
+	if !ok {
+		return
+	}
 	select {
 	case d.reports <- r:
 	default:
@@ -192,87 +233,141 @@ func (d *otaDriver) progress(state string, offset int) {
 func (d *otaDriver) run() {
 	d.progress("entering", 0)
 
-	// 1. Announce the job. The MainController handles EnterBootloader / Begin
-	//    on the bus and reports back via 0x65 (spec §8 steps 2-4).
-	set := nodelib.OtaControlSet{
-		TargetNodeID: uint8(d.nodeID),
-		ImageSize:    uint32(len(d.image)),
-		ImageCRC32:   d.crc32,
-		FWVersion:    d.fw,
-		Module:       d.module,
+	if d.target == "thermostat" {
+		// The ControllerNode does EnterBootloader + the bootloader-Announce
+		// wait itself (spec §5.4) -- Begin is the whole first step here.
+		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, false))
+	} else {
+		if !d.enterBootloader() {
+			d.done("error", "node did not enter bootloader", 0)
+			return
+		}
+		d.sendSet(nodelib.EncodeFirmwareBegin(d.module, uint32(len(d.image)), d.crc32, d.fw))
 	}
-	d.svc.send.SendSet(d.nodeID, nodelib.EndpointOtaControl, set.Encode())
 
-	if !d.waitFor(blReceiving, otaStepWait) {
+	r, ok := d.waitFor(otaStepWait, nodelib.BlReceiving)
+	if !ok {
 		d.done("error", "node did not enter bootloader / begin", 0)
+		return
+	}
+	if r.LastError == nodelib.FwErrAlreadyCurrent {
+		// Thermostat-only guard (§5.4.1): the CN skipped a no-op re-flash.
+		d.done("done", "", len(d.image))
+		return
+	}
+	if r.State == nodelib.BlError {
+		d.done("error", "node reported error "+itoa(int(r.LastError)), 0)
 		return
 	}
 	d.progress("writing", 0)
 
-	// 2. Stream OtaData; the report's NextOffset is authoritative.
+	// Stream Write chunks; the report's ExpectedOffset is authoritative.
 	offset := 0
 	for offset < len(d.image) {
-		for i := 0; i < otaWindow && offset < len(d.image); i++ {
-			end := offset + otaChunk
-			if end > len(d.image) {
-				end = len(d.image)
+		windowStart := offset
+		var r nodelib.FirmwareStatusReport
+		var ok bool
+		for attempt := 0; attempt <= otaWriteRetries; attempt++ {
+			if attempt == 0 {
+				o := windowStart
+				for i := 0; i < otaWindow && o < len(d.image); i++ {
+					end := o + otaChunk
+					if end > len(d.image) {
+						end = len(d.image)
+					}
+					d.sendSet(nodelib.EncodeFirmwareWrite(uint32(o), d.image[o:end]))
+					o = end
+				}
+			} else {
+				// A retry can't just resend the same chunk: if the write
+				// itself landed and only the report describing it was lost,
+				// FirmwareSlave.HandleWrite silently ignores a resend at an
+				// offset that's no longer its expectedOffset -- no new
+				// statusPending, no new report, so blindly repeating the
+				// write would just recreate the same timeout forever. A Get
+				// probe always gets a fresh report either way (current
+				// expectedOffset whether or not the write applied), and the
+				// rewind below naturally retries the write next iteration if
+				// it turns out it didn't.
+				d.svc.send.SendGet(d.nodeID, d.endpoint())
 			}
-			d.svc.send.Send(nodelib.Frame{
-				Node:      uint8(d.nodeID),
-				Endpoint:  nodelib.EndpointOtaData,
-				Operation: nodelib.OpSet,
-				Data:      nodelib.EncodeOtaData(uint32(offset), d.image[offset:end]),
-			})
-			offset = end
+			r, ok = d.awaitReport(otaReportWait)
+			if ok {
+				break
+			}
 		}
-		r, ok := d.awaitReport(otaReportWait)
 		if !ok {
 			d.done("error", "timeout waiting for write progress", offset)
 			return
 		}
-		if r.State == blError {
-			d.done("error", "node reported error "+itoa(int(r.LastError)), int(r.NextOffset))
+		if r.State == nodelib.BlError {
+			d.done("error", "node reported error "+itoa(int(r.LastError)), int(r.ExpectedOffset))
 			return
 		}
 		// Rewind to whatever the node actually has.
-		offset = int(r.NextOffset)
+		offset = int(r.ExpectedOffset)
 		d.progress("writing", offset)
 	}
 
-	// 3. End marker + verify.
-	d.svc.send.SendSet(d.nodeID, nodelib.EndpointOtaControl, set.Encode())
+	// End marker + verify.
+	d.sendSet(nodelib.EncodeFirmwareEnd())
 	d.progress("verifying", offset)
-	if !d.waitFor(blValid, otaStepWait) {
+	r, ok = d.waitFor(otaStepWait, nodelib.BlValid)
+	if !ok {
 		d.done("error", "image did not verify on the node", offset)
 		return
 	}
+	if r.State == nodelib.BlError {
+		d.done("error", "node reported error "+itoa(int(r.LastError)), offset)
+		return
+	}
+	d.sendSet(nodelib.EncodeFirmwareActivate())
 	d.done("done", "", len(d.image))
 }
 
-// waitFor drains reports until one reaches state (or blError) or the timeout.
-func (d *otaDriver) waitFor(state uint8, timeout time.Duration) bool {
-	deadline := time.After(timeout)
+// enterBootloader sends Firmware[EnterBootloader] then polls Firmware Get
+// every otaBootPoll until any Status report arrives (only the bootloader ever
+// sends one -- the running app only Acks/Nacks Firmware) or timeout.
+func (d *otaDriver) enterBootloader() bool {
+	d.sendSet(nodelib.EncodeFirmwareEnterBootloader())
+
+	deadline := time.After(otaStepWait)
+	ticker := time.NewTicker(otaBootPoll)
+	defer ticker.Stop()
 	for {
 		select {
-		case r := <-d.reports:
-			if r.State == state {
-				return true
-			}
-			if r.State == blError {
-				return false
-			}
+		case <-d.reports:
+			return true
+		case <-ticker.C:
+			d.svc.send.SendGet(d.nodeID, nodelib.EndpointFirmware)
 		case <-deadline:
 			return false
 		}
 	}
 }
 
-func (d *otaDriver) awaitReport(timeout time.Duration) (nodelib.OtaControlReport, bool) {
+// waitFor drains reports until one reaches state, reports an error, or the
+// (Thermostat-only) already-current guard fires -- or the timeout elapses.
+func (d *otaDriver) waitFor(timeout time.Duration, state uint8) (nodelib.FirmwareStatusReport, bool) {
+	deadline := time.After(timeout)
+	for {
+		select {
+		case r := <-d.reports:
+			if r.State == state || r.State == nodelib.BlError || r.LastError == nodelib.FwErrAlreadyCurrent {
+				return r, true
+			}
+		case <-deadline:
+			return nodelib.FirmwareStatusReport{}, false
+		}
+	}
+}
+
+func (d *otaDriver) awaitReport(timeout time.Duration) (nodelib.FirmwareStatusReport, bool) {
 	select {
 	case r := <-d.reports:
 		return r, true
 	case <-time.After(timeout):
-		return nodelib.OtaControlReport{}, false
+		return nodelib.FirmwareStatusReport{}, false
 	}
 }
 

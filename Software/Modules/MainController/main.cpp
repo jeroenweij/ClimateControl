@@ -29,7 +29,6 @@ int main()
     uplink.Init();
     master.RegisterHandler(&uplink);
     master.Init();
-    master.StartPollingNodes();
 
     while (true)
     {
