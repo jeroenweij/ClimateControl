@@ -49,9 +49,13 @@ namespace
     const uint8_t MaxAttemptsPerState = 3;
     // Data mode has no AT lines to signal a drop (MainController-Server-Link-
     // Spec.md §3) -- this is the coarse fallback from §10: a very long silence
-    // with nothing at all received forces a reset and full re-join. Deliberately
-    // generous so it never fires just because the server has nothing to say.
-    const uint32_t LinkWatchdogMs = 180000;
+    // with nothing at all received forces a reset and full re-join. Well above
+    // KeepaliveIntervalMs (25s) and the server's own 90s read deadline
+    // (Webserver/internal/uplink/server.go), so it never fires just because
+    // the server has nothing to say, but not so generous that a silently
+    // dropped connection (e.g. the server process restarting) sits zombied
+    // for minutes before anything notices.
+    const uint32_t LinkWatchdogMs = 60000;
 
     void PackU16(uint8_t* const out, const uint16_t value)
     {
