@@ -455,6 +455,20 @@ func (s *Server) handleFirmwareUpdateAll(w http.ResponseWriter, r *http.Request)
 	s.writeEnqueueResult(w, ids, err)
 }
 
+type fwAllowDowngradeReq struct {
+	Allow bool `json:"allow"`
+}
+
+func (s *Server) handleSetAllowDowngrade(w http.ResponseWriter, r *http.Request) {
+	var req fwAllowDowngradeReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	s.svc.SetAllowDowngrade(req.Allow)
+	writeJSON(w, http.StatusOK, map[string]bool{"allowDowngrade": req.Allow})
+}
+
 func (s *Server) writeEnqueueResult(w http.ResponseWriter, ids []int64, err error) {
 	switch {
 	case errors.Is(err, service.ErrOtaQueued):

@@ -95,6 +95,18 @@ h3 { font-size: 0.9rem; margin: 1.4rem 0 0.5rem; color: var(--muted); }
 .card.kv span { color: var(--muted); font-size: 0.8rem; }
 
 label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--muted); }
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  width: fit-content;
+}
+label.check input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  border: none;
+  background: none;
+}
 select, input {
   font: inherit;
   padding: 0.4rem 0.5rem;

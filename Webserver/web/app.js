@@ -651,6 +651,7 @@ async function loadFirmware() {
   const [view, jobs] = await Promise.all([api("/api/firmware"), api("/api/ota")]);
   fwState.images = view.images || [];
   fwState.targets = view.targets || [];
+  $("#fw-allow-downgrade").checked = !!view.allowDowngrade;
   renderFirmwareImages();
   renderFirmwareNodes();
   renderFirmwareJobs(jobs);
@@ -790,6 +791,21 @@ $("#fw-node-table").addEventListener("click", async (e) => {
     });
     flash("update queued");
   } catch (err) {
+    flash(err.message, true);
+  }
+  loadFirmware();
+});
+
+$("#fw-allow-downgrade").addEventListener("change", async (e) => {
+  const allow = e.target.checked;
+  try {
+    await api("/api/firmware/allow-downgrade", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ allow }),
+    });
+  } catch (err) {
+    e.target.checked = !allow; // revert on failure
     flash(err.message, true);
   }
   loadFirmware();

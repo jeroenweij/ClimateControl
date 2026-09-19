@@ -30,8 +30,9 @@ type FwTarget struct {
 
 // FirmwareView is the whole Firmware page payload.
 type FirmwareView struct {
-	Images  []store.FirmwareImage `json:"images"`
-	Targets []FwTarget            `json:"targets"`
+	Images         []store.FirmwareImage `json:"images"`
+	Targets        []FwTarget            `json:"targets"`
+	AllowDowngrade bool                  `json:"allowDowngrade"`
 }
 
 // StoreFirmware validates an uploaded image and records it as the one image
@@ -131,20 +132,21 @@ func (s *Service) FirmwareView(ctx context.Context) (FirmwareView, error) {
 		pending[[2]any{j.NodeID, j.Target}] = j.State
 	}
 
-	targets := []FwTarget{s.mainControllerTarget(byModule, pending)}
+	allow := s.AllowDowngrade()
+	targets := []FwTarget{s.mainControllerTarget(byModule, pending, allow)}
 	for _, n := range roster {
-		targets = append(targets, s.nodeTarget(n, byModule, pending))
+		targets = append(targets, s.nodeTarget(n, byModule, pending, allow))
 		if n.Module == nodelib.ModuleControllerNode.String() {
-			targets = append(targets, s.thermostatTarget(n, therms[n.ID], byModule, pending))
+			targets = append(targets, s.thermostatTarget(n, therms[n.ID], byModule, pending, allow))
 		}
 	}
-	return FirmwareView{Images: imgs, Targets: targets}, nil
+	return FirmwareView{Images: imgs, Targets: targets, AllowDowngrade: allow}, nil
 }
 
 // mainControllerTarget is the bus master's own row (node id 0). Its running
 // version comes from UplinkHello, not the roster; a push relays as an OTA with
 // targetNodeId = 0 (MainController-Server-Link-Spec.md §8).
-func (s *Service) mainControllerTarget(byModule map[string]store.FirmwareImage, pending map[[2]any]string) FwTarget {
+func (s *Service) mainControllerTarget(byModule map[string]store.FirmwareImage, pending map[[2]any]string, allowDowngrade bool) FwTarget {
 	mod := nodelib.ModuleMainController.String()
 	online := s.MasterOnline()
 	fw := s.MainControllerFW()
@@ -158,7 +160,7 @@ func (s *Service) mainControllerTarget(byModule map[string]store.FirmwareImage, 
 		t.Latest, t.LatestStr = img.Version, img.VersionStr
 	}
 	t.Job = pending[[2]any{0, "node"}]
-	t.CanUpdate, t.Reason = updatable(online, hasImg, fw, t.Latest, t.Job)
+	t.CanUpdate, t.Reason = updatable(online, hasImg, fw, t.Latest, t.Job, allowDowngrade)
 	return t
 }
 
@@ -169,7 +171,7 @@ func boolWord(b bool, t, f string) string {
 	return f
 }
 
-func (s *Service) nodeTarget(n store.RosterNode, byModule map[string]store.FirmwareImage, pending map[[2]any]string) FwTarget {
+func (s *Service) nodeTarget(n store.RosterNode, byModule map[string]store.FirmwareImage, pending map[[2]any]string, allowDowngrade bool) FwTarget {
 	t := FwTarget{
 		NodeID: n.ID, Name: n.Name, Module: n.Module, Target: "node",
 		Status: n.Status, Online: n.Online,
@@ -180,11 +182,11 @@ func (s *Service) nodeTarget(n store.RosterNode, byModule map[string]store.Firmw
 		t.Latest, t.LatestStr = img.Version, img.VersionStr
 	}
 	t.Job = pending[[2]any{n.ID, "node"}]
-	t.CanUpdate, t.Reason = updatable(t.Online, hasImg, n.FWVersion, t.Latest, t.Job)
+	t.CanUpdate, t.Reason = updatable(t.Online, hasImg, n.FWVersion, t.Latest, t.Job, allowDowngrade)
 	return t
 }
 
-func (s *Service) thermostatTarget(n store.RosterNode, th store.Thermostat, byModule map[string]store.FirmwareImage, pending map[[2]any]string) FwTarget {
+func (s *Service) thermostatTarget(n store.RosterNode, th store.Thermostat, byModule map[string]store.FirmwareImage, pending map[[2]any]string, allowDowngrade bool) FwTarget {
 	mod := nodelib.ModuleThermostat.String()
 	online := n.Online && th.LinkUp
 	status := "link-down"
@@ -203,7 +205,7 @@ func (s *Service) thermostatTarget(n store.RosterNode, th store.Thermostat, byMo
 		t.Latest, t.LatestStr = img.Version, img.VersionStr
 	}
 	t.Job = pending[[2]any{n.ID, "thermostat"}]
-	t.CanUpdate, t.Reason = updatable(online, hasImg, th.FWVersion, t.Latest, t.Job)
+	t.CanUpdate, t.Reason = updatable(online, hasImg, th.FWVersion, t.Latest, t.Job, allowDowngrade)
 	if !t.CanUpdate && !n.Online {
 		t.Reason = "node offline"
 	} else if !t.CanUpdate && !th.LinkUp && t.Job == "" && hasImg {
@@ -214,8 +216,11 @@ func (s *Service) thermostatTarget(n store.RosterNode, th store.Thermostat, byMo
 
 // updatable applies the rule from the brief: a target is updatable only when it
 // is online, an image is held, that image is newer than what is installed, and
-// no job for it is already queued or running.
-func updatable(online, hasImg bool, installed, latest int, job string) (bool, string) {
+// no job for it is already queued or running. allowDowngrade (an operator
+// toggle, off by default -- AllowDowngrade/SetAllowDowngrade) skips the
+// newer-than-installed requirement, for re-pushing a same/older-version image
+// during bench testing without bumping CC_FW_VERSION each time.
+func updatable(online, hasImg bool, installed, latest int, job string, allowDowngrade bool) (bool, string) {
 	switch {
 	case job != "":
 		return false, "update " + job
@@ -223,7 +228,7 @@ func updatable(online, hasImg bool, installed, latest int, job string) (bool, st
 		return false, "offline"
 	case !hasImg:
 		return false, "no image uploaded"
-	case installed != 0 && installed >= latest:
+	case !allowDowngrade && installed != 0 && installed >= latest:
 		return false, "up to date"
 	default:
 		return true, ""
@@ -285,7 +290,11 @@ func (s *Service) moduleForTarget(ctx context.Context, nodeID int, target string
 	}
 	for _, n := range nodes {
 		if n.ID == nodeID {
-			if m, ok := nodelib.ModuleByName(n.Module); ok {
+			// ModuleByName("Unknown") itself returns (ModuleUnknown, true) --
+			// require an actually-known module here, or a node whose module
+			// hasn't been learned yet would "succeed" on ModuleUnknown and
+			// never reach the expected-roster fallback below.
+			if m, ok := nodelib.ModuleByName(n.Module); ok && m != nodelib.ModuleUnknown {
 				return m, nil
 			}
 		}

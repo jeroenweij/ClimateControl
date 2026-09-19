@@ -34,11 +34,22 @@ type Service struct {
 	send Sender
 	ota  *otaDriver
 	mcFW int // MainController running firmware (major<<8|minor), from UplinkHello; 0 = unknown
+
+	// Nodes we've already asked for SystemInfo this process's lifetime, so a
+	// node's steady stream of ordinary Reports doesn't re-send the Get on
+	// every single one while we wait for the (once-per-boot) answer.
+	fwRequested map[int]bool
+
+	// Operator toggle (default off, not persisted -- resets to off on every
+	// restart): lets EnqueueUpdate/EnqueueUpdateAll re-push a same-or-older
+	// version image, for bench-testing the OTA path itself without bumping
+	// CC_FW_VERSION on every build.
+	allowDowngrade bool
 }
 
 // New builds the service. Call SetSender once the uplink server exists.
 func New(st *store.Store, hb *hub.Hub, log *slog.Logger) *Service {
-	return &Service{st: st, hb: hb, log: log}
+	return &Service{st: st, hb: hb, log: log, fwRequested: make(map[int]bool)}
 }
 
 // SetSender installs the downlink path (breaks the construction cycle).
@@ -61,6 +72,21 @@ func (s *Service) MainControllerFW() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mcFW
+}
+
+// AllowDowngrade reports whether same/older-version firmware pushes are
+// currently permitted (see the allowDowngrade field comment).
+func (s *Service) AllowDowngrade() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.allowDowngrade
+}
+
+// SetAllowDowngrade flips the toggle.
+func (s *Service) SetAllowDowngrade(v bool) {
+	s.mu.Lock()
+	s.allowDowngrade = v
+	s.mu.Unlock()
 }
 
 // warnIfUnexpected logs a node id that showed up on the bus without an entry in
@@ -109,6 +135,14 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 		_ = s.st.UpsertNode(ctx, node, moduleFromInfo(f, v), true)
 		if fw := firmwareFromInfo(f, v); fw != 0 {
 			_ = s.st.SetNodeFirmware(ctx, node, fw)
+		} else if f.Endpoint != nodelib.EndpointSystemInfo {
+			s.mu.Lock()
+			asked := s.fwRequested[node]
+			s.fwRequested[node] = true
+			s.mu.Unlock()
+			if !asked {
+				s.send.SendGet(node, nodelib.EndpointSystemInfo)
+			}
 		}
 		s.hb.PublishValue(node, f.Endpoint, v)
 

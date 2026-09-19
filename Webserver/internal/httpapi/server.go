@@ -61,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/firmware/{module}", s.handleDeleteFirmware)
 	mux.HandleFunc("POST /api/firmware/update", s.handleFirmwareUpdate)
 	mux.HandleFunc("POST /api/firmware/update-all", s.handleFirmwareUpdateAll)
+	mux.HandleFunc("POST /api/firmware/allow-downgrade", s.handleSetAllowDowngrade)
 
 	// SPA bundle: static assets, everything else falls through to index.html.
 	mux.Handle("GET /", s.spaHandler())
