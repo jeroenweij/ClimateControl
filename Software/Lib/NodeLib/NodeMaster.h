@@ -73,16 +73,19 @@ namespace NodeLib
         // Flushing the queue and then immediately writing the round-robin's
         // own Poll right after, with no gap, is fine against a node that's
         // actively cycling through Poll/Done already -- but found on the
-        // bench to desync a node whose simple polling-only receiver (the
-        // bootloader's OtaUart, not the app's interrupt-driven Hal::Uart) is
-        // still busy with whatever was just flushed (e.g. UplinkHandler's
-        // OTA Get/Set) when our own Poll's first byte arrives right behind it
-        // with no gap. The EMasterState::Pollgap state exists solely to hold
-        // off sending that Poll (no opportunistic flush, no new poll -- see
-        // Loop()'s Flush/Pollgap cases) until a real elapsed-time gap has
-        // passed (matching the bus's own established inter-frame spacing,
-        // NodeSpacingMs in FirmwareSlave), instead of writing it back to back
-        // with the flush in the same state.
+        // bench to desync the bootloader's receiver (Boot::OtaUart), which at
+        // the time was a plain poll-only Available()/Read() straight off
+        // ISR/RDR -- busy elsewhere (e.g. a multi-page flash erase/program
+        // run) for even one byte-time could lose whatever arrived right
+        // behind a flush with no gap. OtaUart is now interrupt-driven with
+        // its own ring buffer (same fix class as Hal::Uart's), which should
+        // make byte loss from this specific pattern far less likely, but the
+        // gap costs nothing and stays as cheap insurance: EMasterState::
+        // Pollgap holds off sending that Poll (no opportunistic flush, no new
+        // poll -- see Loop()'s Flush/Pollgap cases) until a real elapsed-time
+        // gap has passed (matching the bus's own established inter-frame
+        // spacing, NodeSpacingMs in FirmwareSlave), instead of writing it
+        // back to back with the flush in the same state.
         static const uint32_t pollGapMs = 25;
         Tools::DelayTimer     pollGapTimer;
     };

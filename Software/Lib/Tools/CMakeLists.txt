@@ -8,4 +8,4 @@ add_library(Tools STATIC
 
 target_include_directories(Tools PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(Tools PUBLIC Hal)
+target_link_libraries(Tools PUBLIC HalCore)

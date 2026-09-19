@@ -9,10 +9,22 @@
 
 namespace Boot
 {
-    // Minimal polled USART driver with hardware RS485 driver-enable, for the
+    // Minimal USART driver with hardware RS485 driver-enable, for the
     // bootloader only. Bypasses Lib/HAL/Uart so the ~17 KB STM32Cube UART
     // driver stays out of the 10 KB bootloader image; the running app uses
     // Hal::Uart as normal.
+    //
+    // RX is interrupt-driven, backed by a small ring buffer (OtaUart.cpp) --
+    // found on the bench that a plain poll-only receiver (checking ISR/RDR
+    // straight from Available()) could miss a byte that landed while
+    // FirmwareSlave::Loop() was off doing something else for a stretch (a
+    // multi-page flash erase/program run being the main one), corrupting
+    // that frame with no way to catch up before the next byte overwrote the
+    // single-deep hardware RDR. TX is still a plain blocking loop -- SendFrame()
+    // building a whole frame before ever calling Write() means there's nothing
+    // for TX buffering to overlap with here, unlike Hal::Uart's non-blocking
+    // WriteBytes() (which exists so NodeLib callers on the app side never block
+    // their own send path on the wire).
     //
     // Which USART depends on the provisioned module type
     // (ControllerNode-Thermostat-Link-Spec.md §5.5):

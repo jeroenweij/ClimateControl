@@ -31,7 +31,63 @@ namespace
     {
         return bus == OtaUart::Bus::Usart2 ? USART2 : USART1;
     }
+
+    // RX ring buffer, ISR-fed -- replaces the old poll-only Available()/Read()
+    // (which had to catch every byte between one FirmwareSlave::Loop() call
+    // and the next, e.g. across a multi-page flash erase/program stretch,
+    // with nothing deeper than the single-byte hardware RDR to hold it).
+    // Sized comfortably over one NodeLib frame (2 sync + 1 len + 3 header +
+    // 32 data + 2 crc = 40 bytes, Id.h::MAX_DATA), matching the sizing logic
+    // Hal::Uart's own RX ring buffer uses. One shared buffer, not
+    // Hal::Uart's per-instance array, is enough: a provisioned node's
+    // bootloader only ever brings up one bus (module decides Usart1 vs
+    // Usart2 in Init()), so only one of USART1_IRQHandler/USART2_IRQHandler
+    // below ever actually fires.
+    constexpr size_t rxBufferSize = 64;
+    struct RxRing
+    {
+        uint8_t         buffer[rxBufferSize];
+        volatile size_t head;
+        volatile size_t tail;
+    };
+    RxRing rxRing;
+
+    // Common to both ISRs -- clears ORE/FE/NE the same way Available() used
+    // to (see its old comment, still true: unclearred, one glitch deafens the
+    // receiver until a power-on reset) and empties RDR into the ring buffer.
+    void ServiceRxIrq(USART_TypeDef* const usart)
+    {
+        if ((usart->ISR & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE)) != 0)
+        {
+            usart->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NECF;
+        }
+
+        if ((usart->ISR & USART_ISR_RXNE_RXFNE) != 0)
+        {
+            const uint8_t byte = static_cast<uint8_t>(usart->RDR); // clears RXNE
+            const size_t  next = (rxRing.head + 1) % rxBufferSize;
+            if (next != rxRing.tail)
+            {
+                rxRing.buffer[rxRing.head] = byte;
+                rxRing.head                = next;
+            }
+            // else: ring buffer full -- drop, same backstop as Hal::Uart's.
+        }
+    }
 } // namespace
+
+// startup_stm32g031xx.s leaves these weakly aliased to Default_Handler (an
+// infinite-loop trap) -- without real definitions, enabling either NVIC line
+// would hang the CPU on the first byte, same pitfall Hal::Uart.cpp notes.
+extern "C" void USART1_IRQHandler()
+{
+    ServiceRxIrq(USART1);
+}
+
+extern "C" void USART2_IRQHandler()
+{
+    ServiceRxIrq(USART2);
+}
 
 void OtaUart::Init(const uint32_t baudRate, const uint8_t module)
 {
@@ -62,38 +118,33 @@ void OtaUart::Init(const uint32_t baudRate, const uint8_t module)
         SetAf(GPIOA, 12, 1u);
     }
 
+    rxRing = RxRing{};
+
     USART_TypeDef* const usart = Regs(bus);
     usart->CR1                 = 0;
     usart->BRR                 = (SystemCoreClock + baudRate / 2u) / baudRate;
     usart->CR3                 = USART_CR3_DEM; // hardware driver-enable
     usart->CR1                 = USART_CR1_DEAT_0 | USART_CR1_DEDT_0 // 1 sample-time assert/deassert
-        | USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+        | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_UE;
+
+    // Highest priority (STM32G0's 2 priority bits -> 0..3), same reasoning as
+    // Hal::Uart.cpp: a byte at bus baud is tens of microseconds, tighter than
+    // anything else running here.
+    const IRQn_Type irqn = (bus == Bus::Usart2) ? USART2_IRQn : USART1_IRQn;
+    NVIC_SetPriority(irqn, 0);
+    NVIC_EnableIRQ(irqn);
 }
 
 bool OtaUart::Available()
 {
-    USART_TypeDef* const usart = Regs(bus);
-
-    // Found on the bench: once ORE (or FE/NE alongside it) latches, the
-    // shift register stops handing new bytes to RDR at all -- RXNE never
-    // sets again for anything that follows, including a later, perfectly
-    // clean frame. Reading RDR clears RXNE, but not ORE/FE/NE -- those need
-    // an explicit ICR write, which nothing was doing, so one glitch (e.g. a
-    // byte arriving while Loop() was busy elsewhere and didn't get back to
-    // Available() before the next one landed) meant this receiver never
-    // heard another word until the next power-on reset. Clear them on every
-    // poll so a transient overrun doesn't cost the whole session.
-    if ((usart->ISR & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE)) != 0)
-    {
-        usart->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NECF;
-    }
-
-    return (usart->ISR & USART_ISR_RXNE_RXFNE) != 0;
+    return rxRing.head != rxRing.tail;
 }
 
 uint8_t OtaUart::Read()
 {
-    return static_cast<uint8_t>(Regs(bus)->RDR);
+    const uint8_t byte = rxRing.buffer[rxRing.tail];
+    rxRing.tail        = (rxRing.tail + 1) % rxBufferSize;
+    return byte;
 }
 
 void OtaUart::Write(const uint8_t* const data, const size_t len)

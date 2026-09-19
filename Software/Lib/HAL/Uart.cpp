@@ -189,6 +189,18 @@ extern "C" void HAL_UART_MspInit(UART_HandleTypeDef*)
 // infinite-loop trap, same pitfall as SysTick_Handler before Tick.cpp's own
 // fix) -- without real definitions, enabling either NVIC line here would
 // hang the CPU on the first byte.
+//
+// Deliberately NOT __attribute__((weak)): tried that so the bootloader's own
+// USART1_IRQHandler/USART2_IRQHandler (Modules/Bootloader/OtaUart.cpp) could
+// coexist with this file in the same link -- found on the bench that with
+// two weak definitions of the same symbol (this one and the startup file's
+// own `.thumb_set name, Default_Handler` alias), the linker silently kept
+// the startup file's alias instead of this real implementation, in every
+// module that links Uart.cpp, not just the bootloader -- a much bigger
+// regression than the one it was meant to fix (every interrupt-driven RX
+// byte anywhere in the fleet would have hung on Default_Handler's infinite
+// loop). The bootloader avoids the clash a different way: it doesn't link
+// this file at all (see Modules/Bootloader/CMakeLists.txt's HalCore).
 extern "C" void USART1_IRQHandler()
 {
     ServiceIrq(Uart::Instance::Usart1);

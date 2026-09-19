@@ -18,7 +18,7 @@ add_stm32_executable(bootloader
         ${NODELIB_DIR}/Id.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/bootloader.ld
     LIBRARIES
-        Hal
+        HalCore
         Board
         Tools
 )
