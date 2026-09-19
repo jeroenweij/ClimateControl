@@ -54,6 +54,7 @@ class UplinkHandler : public NodeLib::INodeHandler
         ConfiguringPsk,
         ActivatingWifi,
         WaitingNetworkUp,
+        NetworkUpSettle, // +UUNU fires before the module can reliably open a peer -- AT+UDCP right after it errors (see UplinkHandler.cpp's NetworkUpSettleMs comment)
         ConnectingPeer,
         WaitingPeerConnected,
         EnteringDataMode,

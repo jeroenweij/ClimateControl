@@ -37,6 +37,13 @@ namespace
     // of 50 ms is required before start of data transmission" -- doubled for
     // margin.
     const uint32_t DataModeSettleMs = 100;
+    // Undocumented, found on the bench: +UUNU fires before AT+UDCP reliably
+    // succeeds -- the first attempt(s) right after it get ERROR, then a
+    // second +UUNU fires and the next attempt succeeds. Absorb that gap here
+    // instead of spending ConnectingPeer's retry budget on it (a MaxAttempts-
+    // PerState run of bad luck there used to blow the whole bring-up back to
+    // Booting for no real reason).
+    const uint32_t NetworkUpSettleMs = 500;
     // A real serial link occasionally drops or delays a response -- retry the
     // same command this many times before treating it as a real failure.
     const uint8_t MaxAttemptsPerState = 3;
@@ -244,7 +251,8 @@ void UplinkHandler::Loop()
             {
                 if (event == NinaAt::Event::NetworkUp)
                 {
-                    TransitionTo(State::ConnectingPeer);
+                    stateTimeout.Start(NetworkUpSettleMs);
+                    TransitionTo(State::NetworkUpSettle);
                     return;
                 }
                 if (event == NinaAt::Event::LinkDown || event == NinaAt::Event::NetworkDown)
@@ -258,6 +266,13 @@ void UplinkHandler::Loop()
             }
             break;
         }
+
+        case State::NetworkUpSettle:
+            if (stateTimeout.Finished())
+            {
+                TransitionTo(State::ConnectingPeer);
+            }
+            break;
 
         case State::ConnectingPeer:
         {
@@ -326,6 +341,7 @@ void UplinkHandler::Loop()
                 helloSent = false;
                 linkWatchdog.Start(LinkWatchdogMs);
                 TransitionTo(State::DataMode);
+                LOG_INFO("Uplink Online");
             }
             break;
 
