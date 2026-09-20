@@ -454,6 +454,16 @@ void Node::PerformPendingReset()
     {
         Hal::Backup::Write(Hal::Backup::Reg::Boot, Board::EnterBootloaderMagic);
     }
+
+    // flushQueue() only queues the Ack/Announce/Done into the TX ring buffer
+    // before setting resetPending -- WriteBytes() never blocks on the wire,
+    // so without this the frames are usually still mid-transmission when
+    // Reset() kills the UART peripheral outright, corrupting them on the bus
+    // and leaving the master never hearing back about the bootloader entry
+    // (see OTA-Debugging-TODO.md, "EnterBootloader Ack/Announce truncated by
+    // its own reset").
+    uart.FlushTx();
+
     Hal::System::Reset(); // never returns
     while (true)
     {

@@ -91,3 +91,9 @@ bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
     }
     return true;
 }
+
+void Uart::FlushTx() const
+{
+    // WriteBytes() above is already synchronous (no ring buffer/ISR to
+    // drain), so there's nothing in flight to wait for here.
+}

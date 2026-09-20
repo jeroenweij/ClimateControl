@@ -42,7 +42,13 @@ namespace NodeLib
         // and resync a wedged parser.
         void Update();
 
-        void Write(Hal::Uart& uart, const Message& message) const;
+        // Returns false if the underlying Hal::Uart::WriteBytes() rejected the
+        // frame (its TX ring buffer didn't have room) -- queues nothing on
+        // failure, same atomic-reject semantics as WriteBytes() itself.
+        // Callers that can usefully react to a drop (e.g. log it) should
+        // check this; callers that can't (most of NodeLib's own internal
+        // sends) are free to ignore it, same as before this was added.
+        bool Write(Hal::Uart& uart, const Message& message) const;
 
         const RxCounters& Counters() const
         {

@@ -287,3 +287,16 @@ bool Uart::WriteBytes(const uint8_t* const data, const size_t len)
     __HAL_UART_ENABLE_IT(&handle, UART_IT_TXE);
     return true;
 }
+
+void Uart::FlushTx() const
+{
+    const RingBuffer& tx = TxBuffer(instance);
+    while (tx.head != tx.tail)
+    {
+    }
+
+    UART_HandleTypeDef& handle = Handle(instance);
+    while (__HAL_UART_GET_FLAG(&handle, UART_FLAG_TC) == RESET)
+    {
+    }
+}

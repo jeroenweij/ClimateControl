@@ -149,7 +149,7 @@ bool Frame::FeedByte(const uint8_t byte, Message& message)
     return false;
 }
 
-void Frame::Write(Hal::Uart& uart, const Message& message) const
+bool Frame::Write(Hal::Uart& uart, const Message& message) const
 {
     uint8_t headerAndDataBuffer[3 + MAX_DATA];
     headerAndDataBuffer[0] = message.id.node;
@@ -180,5 +180,5 @@ void Frame::Write(Hal::Uart& uart, const Message& message) const
     wireBytes[index++] = static_cast<uint8_t>(computedCrc & 0xFF);
     wireBytes[index++] = static_cast<uint8_t>(computedCrc >> 8);
 
-    uart.WriteBytes(wireBytes, index);
+    return uart.WriteBytes(wireBytes, index);
 }

@@ -85,6 +85,17 @@ namespace Hal
         // applies same as any other dropped message.
         bool WriteBytes(const uint8_t* const data, const size_t len);
 
+        // Blocks until every queued byte has actually finished shifting out
+        // on the wire (TX ring buffer empty *and* the hardware's Transmission
+        // Complete flag set -- TDR-empty alone just means the last byte was
+        // handed to the shift register, not that it's done transmitting).
+        // Needed before anything that kills the peripheral outright (e.g.
+        // Hal::System::Reset()) -- WriteBytes() only queues, so code that
+        // "waits until after the last WriteMessage() call" before resetting
+        // does not actually wait for the bytes to reach the wire; see
+        // Node::PerformPendingReset().
+        void FlushTx() const;
+
       private:
         Instance instance = Instance::Usart1;
     };

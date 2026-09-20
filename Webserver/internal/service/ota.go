@@ -288,7 +288,7 @@ func (d *otaDriver) run() {
 		d.sendSet(nodelib.EncodeFirmwareBegin(d.module, uint32(len(d.image)), d.crc32, d.fw))
 	}
 
-	r, ok := d.waitFor(otaStepWait, nodelib.BlReceiving)
+	r, ok := d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlReceiving)
 	if !ok {
 		d.done("error", "node did not enter bootloader / begin", 0)
 		return
@@ -382,7 +382,7 @@ func (d *otaDriver) run() {
 	// side chunking bug".
 	d.sendSet(nodelib.EncodeFirmwareEnd())
 	d.progress("verifying", offset)
-	r, ok = d.waitFor(otaStepWait, nodelib.BlValid)
+	r, ok = d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlValid)
 	if !ok {
 		d.done("error", "image did not verify on the node", offset)
 		return
@@ -421,16 +421,27 @@ func (d *otaDriver) enterBootloader() bool {
 	}
 }
 
-// waitFor drains reports until one reaches state, reports an error, or the
-// (Thermostat-only) already-current guard fires -- or the timeout elapses.
-func (d *otaDriver) waitFor(timeout time.Duration, state uint8) (nodelib.FirmwareStatusReport, bool) {
+// waitForWithProbe is waitFor, but re-sends Firmware[Get] every probeInterval
+// while it waits -- Begin/End's reply rides the same queued-Report/Poll path
+// as enterBootloader()'s, so a single lost Set or a single lost Report is
+// otherwise unrecoverable within the timeout (see Node-Flash-Layout-and-
+// Bootloader-Spec.md §8 item 9 and OTA-Debugging-TODO.md's job-60 finding --
+// a clean transfer failing only because the End Report or Begin's Set/Report
+// was lost once, with no retry budget at all). Get always re-arms
+// statusPending regardless of what's actually pending, so it safely re-elicits
+// a fresh report whatever step we're waiting on.
+func (d *otaDriver) waitForWithProbe(timeout, probeInterval time.Duration, state uint8) (nodelib.FirmwareStatusReport, bool) {
 	deadline := time.After(timeout)
+	ticker := time.NewTicker(probeInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case r := <-d.reports:
 			if r.State == state || r.State == nodelib.BlError || r.LastError == nodelib.FwErrAlreadyCurrent {
 				return r, true
 			}
+		case <-ticker.C:
+			d.svc.send.SendGet(d.nodeID, nodelib.EndpointFirmware)
 		case <-deadline:
 			return nodelib.FirmwareStatusReport{}, false
 		}
