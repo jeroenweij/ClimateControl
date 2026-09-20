@@ -21,7 +21,9 @@ int main()
     Hal::System::Init();
 
     // TODO: clock tree to 64 MHz (HSI16 -> PLL). Running on HSI16 (16 MHz) for
-    // now -- 16 MHz / 250000 = 64 exact, so the bus baud is fine either way.
+    // now -- Board::BusBaudRate (115200) isn't an exact divisor at either
+    // clock, but the resulting generator error is negligible next to the
+    // HSI16 spread itself (Node-Bus-Hardware-Design-Spec.md §6.1).
 
     NodeLib::NodeMaster master;
     UplinkHandler       uplink(master);

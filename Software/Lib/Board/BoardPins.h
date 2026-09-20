@@ -54,8 +54,9 @@ namespace Board
     };
 
     // Wire bit rate for the RS485 main bus and the ControllerNode<->Thermostat
-    // link -- an exact integer USART divisor, well within range for the ~100 m /
-    // 20-node terminated bus. See RS485-Node-Protocol-Spec-STM32G030.md §9.
+    // link -- not an exact integer USART divisor (~0.08% generator error,
+    // negligible next to the HSI16 clock spread), well within range for the
+    // ~100 m / 20-node terminated bus. See RS485-Node-Protocol-Spec-STM32G030.md §9.
     constexpr uint32_t BusBaudRate = 115200;
 
     // --- Status indicators & user button (all three boards) ---------------

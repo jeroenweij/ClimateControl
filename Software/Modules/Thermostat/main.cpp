@@ -20,7 +20,10 @@ int main()
     Hal::System::SetVectorTable(Board::Flash::AppBase);
     Hal::System::Init();
 
-    // TODO: clock tree to 64 MHz (HSI16 -> PLL). 16 MHz / 250000 = 64 exact.
+    // TODO: clock tree to 64 MHz (HSI16 -> PLL). Board::BusBaudRate (115200)
+    // isn't an exact divisor at either clock, but the resulting generator
+    // error is negligible next to the HSI16 spread itself
+    // (Node-Bus-Hardware-Design-Spec.md §6.1).
 
     NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart);
     ThermostatHandler handler(node);

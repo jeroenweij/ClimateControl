@@ -168,7 +168,7 @@ All OTA messages target `Endpoint::Firmware`. `data[0]` is a `FirmwareOp` sub-op
 
 **Flow:** `Begin` → poll until `state==bl-receiving` → stream a batch of `Write` frames (roughly a page's worth, then poll) → on each `Status`, if `expectedOffset` didn't advance as far as sent, **rewind and resend from `expectedOffset`** → repeat to `imageSize` → `End` → poll for `bl-valid` → `Activate`.
 
-**Sizing:** 50 KB ÷ 27 B/frame ≈ 1900 `Write` frames; a full-size update is **~6 s at the 250 000 baud bus rate** (`RS485-Node-Protocol-Spec-STM32G030.md` §9). The rest of the bus keeps polling normally throughout.
+**Sizing:** 50 KB ÷ 27 B/frame ≈ 1900 `Write` frames; a full-size update was estimated at **~6 s at the (then-assumed) 250 000 baud bus rate** (`RS485-Node-Protocol-Spec-STM32G030.md` §9) — stale now that the bus runs 115 200 baud and `Write` is a synchronous per-frame Ack/Nack (§6.2.1); not re-derived here. The rest of the bus keeps polling normally throughout.
 
 This subsection describes v1 as originally designed, with `MAX_DATA = 32` and a 27-byte `Write` payload (`32 − 1 FirmwareOp − 4 offset`). **Decided 2026-09-20: `MAX_DATA` grows to 35 and the `Write` payload changes shape — see §6.2.1, which supersedes the `Write` row of the table above and the sizing note in this paragraph.**
 
@@ -295,7 +295,7 @@ The RAM-resident flash helper lives in `Lib/HAL/Flash` as a `.RamFunc` variant a
 
 1. **`ConfigRecord.settings[16]`** — is 16 bytes of per-node *factory* config enough (servo end-stop trim, room id, sensor offset…), or should the record grow to 48/64 bytes? Cheap to size generously now.
 2. **MainController Wi-Fi image source (§7.1 step 1)** — MQTT / HTTP GET / push from its own backend? Belongs in `MainController-Spec.md` §4 item 1, flagged here because it shapes the app-side updater.
-3. ~~**OTA baud rate**~~ — no OTA-specific rate. The whole bus runs **250 000 baud** (`RS485-Node-Protocol-Spec-STM32G030.md` §9), giving a ~6 s full-image transfer with no mid-session baud switching.
+3. ~~**OTA baud rate**~~ — no OTA-specific rate. The whole bus runs **115 200 baud** (`RS485-Node-Protocol-Spec-STM32G030.md` §9, as actually implemented in `BoardPins.h`) with no mid-session baud switching. The old "~6 s full-image transfer" estimate predates both this baud and the v2 synchronous per-write Ack/Nack protocol and needs re-deriving (§6.2.1's sizing note is likewise stale on this point).
 4. **Boot-fail counter** (§5) — include the watchdog-style "app resets N times without going healthy → stay in bootloader" fallback in v1, or leave it out? Adds one backup register and a bit of app-side "I'm healthy" bookkeeping.
 5. ~~**Bootloader size**~~ — 10 KB reserved; the full image (boot decision + validate + jump + the OTA slave loop, main bus and Thermostat link) links at ~8.0 KB, ~2 KB headroom.
 6. **Flash RDP level 1** in production (blocks SWD image readout; reversible only via full mass-erase)? Default: no — revisit only if the image is considered sensitive.
