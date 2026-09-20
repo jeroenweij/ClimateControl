@@ -231,7 +231,7 @@ func (d *otaDriver) progress(state string, offset int) {
 }
 
 func (d *otaDriver) run() {
-	d.progress("entering", 0)
+	d.progress("entering bootloader", 0)
 
 	if d.target == "thermostat" {
 		// The ControllerNode does EnterBootloader + the bootloader-Announce
@@ -256,7 +256,7 @@ func (d *otaDriver) run() {
 		return
 	}
 	if r.State == nodelib.BlError {
-		d.done("error", "node reported error "+itoa(int(r.LastError)), 0)
+		d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), 0)
 		return
 	}
 	d.progress("writing", 0)
@@ -301,7 +301,7 @@ func (d *otaDriver) run() {
 			return
 		}
 		if r.State == nodelib.BlError {
-			d.done("error", "node reported error "+itoa(int(r.LastError)), int(r.ExpectedOffset))
+			d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), int(r.ExpectedOffset))
 			return
 		}
 		// Rewind to whatever the node actually has.
@@ -318,7 +318,7 @@ func (d *otaDriver) run() {
 		return
 	}
 	if r.State == nodelib.BlError {
-		d.done("error", "node reported error "+itoa(int(r.LastError)), offset)
+		d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), offset)
 		return
 	}
 	d.sendSet(nodelib.EncodeFirmwareActivate())
@@ -369,26 +369,4 @@ func (d *otaDriver) awaitReport(timeout time.Duration) (nodelib.FirmwareStatusRe
 	case <-time.After(timeout):
 		return nodelib.FirmwareStatusReport{}, false
 	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [12]byte
-	i := len(b)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }

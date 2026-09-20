@@ -1,6 +1,9 @@
 package nodelib
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"strconv"
+)
 
 // FirmwareOp mirrors NodeLib::FirmwareOp (Software/Lib/NodeLib/EFirmware.h) --
 // the sub-opcode carried in data[0] of a Firmware / ThermostatFirmware frame.
@@ -48,6 +51,30 @@ const (
 	FwErrAlreadyCurrent = 8 // ThermostatFirmware only -- no-op update, skipped
 	FwErrLinkDown       = 9 // ThermostatFirmware only -- Thermostat unreachable
 )
+
+var firmwareErrorNames = map[uint8]string{
+	FwErrNone:           "none",
+	FwErrWrongModule:    "wrong module",
+	FwErrBadSize:        "bad size",
+	FwErrEraseFailed:    "erase failed",
+	FwErrProgramFailed:  "program failed",
+	FwErrOverrun:        "overrun",
+	FwErrCrcMismatch:    "CRC mismatch",
+	FwErrBadState:       "bad state",
+	FwErrAlreadyCurrent: "already current",
+	FwErrLinkDown:       "thermostat link down",
+}
+
+// FirmwareErrorName renders a node's FirmwareStatusReport.LastError for an
+// operator-facing message -- the numeric code alone (surfaced verbatim by
+// FirmwareSlave, Software/Modules/Bootloader/FirmwareSlave.cpp) means nothing
+// without cross-referencing that file.
+func FirmwareErrorName(code uint8) string {
+	if name, ok := firmwareErrorNames[code]; ok {
+		return name
+	}
+	return "unknown error " + strconv.Itoa(int(code))
+}
 
 // EncodeFirmwareBegin builds the 12-byte Firmware[Begin] payload: op(1)
 // module(1) imageSize(4 LE) imageCrc32(4 LE) fwVersion(2 LE).
