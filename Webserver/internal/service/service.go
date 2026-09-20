@@ -153,8 +153,16 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 		s.hb.PublishValue(node, f.Endpoint, v)
 
 	case nodelib.OpAck:
+		if f.Endpoint == nodelib.EndpointFirmware || f.Endpoint == nodelib.EndpointThermostatFirmware {
+			s.onFirmwareWriteReply(false, f)
+			return
+		}
 		s.log.Debug("node ack", "node", node, "endpoint", f.Endpoint)
 	case nodelib.OpNack:
+		if f.Endpoint == nodelib.EndpointFirmware || f.Endpoint == nodelib.EndpointThermostatFirmware {
+			s.onFirmwareWriteReply(true, f)
+			return
+		}
 		s.log.Info("node nack", "node", node, "endpoint", f.Endpoint, "reason", f.Data)
 	}
 }
@@ -203,6 +211,18 @@ func (s *Service) onFirmwareReport(f nodelib.Frame) {
 	s.mu.Unlock()
 	if d != nil {
 		d.onReport(f)
+	}
+}
+
+// onFirmwareWriteReply feeds a relayed Firmware / ThermostatFirmware Ack/Nack
+// (a Write reply, Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1) to the
+// active push driver, if this frame belongs to it.
+func (s *Service) onFirmwareWriteReply(nack bool, f nodelib.Frame) {
+	s.mu.Lock()
+	d := s.ota
+	s.mu.Unlock()
+	if d != nil {
+		d.onWriteReply(nack, f)
 	}
 }
 

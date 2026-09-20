@@ -12,28 +12,23 @@ import (
 )
 
 const (
-	otaChunk = 27 // bytes per Write frame (spec §5)
-	// Found on the bench: the bootloader's UART is plain polling, no
-	// interrupt-driven buffer like the app's Hal::Uart -- bursting many
-	// Write frames back-to-back (the old otaWindow=16) can outrun it and
-	// overwrite the single-deep receive register before Loop() reads it,
-	// desyncing the stream badly enough that it stops answering anything,
-	// including a plain Discover, until the desync clears. One at a time,
-	// paced by waiting for that write's own status report (which itself
-	// only arrives on the next round-robin Poll) before sending the next.
-	otaWindow     = 1
-	otaReportWait = 3 * time.Second  // per-report timeout
+	otaChunk = 32 // bytes per Write frame -- Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 (v2)
+
+	otaReportWait = 3 * time.Second  // per-report timeout (Begin/End/Abort -- still Report/Poll-based)
 	otaStepWait   = 20 * time.Second // per-phase timeout
 	otaBootPoll   = 1 * time.Second  // Firmware Get cadence while waiting for the bootloader
 
-	// Found on the bench, even past the ORE/pacing fixes above: an
-	// occasional single write's status report still goes missing outright --
-	// the same residual risk NodeMaster.pollTimeout's own comment
-	// acknowledges for a normal Poll reply on a real bus. Resending the same
-	// chunk is safe either way: FirmwareSlave.HandleWrite ignores an offset
-	// that doesn't match its own expectedOffset, so a resend after a report
-	// (not the write) was the one actually lost is just silently dropped as
-	// stale.
+	// Per-write ack timeout. Write's reply is now a queued Ack/Nack tied to
+	// the specific offset (§6.2.1), not a raw progress counter -- but
+	// delivery still rides the normal Poll cadence, same as a Report, so
+	// this stays close to otaReportWait rather than assuming a much shorter
+	// bound. A lost ack or a genuine gap is no longer ambiguous (the reply
+	// names its own offset), so a retry can safely resend the actual Write
+	// -- FirmwareSlave answers a duplicate from a flash read-back instead of
+	// re-programming it (STM32G0 PROGERR on a second write to an
+	// already-programmed double-word), so this is safe even if the
+	// original write landed and only its ack was lost.
+	otaWriteWait    = 3 * time.Second
 	otaWriteRetries = 3
 )
 
@@ -128,16 +123,17 @@ func (s *Service) kickOta() {
 			continue
 		}
 		d := &otaDriver{
-			svc:     s,
-			jobID:   job.ID,
-			nodeID:  job.NodeID,
-			target:  job.Target,
-			image:   bin,
-			crc32:   job.CRC32,
-			fw:      uint16(job.FWVersion),
-			module:  nodelib.Module(job.Module),
-			reports: make(chan nodelib.FirmwareStatusReport, 8),
-			doneCh:  make(chan struct{}),
+			svc:          s,
+			jobID:        job.ID,
+			nodeID:       job.NodeID,
+			target:       job.Target,
+			image:        bin,
+			crc32:        job.CRC32,
+			fw:           uint16(job.FWVersion),
+			module:       nodelib.Module(job.Module),
+			reports:      make(chan nodelib.FirmwareStatusReport, 8),
+			writeReplies: make(chan nodelib.FirmwareWriteReply, 8),
+			doneCh:       make(chan struct{}),
 		}
 		s.ota = d
 		go d.run()
@@ -165,9 +161,10 @@ type otaDriver struct {
 	fw     uint16
 	module nodelib.Module
 
-	reports chan nodelib.FirmwareStatusReport
-	doneCh  chan struct{}
-	once    sync.Once
+	reports      chan nodelib.FirmwareStatusReport
+	writeReplies chan nodelib.FirmwareWriteReply
+	doneCh       chan struct{}
+	once         sync.Once
 }
 
 // endpoint is Endpoint::Firmware for a "node" push, or Endpoint::
@@ -197,6 +194,24 @@ func (d *otaDriver) onReport(f nodelib.Frame) {
 	}
 	select {
 	case d.reports <- r:
+	default:
+	}
+}
+
+// onWriteReply is called by Service.onFirmwareWriteReply for every relayed
+// Firmware / ThermostatFirmware Ack/Nack; it filters to this job's
+// node+endpoint and feeds the decoded reply onto the channel run() reads
+// from.
+func (d *otaDriver) onWriteReply(nack bool, f nodelib.Frame) {
+	if int(f.Node) != d.nodeID || f.Endpoint != d.endpoint() {
+		return
+	}
+	r, ok := nodelib.ParseFirmwareWriteReply(nack, f.Data)
+	if !ok {
+		return
+	}
+	select {
+	case d.writeReplies <- r:
 	default:
 	}
 }
@@ -231,6 +246,16 @@ func (d *otaDriver) progress(state string, offset int) {
 }
 
 func (d *otaDriver) run() {
+	// Cheap sanity pin before touching the bus at all: re-validate the
+	// in-memory/on-disk image against the CRC32 recorded at upload time
+	// (Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 "Server-side
+	// chunking bug", point 3) -- catches corruption between upload and use,
+	// independent of anything about the chunking loop below.
+	if _, crc, err := nodelib.ParseImage(d.image); err != nil || crc != d.crc32 {
+		d.done("error", "uploaded image failed integrity re-check before starting", 0)
+		return
+	}
+
 	d.progress("entering bootloader", 0)
 
 	if d.target == "thermostat" {
@@ -261,55 +286,72 @@ func (d *otaDriver) run() {
 	}
 	d.progress("writing", 0)
 
-	// Stream Write chunks; the report's ExpectedOffset is authoritative.
+	// Stream Write chunks one at a time, each a full request/reply: send,
+	// wait for its Ack/Nack, verify the CRC it reports against what we meant
+	// to send, then move on. See Node-Flash-Layout-and-Bootloader-Spec.md
+	// §6.2.1 for the design and the "Server-side chunking bug" note this
+	// implements point 1 of (slicing 'chunk' fresh from 'offset', the exact
+	// value written into the wire message, rather than a separately-tracked
+	// loop variable that could drift out of sync with it).
 	offset := 0
 	for offset < len(d.image) {
-		windowStart := offset
-		var r nodelib.FirmwareStatusReport
+		end := offset + otaChunk
+		if end > len(d.image) {
+			end = len(d.image)
+		}
+		chunk := d.image[offset:end]
+		expectCRC := nodelib.CRC16(chunk)
+		wireOffset := uint16(offset)
+
+		var reply nodelib.FirmwareWriteReply
 		var ok bool
 		for attempt := 0; attempt <= otaWriteRetries; attempt++ {
-			if attempt == 0 {
-				o := windowStart
-				for i := 0; i < otaWindow && o < len(d.image); i++ {
-					end := o + otaChunk
-					if end > len(d.image) {
-						end = len(d.image)
-					}
-					d.sendSet(nodelib.EncodeFirmwareWrite(uint32(o), d.image[o:end]))
-					o = end
-				}
-			} else {
-				// A retry can't just resend the same chunk: if the write
-				// itself landed and only the report describing it was lost,
-				// FirmwareSlave.HandleWrite silently ignores a resend at an
-				// offset that's no longer its expectedOffset -- no new
-				// statusPending, no new report, so blindly repeating the
-				// write would just recreate the same timeout forever. A Get
-				// probe always gets a fresh report either way (current
-				// expectedOffset whether or not the write applied), and the
-				// rewind below naturally retries the write next iteration if
-				// it turns out it didn't.
-				d.svc.send.SendGet(d.nodeID, d.endpoint())
-			}
-			r, ok = d.awaitReport(otaReportWait)
+			// A resend is always safe now, not just a probe: FirmwareSlave
+			// answers a duplicate offset from a flash read-back rather than
+			// re-programming it, so repeating the write when only its ack
+			// was lost just gets a fresh Ack for the same, already-correct
+			// data.
+			d.sendSet(nodelib.EncodeFirmwareWrite(wireOffset, chunk))
+			reply, ok = d.awaitWriteReply(otaWriteWait)
 			if ok {
 				break
 			}
 		}
 		if !ok {
-			d.done("error", "timeout waiting for write progress", offset)
+			d.done("error", "timeout waiting for write ack", offset)
 			return
 		}
-		if r.State == nodelib.BlError {
-			d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), int(r.ExpectedOffset))
+		if reply.Nack {
+			// Node named where it actually is (a gap, or "can't vouch past
+			// what's committed") -- resync there and retry from that point.
+			offset = int(reply.Offset)
+			d.progress("writing", offset)
+			continue
+		}
+		if reply.ProgramFailed {
+			d.done("error", "node reported a flash program failure", offset)
 			return
 		}
-		// Rewind to whatever the node actually has.
-		offset = int(r.ExpectedOffset)
+		if reply.ChunkCRC16 != expectCRC {
+			// The node applied different bytes than we sent for this offset
+			// -- a receive/logic bug, independent of flash (the frame's own
+			// CRC16 already protects the wire hop; this catches corruption
+			// downstream of that, or a bug in what the node staged).
+			d.done("error", "chunk CRC mismatch -- node staged different bytes than sent", offset)
+			return
+		}
+		offset = end
 		d.progress("writing", offset)
 	}
 
-	// End marker + verify.
+	// End marker + verify. Every chunk sent above was individually verified
+	// against what this driver meant to send, so if this final whole-image
+	// CRC32 still fails, that specific combination points at a server-side
+	// chunking bug (wrong bytes sliced for some offset -- both this driver's
+	// own per-chunk CRC and the node's would agree on the same wrong bytes,
+	// so per-chunk verification alone can't catch it), not the node/flash
+	// path -- see Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 "Server-
+	// side chunking bug".
 	d.sendSet(nodelib.EncodeFirmwareEnd())
 	d.progress("verifying", offset)
 	r, ok = d.waitFor(otaStepWait, nodelib.BlValid)
@@ -318,7 +360,12 @@ func (d *otaDriver) run() {
 		return
 	}
 	if r.State == nodelib.BlError {
-		d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), offset)
+		if r.LastError == nodelib.FwErrCrcMismatch {
+			d.done("error", "image verified chunk-by-chunk during transfer but failed the final image CRC check "+
+				"-- likely a server-side chunking bug, not a node/flash issue", offset)
+		} else {
+			d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), offset)
+		}
 		return
 	}
 	d.sendSet(nodelib.EncodeFirmwareActivate())
@@ -368,5 +415,14 @@ func (d *otaDriver) awaitReport(timeout time.Duration) (nodelib.FirmwareStatusRe
 		return r, true
 	case <-time.After(timeout):
 		return nodelib.FirmwareStatusReport{}, false
+	}
+}
+
+func (d *otaDriver) awaitWriteReply(timeout time.Duration) (nodelib.FirmwareWriteReply, bool) {
+	select {
+	case r := <-d.writeReplies:
+		return r, true
+	case <-time.After(timeout):
+		return nodelib.FirmwareWriteReply{}, false
 	}
 }

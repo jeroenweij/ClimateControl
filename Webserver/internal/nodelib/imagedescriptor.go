@@ -3,7 +3,6 @@ package nodelib
 import (
 	"encoding/binary"
 	"errors"
-	"hash/crc32"
 )
 
 // ImageDescriptor mirrors Board::ImageDescriptor in
@@ -61,7 +60,7 @@ func ParseImage(bin []byte) (ImageDescriptor, uint32, error) {
 			return desc, 0, ErrBadImage
 		}
 		want := binary.LittleEndian.Uint32(bin[size-4 : size])
-		got := crc32.ChecksumIEEE(bin[:size-4])
+		got := CRC32(bin[:size-4])
 		if got != want {
 			return desc, 0, ErrBadImage
 		}
@@ -74,5 +73,5 @@ func ParseImage(bin []byte) (ImageDescriptor, uint32, error) {
 		size = len(bin)
 		desc.ImageSize = uint32(size)
 	}
-	return desc, crc32.ChecksumIEEE(bin[:size]), nil
+	return desc, CRC32(bin[:size]), nil
 }

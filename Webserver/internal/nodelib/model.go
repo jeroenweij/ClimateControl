@@ -5,8 +5,12 @@
 // Node-Message-Model-Spec.md (§3 endpoints, §4 operations, §5 encodings).
 package nodelib
 
-// MaxData is the DATA-field cap enforced on the bus and this link.
-const MaxData = 32
+// MaxData is the DATA-field cap enforced on the bus and this link. Mirrors
+// NodeLib::MAX_DATA (Software/Lib/NodeLib/Id.h) -- 35, decided 2026-09-20,
+// sized for Firmware[Write]'s 32-byte double-word-aligned data payload
+// (Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1): 1 (FirmwareOp) +
+// 2 (byteOffset) + 32 (data) = 35, exactly.
+const MaxData = 35
 
 // NodeBroadcast is the reserved broadcast address (Set-only, no reply).
 const NodeBroadcast = 0xFF

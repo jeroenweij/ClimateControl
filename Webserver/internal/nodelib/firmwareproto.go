@@ -102,14 +102,18 @@ func EncodeThermostatFirmwareBegin(imageSize, imageCRC32 uint32, fwVersion uint1
 }
 
 // EncodeFirmwareWrite builds a Firmware[Write] (or ThermostatFirmware[Write])
-// payload: op(1) offset(4 LE) bytes(<=27) -- identical shape either way.
-func EncodeFirmwareWrite(offset uint32, chunk []byte) []byte {
-	if len(chunk) > 27 {
-		chunk = chunk[:27]
+// payload: op(1) byteOffset(2 LE) bytes(<=32) -- identical shape either way.
+// Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 (v2, decided 2026-09-20):
+// byteOffset shrank from 4 to 2 bytes (the 50 KB app slot fits easily) so the
+// data payload could grow to 32 bytes -- a whole number of 8-byte
+// double-words, so every chunk is independently, immediately flashable.
+func EncodeFirmwareWrite(offset uint16, chunk []byte) []byte {
+	if len(chunk) > 32 {
+		chunk = chunk[:32]
 	}
-	b := make([]byte, 0, 5+len(chunk))
+	b := make([]byte, 0, 3+len(chunk))
 	b = append(b, byte(FirmwareOpWrite))
-	b = binary.LittleEndian.AppendUint32(b, offset)
+	b = binary.LittleEndian.AppendUint16(b, offset)
 	return append(b, chunk...)
 }
 
@@ -149,5 +153,32 @@ func ParseFirmwareStatusReport(data []byte) (FirmwareStatusReport, bool) {
 		ExpectedOffset: u32(data[2:]),
 		LastError:      data[6],
 		FWVersion:      u16(data[7:]),
+	}, true
+}
+
+// FirmwareWriteReply is a decoded Ack/Nack reply to a Firmware[Write] (or
+// ThermostatFirmware[Write]) -- Node-Flash-Layout-and-Bootloader-Spec.md
+// §6.2.1: byteOffset(2 LE) chunkCrc16(2 LE) programFailed(1). Unlike
+// FirmwareStatusReport this rides Operation Ack/Nack, not Report, and
+// carries no FirmwareOp sub-byte -- the operation itself says what it's
+// about, since Write is (so far) the only Firmware op that replies this way.
+type FirmwareWriteReply struct {
+	Nack          bool // true if this was a Nack, not an Ack
+	Offset        uint16
+	ChunkCRC16    uint16
+	ProgramFailed bool
+}
+
+// ParseFirmwareWriteReply decodes a Firmware / ThermostatFirmware Ack/Nack
+// payload. ok is false if the payload is too short.
+func ParseFirmwareWriteReply(nack bool, data []byte) (FirmwareWriteReply, bool) {
+	if len(data) < 5 {
+		return FirmwareWriteReply{}, false
+	}
+	return FirmwareWriteReply{
+		Nack:          nack,
+		Offset:        u16(data[0:]),
+		ChunkCRC16:    u16(data[2:]),
+		ProgramFailed: data[4] != 0,
 	}, true
 }
