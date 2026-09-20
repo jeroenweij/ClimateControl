@@ -30,6 +30,14 @@ const (
 	// original write landed and only its ack was lost.
 	otaWriteWait    = 3 * time.Second
 	otaWriteRetries = 3
+
+	// Found live via the Write/Ack passthrough trace on MainController
+	// (OTA-Debugging-TODO.md): a Send() failure (uplink down / outbound
+	// queue full) was silently discarded and the driver still waited the
+	// full otaWriteWait for a reply that could never arrive. This is the
+	// pause before retrying a send in that case instead -- short, since
+	// there's nothing to wait out, just a moment for the condition to clear.
+	otaSendRetryDelay = 200 * time.Millisecond
 )
 
 // StartOTA validates the uploaded image and records a job. Only one push runs
@@ -177,8 +185,18 @@ func (d *otaDriver) endpoint() nodelib.Endpoint {
 	return nodelib.EndpointFirmware
 }
 
-func (d *otaDriver) sendSet(data []byte) {
-	d.svc.send.Send(nodelib.Frame{Node: uint8(d.nodeID), Endpoint: d.endpoint(), Operation: nodelib.OpSet, Data: data})
+// sendSet returns whether the frame was actually queued for the uplink --
+// false means it never left the server at all (uplink down, or the outbound
+// queue was full), which previously burned a full otaWriteWait doing nothing
+// (Spec/OTA-Debugging-TODO.md: a live Write/Ack passthrough trace on
+// MainController showed one of these events directly -- the MC never even
+// saw a Write to relay for the chunk that finally timed out).
+func (d *otaDriver) sendSet(data []byte) bool {
+	ok := d.svc.send.Send(nodelib.Frame{Node: uint8(d.nodeID), Endpoint: d.endpoint(), Operation: nodelib.OpSet, Data: data})
+	if !ok {
+		d.svc.log.Warn("ota: send failed, not queued for uplink", "job", d.jobID, "node", d.nodeID, "target", d.target)
+	}
+	return ok
 }
 
 // onReport is called by Service.onFirmwareReport for every relayed Firmware /
@@ -311,13 +329,23 @@ func (d *otaDriver) run() {
 			// re-programming it, so repeating the write when only its ack
 			// was lost just gets a fresh Ack for the same, already-correct
 			// data.
-			d.sendSet(nodelib.EncodeFirmwareWrite(wireOffset, chunk))
+			if !d.sendSet(nodelib.EncodeFirmwareWrite(wireOffset, chunk)) {
+				// Never left the server (uplink down / outbound queue full)
+				// -- no reply can possibly come back, so don't burn a full
+				// otaWriteWait waiting for one; pause briefly and retry.
+				time.Sleep(otaSendRetryDelay)
+				continue
+			}
 			reply, ok = d.awaitWriteReply(otaWriteWait)
 			if ok {
 				break
 			}
+			d.svc.log.Warn("ota: write sent, no reply within otaWriteWait", "job", d.jobID, "offset", offset,
+				"attempt", attempt, "waitedMs", otaWriteWait.Milliseconds())
 		}
 		if !ok {
+			d.svc.log.Warn("ota: write ack timed out after all retries", "job", d.jobID, "offset", offset,
+				"attempts", otaWriteRetries+1)
 			d.done("error", "timeout waiting for write ack", offset)
 			return
 		}
