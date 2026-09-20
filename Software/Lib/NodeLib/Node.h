@@ -71,7 +71,7 @@ namespace NodeLib
 
         ErrorHandler         errorHandler;
         static const uint8_t masterNodeId = 0;
-        static const int     nodeSpacing  = 25;
+        static const int     nodeSpacing  = 10;
         // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes) -- one
         // definition, in Id.h, shared with ConfigStore.
         static const uint8_t maxNodes  = MAX_NODES;

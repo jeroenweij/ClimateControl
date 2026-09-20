@@ -20,8 +20,10 @@ namespace NodeLib
 
     // Hard cap on the slave-node count -- sizes NodeMaster's fixed activeNodes[]
     // array and bounds a provisioned NodeId (ConfigStore::Valid()). Node::maxNodes
-    // aliases this so there is one definition.
-    static const uint8_t MAX_NODES = 25;
+    // aliases this so there is one definition. Paired with Node::nodeSpacing /
+    // Boot::NodeSpacingMs -- see the worst-case discovery-collision margin in
+    // RS485-Node-Protocol-Spec-STM32G030.md §9 item 2 before raising either.
+    static const uint8_t MAX_NODES = 21;
 
     // Broadcast address -- valid only with Operation::Set (fire-and-forget, no
     // reply). See Spec/Node-Message-Model-Spec.md §2.

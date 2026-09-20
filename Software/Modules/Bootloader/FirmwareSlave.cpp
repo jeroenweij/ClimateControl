@@ -25,7 +25,7 @@ using NodeLib::Operation;
 
 namespace
 {
-    constexpr uint32_t NodeSpacingMs = 25;
+    constexpr uint32_t NodeSpacingMs = 10; // must match NodeLib::Node::nodeSpacing
     constexpr uint32_t HeartbeatMs   = 500;
 
     // FirmwareOp::Status payload shape (Node-Flash-Layout-and-Bootloader-Spec.md

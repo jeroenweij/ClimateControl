@@ -39,7 +39,7 @@ MainController ──(main RS485 bus, many nodes)── ControllerNode ──(de
 
 **Half-duplex 2-wire RS485 with hardware driver-enable** — the same transceiver and BOM as the main bus. Differential signalling suits the duct-to-wall run, and although a 2-endpoint link has nothing to arbitrate and could run full-duplex or plain UART, the bus-resident bootloader's OTA UART (`Modules/Bootloader/OtaUart.cpp`) drives a hardware DE line and expects `DEAT`/`DEDT` turnaround timing. Matching that here — transceiver DE on `Board::Usart2De` (PA1) — is what lets the same bootloader binary serve a Thermostat image with only a USART-select change (§5.5).
 
-On the ControllerNode this is a *second* RS485 front-end (USART2, PA2/PA3, DE PA1) alongside the main-bus one (USART1); on the Thermostat it is the only link. `BoardPins.h` (`LinkUart`) carries these pins. Bit rate is `Board::BusBaudRate` (250 000), the same as the main bus.
+On the ControllerNode this is a *second* RS485 front-end (USART2, PA2/PA3, DE PA1) alongside the main-bus one (USART1); on the Thermostat it is the only link. `BoardPins.h` (`LinkUart`) carries these pins. Bit rate is `Board::BusBaudRate` (115 200), the same as the main bus.
 
 ### 3.1 Cable, power, and connector
 
@@ -176,7 +176,7 @@ The Thermostat is provisioned with the **same `nodeId` as the ControllerNode it 
 Consequences:
 - A Thermostat is **not field-interchangeable** without re-provisioning.
 - The server, `0x63` and `ota_jobs` identify a Thermostat by its owning ControllerNode's id directly; no separate address space.
-- `FirmwareSlave`'s `(nodeId-1)×25 ms` announce back-off is dead time on the 1:1 link — `LinkMaster` just waits out its discovery window.
+- `FirmwareSlave`'s `(nodeId-1)×10 ms` announce back-off is dead time on the 1:1 link — `LinkMaster` just waits out its discovery window.
 - `LinkMaster`'s single peer id is `ConfigStore::NodeId()` (the CN's own id).
 - The `provision` CMake target (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.3) has a pair mode that writes both records with a shared id in one bench step.
 

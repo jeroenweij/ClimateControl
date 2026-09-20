@@ -17,10 +17,10 @@ using NodeLib::Operation;
 
 namespace
 {
-    // DetectNodes()'s discovery window is nodeSpacing(25) * (maxNodes(25)+1) =
-    // 650ms (Node.h / Id.h::MAX_NODES) -- advancing past it lets the
+    // DetectNodes()'s discovery window is nodeSpacing(10) * (maxNodes(21)+1) =
+    // 220ms (Node.h / Id.h::MAX_NODES) -- advancing past it lets the
     // Detecting state's timeoutTimer fire.
-    const uint32_t discoveryWindowMs = 700;
+    const uint32_t discoveryWindowMs = 250;
 
     void ResetWorld()
     {

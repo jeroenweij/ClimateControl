@@ -92,7 +92,7 @@ The round-robin transport (discovery / poll cycle / heartbeat) carries over from
 | Item | v1 | v2 |
 |---|---|---|
 | Master ID | `0`, hardcoded constant | `0`, still reserved |
-| Node ID range | 1–10 (`numNodes = 10`, compile-time) | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 25). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
+| Node ID range | 1–10 (`numNodes = 10`, compile-time) | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 21). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
 | Broadcast | — (none; `DETECTNODES` recognised by op only) | `NODE_ID = 0xFF`, valid with `Operation::Set` only (fire-and-forget, no reply) — `Node-Message-Model-Spec.md` §2 |
 | Discovery | Broadcast `DETECTNODES`, staggered `HELLOWORLD` replies by `(nodeId-1) * nodeSpacing` ms | Same mechanism; ops renamed `Discover` / `Announce`. `Announce` payload carries module type + 96-bit UID for the master's roster. |
 | Poll cycle | Master → `SENDQ` → node dumps queue → `ENDOFQ` → master polls next active node | Same; ops renamed `Poll` / `Done`. A polled node dumps its queued `Report`s (on-change + keepalive, `Node-Message-Model-Spec.md` §6.1). |
