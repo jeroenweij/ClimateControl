@@ -105,8 +105,8 @@ The round-robin transport (discovery / poll cycle / heartbeat) carries over from
 
 | Buffer | Size | Notes |
 |---|---|---|
-| RX frame buffer | `2 (sync) + 1 (len) + 3 (header) + MAX_DATA + 2 (crc)` | Recommend `MAX_DATA = 32` → 40-byte buffer. Revisit only if a specific message type genuinely needs more. |
-| TX queue | Same struct as v1 (`messageQueue[queueSize]`), but each entry now needs to own/reference a variable-length payload | Simplest approach: fixed-size queue slots sized at `MAX_DATA` (wastes some RAM per slot but avoids dynamic allocation — appropriate on an 8 KB-RAM MCU). `queueSize = 25` from v1 × 40 bytes/slot ≈ 1 KB — fine. |
+| RX frame buffer | `2 (sync) + 1 (len) + 3 (header) + MAX_DATA + 2 (crc)` | **`MAX_DATA = 35`** (decided 2026-09-20 — was 32; see §9 item 1) → 43-byte buffer. |
+| TX queue | Same struct as v1 (`messageQueue[queueSize]`), but each entry now needs to own/reference a variable-length payload | Simplest approach: fixed-size queue slots sized at `MAX_DATA` (wastes some RAM per slot but avoids dynamic allocation — appropriate on an 8 KB-RAM MCU). `queueSize = 25` from v1 × 43 bytes/slot ≈ 1.05 KB — fine (measured actual RAM use post-implementation, `Modules/TemperatureNode`: 2384 B / 8192 B (29%) at `MAX_DATA=32`; the +75 B this queue gains at `MAX_DATA=35` is trivial against that headroom). |
 | Avoid heap allocation | — | No `malloc`/`new` for frame data; fixed-size slots only, matching v1's existing no-heap style. |
 
 This keeps total protocol RAM usage well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. Add the small `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, ~384 B) to this budget.
@@ -138,7 +138,7 @@ This keeps total protocol RAM usage well under 2 KB, leaving headroom for applic
 
 ## 9. Open decisions (need your input before finalizing)
 
-1. **`MAX_DATA` cap** — 32 bytes assumed above; tell me if any planned message type needs more (e.g. streaming a batch of readings in one frame).
+1. ~~**`MAX_DATA` cap**~~ — **decided 2026-09-20: `MAX_DATA = 35`** (was 32). Driven by `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1's OTA `Write` redesign: a double-word-aligned 32-byte firmware data payload (needed so every `Write` chunk maps to an independently-flashable, independently-verifiable double-word-aligned range — see that spec for why) plus `1 (FirmwareOp) + 2 (byteOffset, uint16 LE — the 50 KB app slot fits comfortably)` = 35 bytes exactly, with no slack. No other message type needs anywhere near this much (the next-largest is nowhere close), so 35 is sized specifically for `Firmware[Write]`, not rounded up further speculatively. RAM cost is trivial — see the buffer table above.
 2. ~~**Baud rate**~~ — **250 000 baud.** ~100 m total bus (`Node-Bus-Hardware-Design-Spec.md` §7 item 3), 20 nodes, terminated both ends, indoor (~10–40 °C):
    - **Exact integer USART divisor** at both candidate kernel clocks (÷64 at a 16 MHz HCLK, ÷256 at 64 MHz). Zero baud-generator error — the crystal-less HSI16 clock (±~1 % indoors, so ~±2 % node-to-node) already spends most of the async-UART framing budget, so there is no room to add divisor error. 460 800 / 921 600 are not exact and 1 Mbit leaves too little margin against HSI16 spread plus the slower edges from each node's 10 Ω + SM712 + stub loading.
    - **Length·rate = 2.5×10⁷ bit·m/s** — an order of magnitude inside the conservative RS-485 knee (~10⁸) and far inside what the 12 Mbps MAX3485 does over 100 m of terminated pair. Bit period 4 µs vs. ~0.5 µs one-way cable delay → reflections settle in well under a bit.

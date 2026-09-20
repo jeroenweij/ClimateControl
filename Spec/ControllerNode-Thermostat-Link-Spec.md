@@ -209,14 +209,15 @@ ThermostatFirmware = 0x22   // data[0] = FirmwareOp; "act on my paired Thermosta
 | main bus → CN | CN → Thermostat, over the link |
 |---|---|
 | `Set ThermostatFirmware[Begin] {module=4, imageSize, imageCrc32, fwVersion, flags}` | (guard, §5.4.1) `Set Firmware[EnterBootloader]`, wait for the bootloader `Announce`, then `Set Firmware[Begin {…}]` (the standard 12-byte payload, `flags` dropped) |
-| `Set ThermostatFirmware[Write] {offset, bytes≤27}` | `Set Firmware[Write {offset, bytes}]` in the next link poll window |
+| `Set ThermostatFirmware[Write] {offset(2 LE), bytes=32}` | `Set Firmware[Write {offset, bytes}]` in the next link poll window |
 | `Set ThermostatFirmware[End]` / `[Activate]` / `[Abort]` | the same `Firmware` op |
 | `Get ThermostatFirmware` (no FirmwareOp) | answered from the CN's link cache — no link traffic |
 
 - `ThermostatFirmware[Begin]` is CN-terminated, so its payload differs from the bus `Firmware[Begin]` — it adds a `flags` byte (bit 0 = `Force`, §5.4.1), ~14 bytes, well under `MAX_DATA`.
 - The CN `Report`s `ThermostatFirmware {FirmwareOp::Status, state, expectedOffset, lastError, fwVersion}` up the main bus, copied from the Thermostat's link `Status` (or from cache for a bare `Get`). This carries the Thermostat's running firmware version on demand — no separate "thermostat info" endpoint.
 - The CN keeps a small link cache of the Thermostat's `state` + `fwVersion` (+ `uid`, §5.6), refreshed by a periodic link `Get SystemInfo` / `Get Firmware`, so `Get ThermostatFirmware` is always answerable.
-- One 27-byte chunk crosses the CN at a time — no image staging. The CN does **not** forward frames between the two buses (`Node-Message-Model-Spec.md` §7): it terminates and re-originates.
+- One 32-byte chunk crosses the CN at a time (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1 — decided 2026-09-20, was 27) — no image staging. The CN does **not** forward frames between the two buses (`Node-Message-Model-Spec.md` §7): it terminates and re-originates.
+- **Open question, not yet decided:** `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1 moves the bus `Firmware[Write]`'s acknowledgement from a queued `Status` `Report` to an immediate-content `Ack`/`Nack` naming the offset + a flash read-back CRC — that spec's §8 item 9 hasn't yet decided whether `Begin`/`End`/`Abort` follow suit, and this file hasn't decided whether `ThermostatFirmware[Write]` (both hops: CN↔Thermostat over the link, and the CN's relay of it back up the main bus) should mirror whatever `Firmware[Write]` ends up doing, for the same "same `FirmwareOp` sub-opcodes, no divergence" reason cited above. Flagging so this doesn't silently drift out of sync with `Firmware` once that's decided.
 
 #### 5.4.1 Already-current guard
 
