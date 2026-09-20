@@ -12,7 +12,7 @@ set(CMAKE_C_STANDARD 11)
 # used to name the OTA image the build produces
 # (<Module>_<version>.bin, e.g. ControllerNode_1.0.bin -- the name the server's
 # firmware repository parses). Bump this for a release.
-set(CC_FW_VERSION "1.0" CACHE STRING "Firmware version <major>.<minor>")
+set(CC_FW_VERSION "0.1" CACHE STRING "Firmware version <major>.<minor>")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/stm32.cmake)
 
