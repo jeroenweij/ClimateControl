@@ -65,12 +65,13 @@ bool Hal::Flash::ErasePage(const uint32_t address)
     return ok;
 }
 
-bool Hal::Flash::Program(const uint32_t address, const uint8_t* const data, const size_t len)
+size_t Hal::Flash::Program(const uint32_t address, const uint8_t* const data, const size_t len)
 {
     WaitIdle();
     ClearStatus();
 
-    bool ok = true;
+    bool   ok         = true;
+    size_t programmed = 0;
     FLASH->CR |= FLASH_CR_PG;
 
     for (size_t offset = 0; offset < len && ok; offset += 8)
@@ -88,8 +89,12 @@ bool Hal::Flash::Program(const uint32_t address, const uint8_t* const data, cons
         dst[1] = words[1];
 
         ok = Finish();
+        if (ok)
+        {
+            programmed = offset + 8 > len ? len : offset + 8;
+        }
     }
 
     FLASH->CR &= ~FLASH_CR_PG;
-    return ok;
+    return programmed;
 }

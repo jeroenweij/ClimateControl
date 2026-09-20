@@ -73,6 +73,15 @@ void ControllerHandler::Loop()
         reportedModeValid = true;
         Report(Endpoint::DamperMode, &mode, 1);
     }
+
+    bool     nack;
+    uint16_t offset;
+    uint16_t chunkCrc16;
+    bool     programFailed;
+    if (thermostatLink.ConsumeWriteReply(nack, offset, chunkCrc16, programFailed))
+    {
+        AckOrNackThermostatWrite(nack, offset, chunkCrc16, programFailed);
+    }
 }
 
 void ControllerHandler::ReceivedMessage(const Message& m)
@@ -219,12 +228,15 @@ void ControllerHandler::HandleThermostatFirmware(const Message& m)
             }
             break;
         case FirmwareOp::Write:
-            // op byteOffset(4) bytes
-            if (m.len >= 5)
+            // op byteOffset(2) bytes(<=32) -- Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1
+            if (m.len >= 3)
             {
-                thermostatLink.OtaWrite(ReadU32(&m.data[1]), &m.data[5], static_cast<uint8_t>(m.len - 5));
+                thermostatLink.OtaWrite(ReadU16(&m.data[1]), &m.data[3], static_cast<uint8_t>(m.len - 3));
             }
-            break;
+            // The reply isn't known yet -- it arrives asynchronously from the
+            // link (ConsumeWriteReply(), relayed from Loop()), unlike
+            // Begin/End/Activate/Abort which still answer synchronously below.
+            return;
         case FirmwareOp::End:
             thermostatLink.OtaEnd();
             break;
@@ -276,4 +288,18 @@ void ControllerHandler::Report(const Endpoint endpoint, const uint8_t* const dat
 void ControllerHandler::Nack(const Message& m, const uint8_t reason)
 {
     node.QueueMessage(Id(node.GetId(), m.id.endpoint, Operation::Nack), reason);
+}
+
+void ControllerHandler::AckOrNackThermostatWrite(
+    const bool     nack,
+    const uint16_t offset,
+    const uint16_t chunkCrc16,
+    const bool     programFailed)
+{
+    uint8_t payload[5];
+    PackU16(&payload[0], offset);
+    PackU16(&payload[2], chunkCrc16);
+    payload[4] = programFailed ? 1 : 0;
+    node.QueueMessage(
+        Id(node.GetId(), Endpoint::ThermostatFirmware, nack ? Operation::Nack : Operation::Ack), payload, sizeof(payload));
 }

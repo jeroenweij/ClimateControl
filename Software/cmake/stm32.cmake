@@ -26,6 +26,7 @@
 find_program(ARM_OBJCOPY arm-none-eabi-objcopy REQUIRED)
 find_program(ARM_SIZE    arm-none-eabi-size    REQUIRED)
 find_program(JLINK_EXE   JLinkExe)   # may be absent -- see Software-Architecture-Spec.md §3
+find_program(PYTHON3     python3 REQUIRED)   # runs finalize_image.py below
 
 set(_STM32_CMAKE_DIR ${CMAKE_CURRENT_LIST_DIR})
 
@@ -71,9 +72,12 @@ function(add_stm32_executable NAME)
         COMMENT "Objcopy ${NAME} -> bin/hex")
 
     if(ARG_MODULE)
+        # Finalized (imageSize + trailing CRC-32 + FlagCrcPresent) -- distinct
+        # from ${_bin}, which stays raw/unfinalized (FlagCrcPresent clear) for
+        # direct SWD flashing during development (Lib/Board/ImageDescriptor.h).
         set(_ota_bin ${CMAKE_CURRENT_BINARY_DIR}/${ARG_MODULE}_${CC_FW_VERSION}.bin)
         add_custom_command(TARGET ${NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy ${_bin} ${_ota_bin}
+            COMMAND ${PYTHON3} ${_STM32_CMAKE_DIR}/finalize_image.py ${_bin} ${_ota_bin}
             BYPRODUCTS ${_ota_bin}
             VERBATIM
             COMMENT "OTA image -> ${ARG_MODULE}_${CC_FW_VERSION}.bin (upload this to the server)")

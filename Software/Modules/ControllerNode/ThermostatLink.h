@@ -63,7 +63,7 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Returns false and sets lastError when the request is refused outright
     // (e.g. AlreadyCurrent) -- nothing goes on the link in that case.
     bool OtaBegin(const uint8_t module, const uint32_t imageSize, const uint32_t imageCrc32, const uint16_t fwVersion, const bool force);
-    void OtaWrite(const uint32_t offset, const uint8_t* const bytes, const uint8_t len);
+    void OtaWrite(const uint16_t offset, const uint8_t* const bytes, const uint8_t len);
     void OtaEnd();
     void OtaActivate();
     void OtaAbort();
@@ -71,6 +71,14 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Fills a FirmwareOp::Status-shaped payload (9 bytes) for the ControllerNode
     // to report up as ThermostatFirmware.
     void FillOtaStatus(uint8_t out[9]) const;
+
+    // A Write's Ack/Nack arrives asynchronously over the link, well after
+    // OtaWrite() returns (ControllerNode-Thermostat-Link-Spec.md §5.4 --
+    // "terminates and re-originates", not a direct forward) -- unlike Report,
+    // which the caller answers synchronously from whatever's cached. Called
+    // from Loop() once per reply; returns false (out-params untouched) when
+    // nothing is waiting to be relayed up the main bus.
+    bool ConsumeWriteReply(bool& nack, uint16_t& offset, uint16_t& chunkCrc16, bool& programFailed);
 
   private:
     static const uint32_t displayPushMs    = 1000;
@@ -92,6 +100,15 @@ class ThermostatLink : public NodeLib::INodeHandler
     uint32_t               expectedOffset;
     uint8_t                peerState; // last state byte from the peer's Status
     Tools::DelayTimer      enterBlTimer;
+
+    // Outcome of the write currently (or most recently) in flight on the
+    // link, awaiting relay up the main bus -- see ConsumeWriteReply().
+    uint8_t  pendingWriteLen; // length of that write, to advance expectedOffset on success
+    bool     writeReplyPending;
+    bool     writeReplyNack;
+    uint16_t writeReplyOffset;
+    uint16_t writeReplyCrc16;
+    bool     writeReplyProgramFailed;
 
     Tools::DelayTimer displayTimer;
     uint8_t           lastPushedActual;

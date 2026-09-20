@@ -12,6 +12,7 @@
 
 using NodeLib::Endpoint;
 using NodeLib::Frame;
+using NodeLib::MAX_DATA;
 using NodeLib::Message;
 using NodeLib::Operation;
 
@@ -112,8 +113,8 @@ CC_TEST(Frame, OversizedLengthTriggersResyncThenRecovers)
     Hal::Crc crc;
     Frame    frame(crc);
 
-    // SYNC SYNC LEN=33 (> MAX_DATA) -> abandoned.
-    const uint8_t bogus[3] = {0xEE, 0x42, 33};
+    // SYNC SYNC LEN=MAX_DATA+1 -> abandoned.
+    const uint8_t bogus[3] = {0xEE, 0x42, MAX_DATA + 1};
     Message       rx;
     CC_CHECK(!FeedAll(frame, bogus, sizeof(bogus), rx));
     CC_CHECK_EQ(frame.Counters().resyncs, 1);

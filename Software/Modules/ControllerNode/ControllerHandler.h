@@ -39,6 +39,9 @@ class ControllerHandler : public NodeLib::INodeHandler
     void HandleRoom(const NodeLib::Message& m);
     void HandleThermostatFirmware(const NodeLib::Message& m);
     void ReportThermostatFirmwareStatus();
+    // Relays a Write's Ack/Nack (Node-Flash-Layout-and-Bootloader-Spec.md
+    // §6.2.1) once ThermostatLink has one waiting -- see Loop().
+    void AckOrNackThermostatWrite(const bool nack, const uint16_t offset, const uint16_t chunkCrc16, const bool programFailed);
 
     void Report(const NodeLib::Endpoint endpoint, const uint8_t* const data, const uint8_t len);
     void Nack(const NodeLib::Message& m, const uint8_t reason);

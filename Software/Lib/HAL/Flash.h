@@ -29,7 +29,14 @@ namespace Hal
 
         // Program 'len' bytes at 'address' (both must be 8-byte aligned; a final
         // partial double-word is padded with 0xFF). The target range must have
-        // been erased. False on a hardware error.
-        bool Program(const uint32_t address, const uint8_t* const data, const size_t len);
+        // been erased. Stops at the first double-word that fails (STM32G0 only
+        // allows programming a given double-word once per erase cycle -- a
+        // second attempt, even with identical data, sets PROGERR) and returns
+        // how many bytes were actually committed before that -- always a clean
+        // prefix, never scattered, since the loop stops immediately. Returns
+        // 'len' on full success; callers that retry the same address range must
+        // resume from the returned count, never re-call Program() over bytes
+        // already reported committed.
+        size_t Program(const uint32_t address, const uint8_t* const data, const size_t len);
     } // namespace Flash
 } // namespace Hal

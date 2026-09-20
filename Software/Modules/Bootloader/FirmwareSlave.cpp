@@ -35,6 +35,16 @@ namespace
     // FirmwareOp::Begin payload: op(1) module(1) imageSize(4) imageCrc32(4) fwVersion(2).
     constexpr uint8_t BeginLen = 12;
 
+    // Write payload (v2, Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1):
+    // op(1) byteOffset(2 LE) data(<=32) -- every chunk is a whole number of
+    // 8-byte double-words except possibly the image's final one, so each
+    // Write is independently, immediately programmable with no RAM staging.
+    constexpr uint8_t WriteHeaderLen = 3;
+    constexpr uint8_t ChunkDataLen   = 32;
+
+    // Ack/Nack reply to a Write: byteOffset(2 LE) chunkCrc16(2 LE) programFailed(1).
+    constexpr uint8_t WriteReplyLen = 5;
+
     // Local lastError codes (surfaced verbatim to the master).
     enum : uint8_t
     {
@@ -48,10 +58,6 @@ namespace
         ErrBadState    = 7,
     };
 
-    // The single 2 KB page staging buffer (spec §6.2). File-scope so it lands
-    // in .bss where the linker accounts for it, not on the stack.
-    uint8_t pageBuffer[Hal::Flash::PageSize];
-
     uint32_t ReadU32(const uint8_t* const p)
     {
         return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
@@ -64,6 +70,17 @@ namespace
         p[1] = static_cast<uint8_t>(v >> 8);
         p[2] = static_cast<uint8_t>(v >> 16);
         p[3] = static_cast<uint8_t>(v >> 24);
+    }
+
+    uint16_t ReadU16(const uint8_t* const p)
+    {
+        return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
+    }
+
+    void WriteU16(uint8_t* const p, const uint16_t v)
+    {
+        p[0] = static_cast<uint8_t>(v);
+        p[1] = static_cast<uint8_t>(v >> 8);
     }
 } // namespace
 
@@ -79,9 +96,13 @@ FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     imageCrc32(0),
     fwVersion(0),
     expectedOffset(0),
-    pageBase(Board::Flash::AppBase),
-    pageLen(0),
+    partialCommitted(0),
     statusPending(false),
+    writeReplyPending(false),
+    writeReplyNack(false),
+    writeReplyOffset(0),
+    writeReplyCrc16(0),
+    writeReplyProgramFailed(false),
     activityLed(Board::ActivityLed, Hal::Gpio::Mode::Output), // TEMP DEBUG -- revert after triage
     errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
     heartbeatTimer()
@@ -133,6 +154,11 @@ void FirmwareSlave::OnMessage(const Message& m)
             {
                 SendStatus();
                 statusPending = false;
+            }
+            if (writeReplyPending)
+            {
+                SendWriteReply();
+                writeReplyPending = false;
             }
             SendDone();
         }
@@ -211,55 +237,120 @@ void FirmwareSlave::HandleBegin(const Message& m)
         return;
     }
 
-    imageSize      = size;
-    imageCrc32     = imageCrc;
-    fwVersion      = version;
-    expectedOffset = 0;
-    pageBase       = Board::Flash::AppBase;
-    pageLen        = 0;
-    lastError      = ErrNone;
-    state          = State::Receiving;
-    statusPending  = true;
+    imageSize         = size;
+    imageCrc32        = imageCrc;
+    fwVersion         = version;
+    expectedOffset    = 0;
+    partialCommitted  = 0;
+    lastError         = ErrNone;
+    state             = State::Receiving;
+    statusPending     = true;
+    writeReplyPending = false;
 }
 
 void FirmwareSlave::HandleWrite(const Message& m)
 {
-    if (state != State::Receiving || m.len < 5)
+    if (state != State::Receiving || m.len < WriteHeaderLen)
     {
+        return; // malformed -- no correlation to reply to, drop silently
+    }
+
+    const uint16_t offset = ReadU16(&m.data[1]);
+    const uint8_t  count  = static_cast<uint8_t>(m.len - WriteHeaderLen);
+
+    if (offset < expectedOffset)
+    {
+        // Duplicate -- the write already landed, only its ack was lost.
+        // Never call Hal::Flash::Program() again for it (STM32G0 PROGERR on
+        // a second write to an already-programmed double-word, even
+        // identical data) -- just read back what's already there.
+        AckFromFlash(offset, count);
         return;
     }
 
-    const uint32_t offset = ReadU32(&m.data[1]);
-    const uint8_t  count  = static_cast<uint8_t>(m.len - 5);
-
-    if (offset != expectedOffset)
+    if (offset > expectedOffset)
     {
-        return; // out of order -- master will rewind from our reported offset
+        // Genuine gap -- should not happen if the master only ever sends the
+        // next expected chunk, but must be handled: Nack naming where we
+        // actually are so the master can resync without guessing.
+        QueueWriteReply(true, static_cast<uint16_t>(expectedOffset), 0, false);
+        return;
     }
-    if (expectedOffset + count > imageSize)
+
+    // offset == expectedOffset: new data, or resuming a chunk that only
+    // partially programmed last time (a genuine Hal::Flash::Program()
+    // failure, not a lost ack -- a lost ack always shows up as offset <
+    // expectedOffset instead, since expectedOffset only advances once a
+    // chunk fully commits).
+    if (count == 0 || count > ChunkDataLen || expectedOffset + count > imageSize)
     {
         Fault(ErrOverrun);
         return;
     }
 
-    if (!AppendImageBytes(&m.data[5], count))
+    const uint32_t address   = Board::Flash::AppBase + expectedOffset;
+    uint8_t        committed = partialCommitted;
+
+    if (committed < count)
     {
-        Fault(ErrProgramFail);
+        Hal::Flash::Unlock();
+        const size_t done = Hal::Flash::Program(
+            address + committed, &m.data[WriteHeaderLen + committed], count - committed);
+        Hal::Flash::Lock();
+        committed = static_cast<uint8_t>(committed + done);
+    }
+
+    partialCommitted = committed;
+
+    if (committed < count)
+    {
+        // Program() stopped partway -- a real hardware failure. Report it,
+        // leave expectedOffset/partialCommitted exactly where they are so a
+        // retry of this same offset resumes from this point, not the start.
+        QueueWriteReply(true, offset, ChunkCrc(address, committed), true);
         return;
     }
-    statusPending = true;
+
+    expectedOffset += count;
+    partialCommitted = 0;
+    QueueWriteReply(false, offset, ChunkCrc(address, count), false);
+}
+
+void FirmwareSlave::AckFromFlash(const uint16_t offset, const uint8_t count)
+{
+    if (count == 0 || static_cast<uint32_t>(offset) + count > expectedOffset)
+    {
+        // Can't vouch for bytes beyond what's actually been committed.
+        QueueWriteReply(true, static_cast<uint16_t>(expectedOffset), 0, false);
+        return;
+    }
+    const uint32_t address = Board::Flash::AppBase + offset;
+    QueueWriteReply(false, offset, ChunkCrc(address, count), false);
+}
+
+uint16_t FirmwareSlave::ChunkCrc(const uint32_t address, const uint8_t count)
+{
+    return crc.Compute(reinterpret_cast<const uint8_t*>(address), count);
+}
+
+void FirmwareSlave::QueueWriteReply(
+    const bool     nack,
+    const uint16_t offset,
+    const uint16_t chunkCrc16,
+    const bool     programFailed)
+{
+    writeReplyNack          = nack;
+    writeReplyOffset        = offset;
+    writeReplyCrc16         = chunkCrc16;
+    writeReplyProgramFailed = programFailed;
+    writeReplyPending       = true;
 }
 
 void FirmwareSlave::HandleEnd()
 {
-    if (state != State::Receiving)
+    if (state != State::Receiving || expectedOffset != imageSize)
     {
         Fault(ErrBadState);
-        return;
-    }
-    if (!FlushPage())
-    {
-        Fault(ErrProgramFail);
         return;
     }
 
@@ -300,11 +391,12 @@ void FirmwareSlave::HandleActivate()
 
 void FirmwareSlave::HandleAbort()
 {
-    state          = State::Idle;
-    lastError      = ErrNone;
-    expectedOffset = 0;
-    pageLen        = 0;
-    statusPending  = true;
+    state             = State::Idle;
+    lastError         = ErrNone;
+    expectedOffset    = 0;
+    partialCommitted  = 0;
+    statusPending     = true;
+    writeReplyPending = false;
 }
 
 bool FirmwareSlave::EraseAppSlot()
@@ -316,43 +408,6 @@ bool FirmwareSlave::EraseAppSlot()
         ok = Hal::Flash::ErasePage(Board::Flash::AppBase + offset);
     }
     Hal::Flash::Lock();
-    return ok;
-}
-
-bool FirmwareSlave::AppendImageBytes(const uint8_t* const bytes, const uint8_t count)
-{
-    for (uint8_t i = 0; i < count; i++)
-    {
-        const uint32_t address = Board::Flash::AppBase + expectedOffset;
-        const uint32_t pageOf  = address & ~(Hal::Flash::PageSize - 1);
-
-        if (pageOf != pageBase)
-        {
-            if (!FlushPage())
-            {
-                return false;
-            }
-            pageBase = pageOf;
-            pageLen  = 0;
-        }
-
-        pageBuffer[pageLen] = bytes[i];
-        pageLen++;
-        expectedOffset++;
-    }
-    return true;
-}
-
-bool FirmwareSlave::FlushPage()
-{
-    if (pageLen == 0)
-    {
-        return true;
-    }
-    Hal::Flash::Unlock();
-    const bool ok = Hal::Flash::Program(pageBase, pageBuffer, pageLen);
-    Hal::Flash::Lock();
-    pageLen = 0;
     return ok;
 }
 
@@ -376,6 +431,16 @@ void FirmwareSlave::SendStatus()
     m.data[7] = static_cast<uint8_t>(fwVersion);
     m.data[8] = static_cast<uint8_t>(fwVersion >> 8);
     m.len     = StatusLen;
+    SendFrame(m);
+}
+
+void FirmwareSlave::SendWriteReply()
+{
+    Message m(Id(nodeId, Endpoint::Firmware, writeReplyNack ? Operation::Nack : Operation::Ack));
+    WriteU16(&m.data[0], writeReplyOffset);
+    WriteU16(&m.data[2], writeReplyCrc16);
+    m.data[4] = writeReplyProgramFailed ? 1 : 0;
+    m.len     = WriteReplyLen;
     SendFrame(m);
 }
 

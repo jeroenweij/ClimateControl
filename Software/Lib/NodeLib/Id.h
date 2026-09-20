@@ -11,8 +11,12 @@
 
 namespace NodeLib
 {
-    // MAX_DATA=32, see RS485-Node-Protocol-Spec-STM32G030.md §9 (open item, defaulted)
-    static const uint8_t MAX_DATA = 32;
+    // MAX_DATA=35, see RS485-Node-Protocol-Spec-STM32G030.md §9 -- sized for
+    // Firmware[Write]'s 32-byte double-word-aligned data payload (Node-Flash-
+    // Layout-and-Bootloader-Spec.md §6.2.1): 1 (FirmwareOp) + 2 (byteOffset) +
+    // 32 (data) = 35, exactly, no slack. No other message type needs anywhere
+    // near this much.
+    static const uint8_t MAX_DATA = 35;
 
     // Hard cap on the slave-node count -- sizes NodeMaster's fixed activeNodes[]
     // array and bounds a provisioned NodeId (ConfigStore::Valid()). Node::maxNodes

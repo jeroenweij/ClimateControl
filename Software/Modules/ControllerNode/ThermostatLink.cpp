@@ -54,6 +54,12 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     expectedOffset(0),
     peerState(StateApp),
     enterBlTimer(),
+    pendingWriteLen(0),
+    writeReplyPending(false),
+    writeReplyNack(false),
+    writeReplyOffset(0),
+    writeReplyCrc16(0),
+    writeReplyProgramFailed(false),
     displayTimer(),
     lastPushedActual(0xFF),
     lastPushedMode(0xFF)
@@ -168,6 +174,33 @@ void ThermostatLink::ReceivedMessage(const Message& m)
                 break;
         }
     }
+    else if (m.id.operation == Operation::Ack || m.id.operation == Operation::Nack)
+    {
+        // Ack/Nack reply to a Write, from the peer's bootloader
+        // (Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1): byteOffset(2)
+        // chunkCrc16(2) programFailed(1). Relayed up the main bus from
+        // Loop() via ConsumeWriteReply(), not answered here -- the CN
+        // terminates and re-originates rather than forwarding.
+        if (m.id.endpoint == Endpoint::Firmware && m.len >= 5 && otaState == OtaState::Transferring)
+        {
+            const bool     nack          = (m.id.operation == Operation::Nack);
+            const uint16_t offset        = ReadU16(m.data);
+            const uint16_t chunkCrc16    = ReadU16(&m.data[2]);
+            const bool     programFailed = m.data[4] != 0;
+
+            expectedOffset = nack ? offset : offset + pendingWriteLen;
+            if (programFailed)
+            {
+                lastError = FirmwareError::ProgramFailed;
+            }
+
+            writeReplyPending       = true;
+            writeReplyNack          = nack;
+            writeReplyOffset        = offset;
+            writeReplyCrc16         = chunkCrc16;
+            writeReplyProgramFailed = programFailed;
+        }
+    }
 }
 
 void ThermostatLink::ConnectionLost()
@@ -246,17 +279,33 @@ bool ThermostatLink::OtaBegin(const uint8_t module, const uint32_t imageSize, co
     return true;
 }
 
-void ThermostatLink::OtaWrite(const uint32_t offset, const uint8_t* const bytes, const uint8_t len)
+void ThermostatLink::OtaWrite(const uint16_t offset, const uint8_t* const bytes, const uint8_t len)
 {
     if (otaState != OtaState::Transferring)
     {
         return;
     }
-    uint8_t payload[4 + 27];
-    WriteU32(payload, offset);
-    const uint8_t n = len > 27 ? 27 : len;
-    memcpy(&payload[4], bytes, n);
-    SendFirmwareOp(FirmwareOp::Write, payload, static_cast<uint8_t>(4 + n));
+    uint8_t payload[2 + 32];
+    payload[0]      = static_cast<uint8_t>(offset);
+    payload[1]      = static_cast<uint8_t>(offset >> 8);
+    const uint8_t n = len > 32 ? 32 : len;
+    memcpy(&payload[2], bytes, n);
+    pendingWriteLen = n;
+    SendFirmwareOp(FirmwareOp::Write, payload, static_cast<uint8_t>(2 + n));
+}
+
+bool ThermostatLink::ConsumeWriteReply(bool& nack, uint16_t& offset, uint16_t& chunkCrc16, bool& programFailed)
+{
+    if (!writeReplyPending)
+    {
+        return false;
+    }
+    nack              = writeReplyNack;
+    offset            = writeReplyOffset;
+    chunkCrc16        = writeReplyCrc16;
+    programFailed     = writeReplyProgramFailed;
+    writeReplyPending = false;
+    return true;
 }
 
 void ThermostatLink::OtaEnd()
