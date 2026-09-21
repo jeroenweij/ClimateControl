@@ -156,6 +156,30 @@ func ParseFirmwareStatusReport(data []byte) (FirmwareStatusReport, bool) {
 	}, true
 }
 
+// FirmwareOpReply is a decoded Ack/Nack reply to Firmware[Begin]/[End]/
+// [Abort] (Node-Flash-Layout-and-Bootloader-Spec.md §8 item 9): lastError(1),
+// 0 on Ack -- these ops happen once per job rather than ~2000 times like
+// Write, so they get the same correlation benefit without a Status Report
+// round trip. Only a "node" push's bootloader replies this way; a
+// "thermostat" push still gets a Report from the owning ControllerNode's own
+// FillOtaStatus/ReportThermostatFirmwareStatus synthesis
+// (Software/Modules/ControllerNode/ControllerHandler.cpp).
+type FirmwareOpReply struct {
+	Nack      bool
+	LastError uint8
+}
+
+// ParseFirmwareOpReply decodes a Firmware / ThermostatFirmware Ack/Nack
+// payload for Begin/End/Abort. ok is false unless the payload is exactly the
+// 1-byte lastError shape -- a longer payload is a FirmwareWriteReply instead,
+// which is how the two are told apart (neither carries a FirmwareOp byte).
+func ParseFirmwareOpReply(nack bool, data []byte) (FirmwareOpReply, bool) {
+	if len(data) != 1 {
+		return FirmwareOpReply{}, false
+	}
+	return FirmwareOpReply{Nack: nack, LastError: data[0]}, true
+}
+
 // FirmwareWriteReply is a decoded Ack/Nack reply to a Firmware[Write] (or
 // ThermostatFirmware[Write]) -- Node-Flash-Layout-and-Bootloader-Spec.md
 // §6.2.1: byteOffset(2 LE) chunkCrc16(2 LE) programFailed(1). Unlike

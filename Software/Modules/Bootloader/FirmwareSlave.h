@@ -69,12 +69,23 @@ namespace Boot
         void     AckFromFlash(const uint16_t offset, const uint8_t count);
         uint16_t ChunkCrc(const uint32_t address, const uint8_t count);
 
+        // Same correlation benefit as QueueWriteReply(), for the three ops
+        // that happen once per job rather than ~2000 times
+        // (Node-Flash-Layout-and-Bootloader-Spec.md §8 item 9): Begin/End/
+        // Abort reply with Ack/Nack on Endpoint::Firmware, data[0] = lastError
+        // (0 on Ack), instead of the generic Status Report.
+        void QueueOpReply(const bool nack, const uint8_t error);
+        void SendOpReply();
+
         void SendAnnounce();
         void SendStatus();
         void SendWriteReply();
         void SendDone();
         void SendFrame(const NodeLib::Message& m);
         void Fault(const uint8_t error);
+        // Fault() plus queuing this op's own Nack -- the common case for
+        // Begin/End's validation failures.
+        void FaultOp(const uint8_t error);
         void Heartbeat();
 
         OtaUart        uart;
@@ -110,6 +121,11 @@ namespace Boot
         uint16_t writeReplyOffset;
         uint16_t writeReplyCrc16;
         bool     writeReplyProgramFailed;
+
+        // Pending reply for whichever of Begin/End/Abort was last handled.
+        bool    opReplyPending;
+        bool    opReplyNack;
+        uint8_t opReplyError;
 
         Hal::Gpio         activityLed;
         Hal::Gpio         errorLed;

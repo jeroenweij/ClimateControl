@@ -135,6 +135,13 @@ namespace
         slave.Loop();
     }
 
+    Message MakeGetStatus()
+    {
+        Message m(Id(kNodeId, Endpoint::Firmware, Operation::Get));
+        m.len = 0;
+        return m;
+    }
+
     uint32_t ReadU32(const uint8_t* const p)
     {
         return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
@@ -213,9 +220,8 @@ CC_TEST(FirmwareSlave, BeginRejectsAMismatchedModuleWithoutTouchingFlash)
     Message   tx[4];
     const int n = DecodeOtaTx(tx, 4);
     int       idx;
-    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].data[1], 5); // State::Error
-    CC_CHECK_EQ(tx[idx].data[6], 1); // ErrWrongModule
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Nack, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], 1); // ErrWrongModule
 }
 
 CC_TEST(FirmwareSlave, BeginRejectsAnImageSmallerThanTheDescriptorFloor)
@@ -230,8 +236,8 @@ CC_TEST(FirmwareSlave, BeginRejectsAnImageSmallerThanTheDescriptorFloor)
     Message   tx[4];
     const int n = DecodeOtaTx(tx, 4);
     int       idx;
-    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].data[6], 2); // ErrBadSize
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Nack, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], 2); // ErrBadSize
 }
 
 CC_TEST(FirmwareSlave, BeginErasesTheSlotAndMovesToReceiving)
@@ -246,12 +252,23 @@ CC_TEST(FirmwareSlave, BeginErasesTheSlotAndMovesToReceiving)
     Message   tx[4];
     const int n = DecodeOtaTx(tx, 4);
     int       idx;
-    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].data[1], 3); // State::Receiving
-    CC_CHECK_EQ(tx[idx].data[6], 0); // ErrNone
-    CC_CHECK_EQ(ReadU32(&tx[idx].data[2]), 0); // expectedOffset
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Ack, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], 0); // ErrNone
 
     CC_CHECK_EQ(FakeFlash::Data()[0], 0xFF); // slot actually erased
+
+    // Ack doesn't carry state/expectedOffset -- confirm those via the
+    // separate Get/Status probe.
+    FakeOtaUart::Reset();
+    InjectOtaFrame(MakeGetStatus());
+    Poll(slave);
+
+    Message   tx2[4];
+    const int n2 = DecodeOtaTx(tx2, 4);
+    int       idx2;
+    CC_CHECK(FindMessage(tx2, n2, Endpoint::Firmware, Operation::Report, &idx2));
+    CC_CHECK_EQ(tx2[idx2].data[1], 3); // State::Receiving
+    CC_CHECK_EQ(ReadU32(&tx2[idx2].data[2]), 0); // expectedOffset
 }
 
 CC_TEST(FirmwareSlave, BeginResetsTheBootFailCounterForTheFreshImage)
@@ -398,9 +415,8 @@ CC_TEST(FirmwareSlave, EndFaultsWhenNotAllBytesHaveArrivedYet)
     Message   tx[4];
     const int n = DecodeOtaTx(tx, 4);
     int       idx;
-    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].data[1], 5); // State::Error
-    CC_CHECK_EQ(tx[idx].data[6], 7); // ErrBadState
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Nack, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], 7); // ErrBadState
 }
 
 CC_TEST(FirmwareSlave, AbortReturnsToIdle)
@@ -418,7 +434,48 @@ CC_TEST(FirmwareSlave, AbortReturnsToIdle)
     Message   tx[4];
     const int n = DecodeOtaTx(tx, 4);
     int       idx;
-    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].data[1], 1); // State::Idle
-    CC_CHECK_EQ(tx[idx].data[6], 0); // ErrNone
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Ack, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], 0); // ErrNone
+
+    // Ack doesn't carry state -- confirm Idle via the separate Get/Status probe.
+    FakeOtaUart::Reset();
+    InjectOtaFrame(MakeGetStatus());
+    Poll(slave);
+
+    Message   tx2[4];
+    const int n2 = DecodeOtaTx(tx2, 4);
+    int       idx2;
+    CC_CHECK(FindMessage(tx2, n2, Endpoint::Firmware, Operation::Report, &idx2));
+    CC_CHECK_EQ(tx2[idx2].data[1], 1); // State::Idle
+}
+
+CC_TEST(FirmwareSlave, WriteOverrunIsNackedNotSilentlyDropped)
+{
+    ResetWorld();
+    FirmwareSlave slave(kNodeId, kModule);
+    slave.Init();
+
+    const uint32_t smallImageSize = 228; // HandleBegin's own floor -- 7*32 + 4
+    InjectOtaFrame(MakeBegin(kModule, smallImageSize, 0, 0));
+    Poll(slave);
+    FakeOtaUart::Reset();
+
+    const uint8_t chunk[32] = {}; // content doesn't matter for this test
+    for (uint16_t offset = 0; offset < 224; offset += 32)
+    {
+        InjectOtaFrame(MakeWrite(offset, chunk, sizeof(chunk)));
+        Poll(slave);
+        FakeOtaUart::Reset();
+    }
+
+    // expectedOffset is now 224; the image only has 4 bytes left (228
+    // total), but this write claims a full 32 -- 224 + 32 = 256 > 228.
+    InjectOtaFrame(MakeWrite(224, chunk, sizeof(chunk)));
+    Poll(slave);
+
+    Message   tx[4];
+    const int n = DecodeOtaTx(tx, 4);
+    int       idx;
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Nack, &idx));
+    CC_CHECK_EQ(static_cast<uint16_t>(tx[idx].data[0] | (tx[idx].data[1] << 8)), 224); // names expectedOffset
 }

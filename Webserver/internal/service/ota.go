@@ -14,7 +14,7 @@ import (
 const (
 	otaChunk = 32 // bytes per Write frame -- Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 (v2)
 
-	otaReportWait = 3 * time.Second  // per-report timeout (Begin/End/Abort -- still Report/Poll-based)
+	otaReportWait = 3 * time.Second  // per-report timeout (a "thermostat" push's Begin/End/Abort -- still Report/Poll-based)
 	otaStepWait   = 20 * time.Second // per-phase timeout
 	otaBootPoll   = 1 * time.Second  // Firmware Get cadence while waiting for the bootloader
 
@@ -141,6 +141,7 @@ func (s *Service) kickOta() {
 			module:       nodelib.Module(job.Module),
 			reports:      make(chan nodelib.FirmwareStatusReport, 8),
 			writeReplies: make(chan nodelib.FirmwareWriteReply, 8),
+			opReplies:    make(chan nodelib.FirmwareOpReply, 8),
 			doneCh:       make(chan struct{}),
 		}
 		s.ota = d
@@ -171,6 +172,7 @@ type otaDriver struct {
 
 	reports      chan nodelib.FirmwareStatusReport
 	writeReplies chan nodelib.FirmwareWriteReply
+	opReplies    chan nodelib.FirmwareOpReply
 	doneCh       chan struct{}
 	once         sync.Once
 }
@@ -218,10 +220,20 @@ func (d *otaDriver) onReport(f nodelib.Frame) {
 
 // onWriteReply is called by Service.onFirmwareWriteReply for every relayed
 // Firmware / ThermostatFirmware Ack/Nack; it filters to this job's
-// node+endpoint and feeds the decoded reply onto the channel run() reads
-// from.
+// node+endpoint and feeds the decoded reply onto whichever channel run()
+// reads it from. Begin/End/Abort's 1-byte lastError-only reply and Write's
+// 5-byte offset/CRC/programFailed reply share the same Operation, so the
+// payload length is what tells them apart (see FirmwareOpReply /
+// FirmwareWriteReply).
 func (d *otaDriver) onWriteReply(nack bool, f nodelib.Frame) {
 	if int(f.Node) != d.nodeID || f.Endpoint != d.endpoint() {
+		return
+	}
+	if r, ok := nodelib.ParseFirmwareOpReply(nack, f.Data); ok {
+		select {
+		case d.opReplies <- r:
+		default:
+		}
 		return
 	}
 	r, ok := nodelib.ParseFirmwareWriteReply(nack, f.Data)
@@ -422,14 +434,24 @@ func (d *otaDriver) enterBootloader() bool {
 }
 
 // waitForWithProbe is waitFor, but re-sends Firmware[Get] every probeInterval
-// while it waits -- Begin/End's reply rides the same queued-Report/Poll path
-// as enterBootloader()'s, so a single lost Set or a single lost Report is
-// otherwise unrecoverable within the timeout (see Node-Flash-Layout-and-
-// Bootloader-Spec.md §8 item 9 and OTA-Debugging-TODO.md's job-60 finding --
-// a clean transfer failing only because the End Report or Begin's Set/Report
-// was lost once, with no retry budget at all). Get always re-arms
-// statusPending regardless of what's actually pending, so it safely re-elicits
-// a fresh report whatever step we're waiting on.
+// while it waits -- a single lost Set, or a single lost reply, is otherwise
+// unrecoverable within the timeout (see Node-Flash-Layout-and-Bootloader-
+// Spec.md §8 item 9 and OTA-Debugging-TODO.md's job-60 finding -- a clean
+// transfer failing only because the End Report or Begin's Set/Report was lost
+// once, with no retry budget at all). Get always re-arms statusPending
+// regardless of what's actually pending, so it safely re-elicits a fresh
+// report whatever step we're waiting on.
+//
+// A "node" push's Begin/End/Abort now reply directly via Ack/Nack (matching
+// what Write already did) instead of the Report this originally probed for
+// -- opReplies carries that. It settles the wait immediately rather than
+// leaving it to the next probe tick: an Ack only ever gets queued once
+// FirmwareSlave has already moved into the state being waited for
+// (FirmwareSlave.cpp's HandleBegin/HandleEnd), so it's synthesized as a
+// Report claiming exactly that state; a Nack carries the same lastError a
+// probed Report would eventually have. A "thermostat" push still only ever
+// produces Reports here (ControllerHandler.cpp's own Begin/End/Abort
+// handling wasn't part of this migration), so this is purely additive for it.
 func (d *otaDriver) waitForWithProbe(timeout, probeInterval time.Duration, state uint8) (nodelib.FirmwareStatusReport, bool) {
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(probeInterval)
@@ -440,6 +462,11 @@ func (d *otaDriver) waitForWithProbe(timeout, probeInterval time.Duration, state
 			if r.State == state || r.State == nodelib.BlError || r.LastError == nodelib.FwErrAlreadyCurrent {
 				return r, true
 			}
+		case r := <-d.opReplies:
+			if r.Nack {
+				return nodelib.FirmwareStatusReport{State: nodelib.BlError, LastError: r.LastError}, true
+			}
+			return nodelib.FirmwareStatusReport{State: state, LastError: nodelib.FwErrNone}, true
 		case <-ticker.C:
 			d.svc.send.SendGet(d.nodeID, nodelib.EndpointFirmware)
 		case <-deadline:

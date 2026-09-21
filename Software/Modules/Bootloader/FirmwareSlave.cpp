@@ -46,6 +46,9 @@ namespace
     // Ack/Nack reply to a Write: byteOffset(2 LE) chunkCrc16(2 LE) programFailed(1).
     constexpr uint8_t WriteReplyLen = 5;
 
+    // Ack/Nack reply to Begin/End/Abort: lastError(1), 0 on Ack.
+    constexpr uint8_t OpReplyLen = 1;
+
     // Local lastError codes (surfaced verbatim to the master).
     enum : uint8_t
     {
@@ -104,6 +107,9 @@ FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     writeReplyOffset(0),
     writeReplyCrc16(0),
     writeReplyProgramFailed(false),
+    opReplyPending(false),
+    opReplyNack(false),
+    opReplyError(ErrNone),
     activityLed(Board::ActivityLed, Hal::Gpio::Mode::Output), // TEMP DEBUG -- revert after triage
     errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
     heartbeatTimer()
@@ -155,6 +161,11 @@ void FirmwareSlave::OnMessage(const Message& m)
             {
                 SendStatus();
                 statusPending = false;
+            }
+            if (opReplyPending)
+            {
+                SendOpReply();
+                opReplyPending = false;
             }
             if (writeReplyPending)
             {
@@ -211,7 +222,7 @@ void FirmwareSlave::HandleBegin(const Message& m)
 {
     if (m.len < BeginLen)
     {
-        Fault(ErrBadSize);
+        FaultOp(ErrBadSize);
         return;
     }
 
@@ -222,19 +233,19 @@ void FirmwareSlave::HandleBegin(const Message& m)
 
     if (wantModule != module)
     {
-        Fault(ErrWrongModule);
+        FaultOp(ErrWrongModule);
         return;
     }
     if (size < (Board::Flash::AppDescriptorOffset + 32 + 4) || size > Board::Flash::AppSize)
     {
-        Fault(ErrBadSize);
+        FaultOp(ErrBadSize);
         return;
     }
 
     state = State::Erasing;
     if (!EraseAppSlot())
     {
-        Fault(ErrEraseFailed);
+        FaultOp(ErrEraseFailed);
         return;
     }
 
@@ -249,8 +260,8 @@ void FirmwareSlave::HandleBegin(const Message& m)
     partialCommitted  = 0;
     lastError         = ErrNone;
     state             = State::Receiving;
-    statusPending     = true;
     writeReplyPending = false;
+    QueueOpReply(false, ErrNone);
 }
 
 void FirmwareSlave::HandleWrite(const Message& m)
@@ -290,6 +301,10 @@ void FirmwareSlave::HandleWrite(const Message& m)
     if (count == 0 || count > ChunkDataLen || expectedOffset + count > imageSize)
     {
         Fault(ErrOverrun);
+        // Still a Write, so it replies via the Write channel (offset-
+        // correlated), not the Begin/End/Abort one -- Fault() only marks the
+        // node's persistent state, it no longer queues any reply on its own.
+        QueueWriteReply(true, static_cast<uint16_t>(expectedOffset), 0, false);
         return;
     }
 
@@ -357,7 +372,7 @@ void FirmwareSlave::HandleEnd()
 {
     if (state != State::Receiving || expectedOffset != imageSize)
     {
-        Fault(ErrBadState);
+        FaultOp(ErrBadState);
         return;
     }
 
@@ -376,13 +391,12 @@ void FirmwareSlave::HandleEnd()
     {
         state     = State::Valid;
         lastError = ErrNone;
+        QueueOpReply(false, ErrNone);
     }
     else
     {
-        Fault(ErrCrcMismatch);
-        return;
+        FaultOp(ErrCrcMismatch);
     }
-    statusPending = true;
 }
 
 void FirmwareSlave::HandleActivate()
@@ -403,8 +417,8 @@ void FirmwareSlave::HandleAbort()
     lastError         = ErrNone;
     expectedOffset    = 0;
     partialCommitted  = 0;
-    statusPending     = true;
     writeReplyPending = false;
+    QueueOpReply(false, ErrNone);
 }
 
 bool FirmwareSlave::EraseAppSlot()
@@ -452,6 +466,21 @@ void FirmwareSlave::SendWriteReply()
     SendFrame(m);
 }
 
+void FirmwareSlave::QueueOpReply(const bool nack, const uint8_t error)
+{
+    opReplyNack    = nack;
+    opReplyError   = error;
+    opReplyPending = true;
+}
+
+void FirmwareSlave::SendOpReply()
+{
+    Message m(Id(nodeId, Endpoint::Firmware, opReplyNack ? Operation::Nack : Operation::Ack));
+    m.data[0] = opReplyError;
+    m.len     = OpReplyLen;
+    SendFrame(m);
+}
+
 void FirmwareSlave::SendDone()
 {
     SendFrame(Message(nodeId, Operation::Done));
@@ -483,9 +512,18 @@ void FirmwareSlave::SendFrame(const Message& m)
 
 void FirmwareSlave::Fault(const uint8_t error)
 {
-    state         = State::Error;
-    lastError     = error;
-    statusPending = true;
+    // Marks the node's persistent state only -- a Get/Discover after this
+    // still sees the fault. Does not queue any reply on its own; callers
+    // reply on whichever channel (Write's Ack/Nack, or FaultOp() below for
+    // Begin/End) actually correlates to the request that failed.
+    state     = State::Error;
+    lastError = error;
+}
+
+void FirmwareSlave::FaultOp(const uint8_t error)
+{
+    Fault(error);
+    QueueOpReply(true, error);
 }
 
 void FirmwareSlave::Heartbeat()
