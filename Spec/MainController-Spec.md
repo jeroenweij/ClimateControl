@@ -1,11 +1,10 @@
 # MainController — Design Spec
 
-**Status:** Draft — bus-master role confirmed 2026-09-06; power input defined (§3); connectivity = NINA-W152 (§5); outward interface = relay node frames to a LAN server (`MainController-Server-Link-Spec.md`); feed topology + persistence still open (see §4)
 **Companion docs:** `RS485-Node-Protocol-Spec-STM32G030.md` (wire protocol this module implements as master), `Node-Bus-Hardware-Design-Spec.md` §6 (shared node core schematic this board reuses), `Node-Bus-Power-Path-Spec.md` §4 (both-ends feed decision), `Software-Architecture-Spec.md` (module map)
 
 ---
 
-## 1. Confirmed role
+## 1. Role
 
 `MainController` is the RS485 bus master for the main node bus, running the same STM32G0-family MCU as the slave nodes (`ControllerNode`, `TemperatureNode`). It owns node ID `0` (reserved per protocol spec §6) and implements the `NodeMaster` side of `NodeLib`:
 
@@ -13,75 +12,65 @@
 - Poll cycle: round-robins active nodes with `Poll` → node dumps its queued `Report`s → `Done` → poll next (protocol spec §6, `PollNextNode`/`ActiveNodeCount`/`activeNodes[]`).
 - Heartbeat: resets a timer each full poll round; declares `ConnectionLost()` on lapse.
 
-This is a direct port of `NodeMaster` from `~/git/node/Software/lib/NodeLib/NodeMaster.{h,cpp}`, re-targeted to the v2 variable-length/CRC framing instead of the fixed-size AVR frame.
+This is `NodeMaster`, re-targeted to the v2 variable-length/CRC framing.
 
 ---
 
 ## 2. What MainController does with the data it collects
 
-**Resolved 2026-09-21** (`ControllerNode-Thermostat-Link-Spec.md` §6 item 1, `Damper-Budget-Spec.md`): setpoint control is a local loop between each `ControllerNode` and its own `Thermostat`, not routed through `MainController`. `MainController`'s role is supervisory — aggregate temperatures, expose system state, detect faults — plus one piece of fleet-wide arbitration: it divides a shared airflow "budget" across all online `ControllerNode`s (`Damper-Budget-Spec.md` §5, `BudgetAllocator`), sent as a per-node `DamperBudget` ceiling. This is not closed-loop room control — it never sees or reacts to a single room's temperature error the way `ControllerNode`'s own loop does, it only narrows what that loop is allowed to do.
+Setpoint control is a local loop between each `ControllerNode` and its own `Thermostat` (`ControllerNode-Thermostat-Link-Spec.md`), not routed through `MainController`. `MainController`'s role is supervisory — aggregate temperatures, expose system state, detect faults — plus one piece of fleet-wide arbitration: it divides a shared airflow "budget" across all online `ControllerNode`s (`Damper-Budget-Spec.md` §5, `BudgetAllocator`), sent as a per-node `DamperBudget` ceiling. This is not closed-loop room control — it never sees or reacts to a single room's temperature error the way `ControllerNode`'s own loop does, it only narrows what that loop is allowed to do.
 
 ---
 
 ## 3. Power input & bus injection
 
-`MainController` is the near-end **48 V injection point** for the shared bus. Per `Node-Bus-Power-Path-Spec.md` §4 the bus is fed at **both ends** — the far end needs its own connection (see topology decision below). The board reuses the `Node-Bus-Hardware-Design-Spec.md` §6 node core (MCU, transceiver, LEDs, buttons, local 48→5→3.3 V chain); this section is only the extra injection front-end, which is **DNP on `TemperatureNode` builds** of the same board.
+`MainController` is the near-end **48 V injection point** for the shared bus, and a second PSU feeds the far end. The board reuses the `Node-Bus-Hardware-Design-Spec.md` §6 node core (MCU, transceiver, LEDs, buttons, local 48→5→3.3 V chain); this section is only the extra injection front-end, which is **DNP on `TemperatureNode` builds** of the same board.
 
-**Input connector — P1:** 3-position 5.08 mm screw terminal (`WJ500V-5.08-03P-14-00A`). GND / +48 V / GND (double GND for return current; or make one outer pin a chassis-earth for the RJ45 shield). **Silkscreen the polarity clearly.**
+**Input connector — P1:** 3-position 5.08 mm screw terminal (`WJ500V-5.08-03P-14-00A`). GND / +48 V / GND (double GND for return current). Silkscreen the polarity clearly.
 
 **Protection chain: P1 → fuse → TVS → +48 V rail → bus RJ45s.**
 
 | Function | Part | Notes |
 |---|---|---|
-| Fuse | 5×20 mm **ceramic** (sand-filled), **time-lag (T)**, DC rating ≥ 63 V, in a PCB holder (XFCN PTF-77, LCSC `C717030`) | Field-replaceable. Value per feed topology below. Ceramic not glass — glass has poor DC breaking. |
-| Surge / reverse-polarity TVS — D4 | **SMCJ58A**, 1500 W, SMC, unidirectional (LCSC `C3012585`) | Cathode → +48 V rail, anode → GND. Clamps cable/PSU transients. On a reverse-wire at P1 it forward-conducts and blows the fuse — D4 is sacrificial then (~€0.10). Assumes a supply regulated near 48 V; if the bus can reach the 57 V top of the range use SMCJ60A/64A. |
-| ~~Series reverse-polarity Schottky~~ | **removed 2026-09-07** (was MBR10100) | Redundant: every node incl. the master already has its own series Schottky (SS26A) guarding its regulator + electrolytic; nothing on the raw +48 V rail is polarity-sensitive; and D4 + fuse handle a reverse-wire non-catastrophically. It was also the hottest part on the board and cost a 0.5 V drop. |
+| Fuse | 5×20 mm **ceramic** (sand-filled), **time-lag (T)**, DC rating ≥ 63 V, in a PCB holder (XFCN PTF-77, LCSC `C717030`) | Field-replaceable, hand-inserted (not part of the PCB assembly). |
+| Surge / reverse-polarity TVS — D4 | **SMCJ58A**, 1500 W, SMC, unidirectional (LCSC `C3012585`) | Cathode → +48 V rail, anode → GND. Clamps cable/PSU transients. On a reverse-wire at P1 it forward-conducts and blows the fuse — D4 is sacrificial then. Assumes a supply regulated near 48 V; if the bus can reach the 57 V top of the range use SMCJ60A/64A. |
 
-**Feed topology — decides the fuse rating (still to confirm):**
+Every node incl. the master already has its own series Schottky (SS26A) guarding its regulator + electrolytic, so there is no separate series reverse-polarity Schottky on the raw +48 V rail here — D4 + fuse handle a reverse-wire non-catastrophically without one.
 
-| Topology | Master fuse carries | Fuse |
-|---|---|---|
-| **Two PSUs** — one at each end of the bus | ~0.7 A normal / **~3.2 A** worst-case (all 20 servos stalled at once) | **T4 A** — margin now ~1.25×, down from ~1.5× |
-| **One PSU at the master**, feeding the far end via a return cable | ~1.4 A normal / **~6.4 A** worst-case | **T6.3 A is no longer adequate** — the worst case now sits at the fuse's own rating. Step up to T8 A if this topology is ever used instead of the default; size the master's +48 V copper for ~7–8 A. |
+**Feed topology: two PSUs**, one at each end of the bus. Master fuse carries ~0.7 A normal / **~3.2 A** worst-case (all 20 servos stalled at once, split across both injection points) — **T4 A** ceramic, margin ~1.25×. The worst-case aggregate (20 nodes × ~2.7A servo stall current, `Node-Bus-Hardware-Design-Spec.md` §4) is ~6.4A at 48V split across both ends; whether simultaneous full-stall across all 20 nodes is realistic for this application is open (`Node-Bus-Hardware-Design-Spec.md` §7) — a T-type fuse rides over a few-second synchronised-homing move regardless.
 
-Updated 2026-09-12 — was ~2.4–2.7 A / ~4.7 A, built on a generic servo datasheet figure; the actual supplier spec sheet for the `DS3225` units being bought (`Node-Bus-Hardware-Design-Spec.md` §7 item 1) gives a higher stall current, raising the full-aggregate worst case to ~6.4 A at 48 V (`Node-Bus-Hardware-Design-Spec.md` §4). Full-system load is still not the constraint the intuition suggests — 20 nodes + 20 servos + 20 thermostat displays, *all stalled simultaneously*, is ~6.4 A total at 48 V (that's the point of the 48 V rail — `Node-Bus-Power-Path-Spec.md` §2). Whether simultaneous full-stall is even realistic is still open (`Node-Bus-Power-Path-Spec.md` §7 item 2); a T-type fuse rides over a few-second synchronised-homing move regardless. **Default: two PSUs + T4 A ceramic** — still holds at the updated number, just with less headroom than before.
+The far-end feed is either a second *TemperatureNode-variant* Main board (the only other board variant carrying the injection front-end) or a bare external 48 V supply wired directly into that end's RJ45 power pins — the injection front-end is not populated on a `ControllerNode` board.
 
 Order fuse (T4 A ceramic 5×20, both-ends feed): ESKA 522.523 — <https://www.amazon.nl/G-veiligheidsinzet-zekering-5x20mm-522-523-drager/dp/B01MV3477I>
 
 ---
 
-## 4. Open items — need your input before finalizing
+## 4. Internet connectivity — NINA-W152
 
-1. **User/network interface.** *Resolved:* connectivity is a **u-blox NINA-W152** on USART2 running u-connectXpress AT firmware (§5). The outward interface **relays `NodeLib` v2 frames verbatim over one plaintext LAN TCP socket to a server** that decodes, stores to SQLite, and serves an SPA over HTTP + WebSocket — full design in `MainController-Server-Link-Spec.md`. Local display/buttons: none planned.
-2. **Control loop ownership.** *Resolved:* `MainController` is a bus master + **supervisor + bridge/logger**, not a closed-loop controller — each `ControllerNode`/`Thermostat` pair runs its room loop locally and the bus keeps working with the uplink down (`MainController-Server-Link-Spec.md` §1). It does run one piece of fleet-wide arbitration on top, the `DamperBudget` allocator (`Damper-Budget-Spec.md` §5) — a ceiling on each `ControllerNode`'s own loop, not a room-level loop itself.
-3. **Feed topology (§3):** two PSUs (one per bus end) or one PSU at the master feeding both ends via a return cable? Decides the master fuse rating (T4 A vs T6.3 A) and the +48 V copper sizing.
-4. **Persistence.** Does `MainController` need to remember anything across power cycles (schedules, setpoints, node roster) — and if so, where (internal flash, external EEPROM/flash chip)?
-5. **Same MCU as slave nodes — resolved 2026-09-08: STM32G031F8P6** (64 KB flash / 8 KB SRAM, drop-in for the STM32G030F6P6TR). The +32 KB flash covers a bus-resident DFU bootloader plus the NINA AT-driver; RAM is unchanged at 8 KB, so the §7 memory discipline in `RS485-Node-Protocol-Spec-STM32G030.md` still applies. Footprint also fits STM32G031F6P6 (32 KB) as a cost-down fallback for the slave nodes.
-
----
-
-## 5. Internet connectivity — NINA-W152 (decided 2026-09-08)
-
-u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, running the pre-flashed **u-connectXpress AT firmware** — TCP/IP + TLS run on the module, the STM32 only drives a UART at 115200 8N1.
+u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, running the pre-flashed **u-connectXpress AT firmware** — TCP/IP + TLS run on the module, the STM32 only drives a UART at 115200 8N1. The outward interface **relays `NodeLib` v2 frames verbatim over one plaintext LAN TCP socket to a server** that decodes, stores to SQLite, and serves an SPA over HTTP + WebSocket — full design in `MainController-Server-Link-Spec.md`. No local display/buttons.
 
 **Minimal connections:**
 
 | NINA pin | To | Notes |
 |---|---|---|
-| VCC (10) + VCC_IO (9) | `+3v3 P` rail — dedicated RT9080-33GJ5 LDO off the 5 V buck | see `Node-Bus-Power-Path-Spec.md` §4.1. ~120 mA avg / ~350 mA peak. **Bulk: 22 µF at the LDO + ≥10 µF right at the NINA VCC pins** (NINA is in the opposite board corner) + 100 nF. RT9080 populated on both Main-board build variants. |
+| VCC (10) + VCC_IO (9) | `+3v3 P` rail — dedicated RT9080-33GJ5 LDO off the 5 V buck | see `Node-Bus-Power-Path-Spec.md` §4.1. ~120 mA avg / ~350 mA peak. Bulk: 22 µF at the LDO + ≥10 µF right at the NINA VCC pins (NINA is in the opposite board corner) + 100 nF. RT9080 populated on both Main-board build variants. |
 | GND + centre pad | solid ground pour | |
 | RESET_N (19) | STM32 `PA6` (net RESET_NINA), **open-drain**, active low | module has 100 kΩ + 10 nF internal; drive low ≥50 µs, release to run. Never push-pull — `Hal::Gpio::Mode::OpenDrain` (`Write(false)` = drive low, `Write(true)` = release to Hi-Z). Add a 10 kΩ pull-up to `+3v3 P` + a test point. |
 | UART_RXD (23) | STM32 `PA2` (USART2_TX, AF1) | |
 | UART_TXD (22) | STM32 `PA3` (USART2_RX, AF1) | |
-| UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control, **on by default in u-connectXpress**: the module will not transmit at all until this line is driven low by the STM32 (push-pull output, held low) — there is nothing else on the link to assert it. |
+| UART_CTS (21) | STM32 `PA1` (USART2_RTS, AF1) | 4-wire HW flow control, on by default in u-connectXpress: the module will not transmit at all until this line is driven low by the STM32 (push-pull output, held low) — there is nothing else on the link to assert it. |
 | UART_RTS (20) | STM32 `PA0` (USART2_CTS, AF1) | freed by moving RESET_NODES to `PB9` |
 | boot pins 27/32/36 | leave unconnected | internally strapped; pin 36 must not be pulled low |
 | SWITCH_1 (7), SWITCH_2 (18) | 2 test pads each (or 0 Ω-DNP to GND) | SWITCH_1 low at boot = restore UART defaults; SWITCH_1+2 low = enter serial bootloader. Recovery path if FW/baud is lost |
 | UART_TXD/RXD | header H1 (shared with USART2) | firmware update via AT or bootloader; hold the STM32 in reset (NRST on the Tag-Connect) to drive H1 from a PC adapter |
-| ANT (13) | leave open (or to GND) | W152 = internal antenna. Module in a board corner, antenna edge to the board edge, **no copper on any layer under the antenna keep-out**, ≥10 mm from P1 / RJ45 / electrolytics / the buck node, plastic enclosure only |
+| ANT (13) | leave open (or to GND) | W152 = internal antenna. Module in a board corner, antenna edge to the board edge, no copper on any layer under the antenna keep-out, ≥10 mm from P1 / RJ45 / electrolytics / the buck node, plastic enclosure only |
 
-**Consequence:** both USARTs are now committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.
+**Consequence:** both USARTs are committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.
 
-**Board-rev review (2026-09-08, `Hardware/Main/*_PCB1_1_2026-09-08`):** pin map and NINA/RT9080 wiring verified correct. Open before fab: (1) confirm the NINA antenna keep-out and clearances above; (2) move ≥10 µF of the NINA bulk to the module's VCC pins; (3) add the SWITCH_1/2 and RESET_N pads above; (4) commit a schematic PDF alongside the layout; (5) confirm the orderable NINA-W152 variant (BOM shows `-04B`; datasheet current production is `-06B`).
+Firmware baseline is u-connectXpress **6.4.1-001**; factory/sample units may ship on much older firmware and should be updated via s-center before deployment. Wi-Fi station join and a TCP connection to the server's uplink port have both been verified end-to-end against real hardware — command sequence in `MainController-Server-Link-Spec.md` §3.
 
-**Bench-validated (2026-09-18):** `RESET_N` release + `NinaRts` (`PA1`) held low bring the module up to a fully responsive AT interface at 115200 8N1 — `Software/NinaEnable` does exactly this for standalone bench access. Firmware baseline is u-connectXpress **6.4.1-001**; factory/sample units may ship on much older firmware (`1.0.0-126` seen) and should be updated via s-center before deployment. Wi-Fi station join and a TCP connection to the server's uplink port have both been verified end-to-end against real hardware — command sequence in `MainController-Server-Link-Spec.md` §3.
+---
+
+## 5. Persistence
+
+`MainController` needs no persistence across power cycles. Setpoints live locally on each `Thermostat`/`ControllerNode` pair (`ControllerNode-Thermostat-Link-Spec.md`), the node roster rebuilds itself every boot via `Discover`/`Announce` (protocol spec §6), and `BudgetAllocator` recomputes fresh from bus traffic with no saved state across a reset (`Damper-Budget-Spec.md` §7). No internal flash or external EEPROM/flash chip is needed for this.

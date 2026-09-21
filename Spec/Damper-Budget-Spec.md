@@ -1,6 +1,5 @@
 # Damper Budget & Room Control Loop — Design Spec
 
-**Status:** Draft — design locked 2026-09-21, not yet implemented (see §7)
 **Companion docs:** `ControllerNode-Thermostat-Link-Spec.md` (resolves that spec's §6 open item 1 — the room loop lives on `ControllerNode`), `Node-Message-Model-Spec.md` (the `DamperBudget` endpoint, §3 here), `MainController-Spec.md` (§2 there — this is the "supervisor" role, not a room-level closed loop), `TemperatureNode-Spec.md` (`SupplyTemp`/`ReturnTemp` source)
 
 ---
@@ -8,7 +7,7 @@
 ## 1. Split of responsibility
 
 - **`ControllerNode` runs the room's control loop.** This resolves `ControllerNode-Thermostat-Link-Spec.md` §6 open item 1: yes, `ControllerNode` compares its own Thermostat's setpoint/room-temp against the shared duct supply-air temperature and drives its own damper — `MainController` is never in that loop.
-- **`MainController` runs a fleet-wide fairness arbitration on top**, not a room loop — consistent with `MainController-Spec.md` §4 item 2 ("supervisor + bridge/logger, not a closed-loop controller"). It watches every node's `Room*`/`SupplyTemp` traffic (it already sees all of it, being bus master) and periodically narrows what each `ControllerNode`'s loop is *permitted* to do, by sending it a `DamperBudget` percent — a ceiling, never a target.
+- **`MainController` runs a fleet-wide fairness arbitration on top**, not a room loop — consistent with `MainController-Spec.md` §2 ("supervisor + bridge/logger, not a closed-loop controller"). It watches every node's `Room*`/`SupplyTemp` traffic (it already sees all of it, being bus master) and periodically narrows what each `ControllerNode`'s loop is *permitted* to do, by sending it a `DamperBudget` percent — a ceiling, never a target.
 - Each `ControllerNode` still decides locally where inside its current budget to sit; it does not always run at the budget ceiling.
 
 ---
@@ -202,7 +201,7 @@ While the main-bus connection is lost, a node's budget is not stuck wherever `Ma
 
 ```cpp
 // Divides a shared airflow-budget pool across every online ControllerNode.
-// Never a room-level loop (MainController-Spec.md §4 item 2) -- this only
+// Never a room-level loop (MainController-Spec.md §2) -- this only
 // narrows what each ControllerNode's own RoomControlLoop is permitted to do.
 // MainController is already bus master, so Observe() needs no extra bus
 // traffic -- it just reads what UplinkHandler already sees relayed to it.
@@ -274,6 +273,5 @@ Considered and rejected: exposing the servo's native `0–180°` range (or raw P
 ## 7. Open items
 
 1. **Tunable constants are defaults, not bench-validated:** `roomDeadbandCentiC = 30` (0.3 °C), `fullAuthorityCentiC = 300` (3 °C), `SupplyTemp::staleTimeoutMs = 5 min`, `BudgetAllocator::recomputeIntervalMs = 30 s`. Revisit once real thermostats/dampers are on a bench.
-2. **`DamperBudget` only constrains `Damper::Mode::Auto`.** A technician's `Manual`/`Open`/`Closed` override is never silently reclamped by a budget update. Confirm this is the intended scope before it ships.
-3. **`BudgetAllocator` keeps no state across a `MainController` reset** — it recomputes fresh from whatever `Report`s arrive after reboot; a node's own 30-minute disconnect ramp (§4.3) covers the gap while `MainController` is down, so this is believed fine, not re-litigated here.
-4. **Rounding in the water-fill (§5.2) and in `RoomDemandPercent`'s linear scale** — integer division rounds down throughout; whether that should round-to-nearest instead is a small correctness detail, flagged but not decided.
+2. **`BudgetAllocator` keeps no state across a `MainController` reset** — it recomputes fresh from whatever `Report`s arrive after reboot; a node's own 30-minute disconnect ramp (§4.3) covers the gap while `MainController` is down, so this is believed fine, not re-litigated here.
+3. **Rounding in the water-fill (§5.2) and in `RoomDemandPercent`'s linear scale should be round-to-nearest, not floor** — current code (`RoomDemand.cpp`, `BudgetAllocator::Recompute()`) still floors throughout (plain integer division); a small, low-risk follow-up.

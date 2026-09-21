@@ -1,7 +1,8 @@
 # MainController ↔ Server Link — Design Spec
 
-**Status:** Draft. The `MainController` relays `NodeLib` v2 frames verbatim between the RS485 node bus and a single LAN server; the server decodes, stores to SQLite, and serves the operator web application.
-**Companion docs:** `MainController-Spec.md` §5 (NINA-W152 hardware), `RS485-Node-Protocol-Spec-STM32G030.md` §3 (frame format, reused on this link), `Node-Message-Model-Spec.md` §3–§5 (endpoints, operations, encodings — the server decodes these), `Node-Flash-Layout-and-Bootloader-Spec.md` §6 (the bus OTA sequence this link feeds).
+`MainController` relays `NodeLib` v2 frames verbatim between the RS485 node bus and a single LAN server; the server decodes, stores to SQLite, and serves the operator web application.
+
+**Companion docs:** `MainController-Spec.md` §4 (NINA-W152 hardware), `RS485-Node-Protocol-Spec-STM32G030.md` §3 (frame format, reused on this link), `Node-Message-Model-Spec.md` §3–§5 (endpoints, operations, encodings — the server decodes these), `Node-Flash-Layout-and-Bootloader-Spec.md` §6 (the bus OTA sequence this link feeds).
 
 ---
 
@@ -47,11 +48,12 @@ The server implements the `NodeLib` wire format (§6); it is a small, fixed, alr
 
 ## 3. Transport — NINA socket
 
-- NINA-W152 on USART2, u-connectXpress AT firmware (bench-validated on **6.4.1-001**), 115200 8N1, 4-wire hardware flow control (RTS/CTS per `MainController-Spec.md` §5) — the STM32 must hold `NinaRts` (`PA1`) low or the module never transmits.
+- NINA-W152 on USART2, u-connectXpress AT firmware, 115200 8N1, 4-wire hardware flow control (RTS/CTS per `MainController-Spec.md` §4) — the STM32 must hold `NinaRts` (`PA1`) low or the module never transmits.
 - **Wi-Fi join:** `AT+UWSC=0,2,"<ssid>"` / `AT+UWSC=0,5,2` (WPA/WPA2-PSK) / `AT+UWSC=0,8,"<passphrase>"` configure station profile 0; `AT+UWSCA=0,3` activates it. `+UUWLE` (link up) / `+UUNU` (IP up) report readiness; `+UUWLD` / `+UUND` report loss and drive the same reconnect logic as the socket below.
 - **Socket:** u-connectXpress models the server as a **peer**, not a BSD-style socket — there is no `+USOCR`/`+USOCO` family on this firmware. `AT+UDCP="tcp://<host>:<port>/"` opens it: `+UDCP:<peer_handle>` on write, then an unsolicited `+UUDPC:<peer_handle>,<type>,<flags>,<local_ip>,<local_port>,<remote_ip>,<remote_port>` once the TCP handshake completes. `ATO` then switches the UART into **data mode** — a transparent byte pipe to the connected peer — for the life of the connection. `+UUDPD:<peer_handle>` reports a close (drops the module back to command mode); `AT+UDCPC=<peer_handle>` closes it explicitly.
 - The **AT engine is a non-blocking state machine** ticked from the same super-loop as `master.Loop()`: it issues one command and returns, collecting the response over later iterations. A stalled uplink never delays a bus `Poll` / `Done`.
 - **Reconnect:** exponential backoff, 1 s → 30 s cap, re-triggered by `+UUWLD` / `+UUND` / `+UUDPD`. The MCU keeps no uplink send queue — a `Report` produced during an outage is dropped; the value re-reports on its next change or periodic refresh, leaving only a gap in stored history.
+- Bring-up has confirmed Wi-Fi join and the `+UDCP` TCP peer connect end-to-end against the real server; the `ATO` transparent byte pipe itself and the `UplinkHello` token handshake that authenticates it (§5) are firmware work still to be exercised.
 
 ---
 
@@ -89,7 +91,7 @@ Transport verbs (`Discover` / `Announce` / `Poll` / `Done`) are bus-internal and
 | `0x64` `Keepalive` | ↔ | `Get` / `Report` | none | Idle liveness, ~30 s interval. A missed round trip triggers reconnect. |
 | `0x67` `MainStatus` | MC→S | `Report` | `rxFrames(4) · crcErrors(4) · resyncs(4) · txDrops(4) · downlinkDrops(4) · wifiRssi(1, int8) · freeHeap(2)` | `MainController` + bus health, ~10 s. `downlinkDrops` counts commands shed by the outbound queue (§7). |
 
-Firmware pushes to a bus node do **not** go through this block — see §8. There used to be a `0x65 OtaControl` / `0x66 OtaData` wrapper pair here that the MC rewrote into bus `Firmware` frames; it's gone. `Firmware` (`0x20`) and `ThermostatFirmware` (`0x22`) are already ordinary relayed endpoints (block `0x10`-`0x50`, §6), so the server drives the OTA sequence directly against them — the MC needed no OTA-specific code for that case, since the generic relay already carries it both ways. The wrapper only ever justified itself for a target the relay *can't* reach: `targetNodeId == 0` (§8 step 7, `Firmware` addressed to the MC's own reserved node id — an Open item, not yet handled either way).
+Firmware pushes to a bus node do **not** go through this block — see §8. `Firmware` (`0x20`) and `ThermostatFirmware` (`0x22`) are ordinary relayed endpoints (block `0x10`-`0x50`, §4), so the server drives the OTA sequence directly against them — the MC needs no OTA-specific code for that case, since the generic relay already carries it both ways. The one target the relay can't reach is `targetNodeId == 0` (§8 step 7, `Firmware` addressed to the MC's own reserved node id).
 
 ---
 
@@ -150,7 +152,7 @@ map_floors(id PK, name, image_path, width_px, height_px)
 map_placements(node_id, floor_id, x_px, y_px, poly_json NULL)      -- one row per ControllerNode
 ```
 
-`readings` is the only growing table; the node count keeps its rate low. A retention / downsample job can be added later.
+`readings` is the only growing table; the node count keeps its rate low. A retention / downsample job can be added later (§11).
 
 ### Frame codec
 
@@ -191,21 +193,21 @@ The bus is a round-robin poll cycle into which the master injects its own `Set`s
 
 ## 8. Firmware update
 
-Drives the bus OTA sequence in `Node-Flash-Layout-and-Bootloader-Spec.md` §6 **directly** — `Firmware` (`0x20`) is an ordinary relayed endpoint (§6), so the server is the one running this state machine, addressing the target node id over the socket exactly like any other `Set`/`Get`. The MC does no OTA-specific translation for this path; it's the same generic relay it already does for `SystemInfo`, `DamperTarget`, etc.
+Drives the bus OTA sequence in `Node-Flash-Layout-and-Bootloader-Spec.md` §6 **directly** — `Firmware` (`0x20`) is an ordinary relayed endpoint (§4), so the server is the one running this state machine, addressing the target node id over the socket exactly like any other `Set`/`Get`. The MC does no OTA-specific translation for this path; it's the same generic relay it already does for `SystemInfo`, `DamperTarget`, etc.
 
 1. Operator uploads `<module>.bin` on the Status page. The server validates the `ImageDescriptor` (magic, module, size) and computes the CRC-32.
 2. Server → bus (relayed): `Set Firmware[EnterBootloader]` addressed to the target node id (the app parks outputs, sets the backup magic, resets — `INodeHandler::PrepareForReset`). Server then polls `Get Firmware` on that node id until it gets back any `Firmware Status` Report — only the bootloader ever sends one, the running app only `Ack`/`Nack`s `Firmware`, so any reply confirms the reset landed.
 3. Server → bus: `Set Firmware[Begin] {module, imageSize, imageCrc32, fwVersion}`; the node erases its app slot and reports `bl-receiving`.
-4. Server streams `Set Firmware[Write] {offset(2 LE), bytes=32}` (**payload changed 2026-09-20** — was `offset(4 LE), bytes≤27`; see `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1) one chunk at a time, waiting for that write's own `Ack`/`Nack` (echoing the offset + a flash read-back CRC16) rather than watching a generic `Firmware Status` Report for progress — the reply is now tied to the specific write, not a raw `expectedOffset` counter to eyeball for stalls. On a lost ack, the server resends the same `Write`; on a `Nack`, it resyncs to the offset the `Nack` names. Delivery still rides the target's normal poll window, unchanged.
+4. Server streams `Set Firmware[Write] {offset(2 LE), bytes=32}` one chunk at a time, waiting for that write's own `Ack`/`Nack` (echoing the offset + a flash read-back CRC16) rather than watching a generic `Firmware Status` Report for progress — the reply is tied to the specific write, not a raw `expectedOffset` counter to eyeball for stalls (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2). On a lost ack, the server resends the same `Write`; on a `Nack`, it resyncs to the offset the `Nack` names. Delivery still rides the target's normal poll window, unchanged.
 5. At `imageSize`: `Set Firmware[End]` → poll for `bl-valid` → `Set Firmware[Activate]`. The node clears its magic, resets into the new app, re-announces; the server reads the new `fwVersion` from `SystemInfo`.
 6. **Thermostat target** — same steps 3-5, but addressed to `ThermostatFirmware` (`0x22`) on the *owning ControllerNode's* node id instead of `Firmware` on the target's own id, and step 2 is skipped: `ThermostatFirmware[Begin]` does the `EnterBootloader` + bootloader-wait itself, CN-side (`ControllerNode-Thermostat-Link-Spec.md` §5.4).
-7. **`targetNodeId == 0`** — MainController self-update. Not reachable via any relay (the MC doesn't relay to itself); needs a dedicated `Firmware`-addressed-to-node-0 special case in `UplinkHandler` that writes the MC's own application slot with a RAM-resident flash routine (`Node-Flash` §7.1) instead of forwarding onto the bus, then resets. The uplink drops during the write and reconnects on the new image. **Open item — not yet implemented.**
+7. **`targetNodeId == 0`** — MainController self-update. Not reachable via any relay (the MC doesn't relay to itself); needs a dedicated `Firmware`-addressed-to-node-0 special case in `UplinkHandler` that writes the MC's own application slot with a RAM-resident flash routine (`Node-Flash-Layout-and-Bootloader-Spec.md` §7.1) instead of forwarding onto the bus, then resets. The uplink drops during the write and reconnects on the new image. Not yet implemented.
 
-The STM32 working buffer is smaller than before: a `Write` payload is now 35 B (`MAX_DATA`, `RS485-Node-Protocol-Spec-STM32G030.md` §7/§9), but the bootloader no longer stages a RAM page buffer at all (§6.2.1 — each `Write` is programmed to flash immediately) — no whole image is buffered either way.
+The STM32 working buffer for this is small: a `Write` payload is 35 B (`MAX_DATA`, `RS485-Node-Protocol-Spec-STM32G030.md` §7), and the bootloader stages no RAM page buffer at all — each `Write` is programmed to flash immediately.
 
 ---
 
-## 9. STM32 code / RAM budget (over today's MainController)
+## 9. STM32 code / RAM budget
 
 | Piece | Flash | SRAM |
 |---|---|---|
@@ -214,9 +216,9 @@ The STM32 working buffer is smaller than before: a `Write` payload is now 35 B (
 | `0x60` block handlers (roster, presence, keepalive, status) | ~1 KB | — |
 | **Total** | **~4–6 KB** | **< 1 KB** |
 
-Firmware pushes no longer cost the MC anything beyond the generic relay it already has — no separate OTA glue line item (§8).
+Firmware pushes cost the MC nothing beyond the generic relay it already has — no separate OTA glue line item (§8).
 
-The MainController image is ~20 KB in a 52 KB slot. `Frame` / `Message` / `Id` / `Crc` / `NodeMaster` are already linked.
+`Frame` / `Message` / `Id` / `Crc` / `NodeMaster` are already linked.
 
 ---
 
@@ -236,6 +238,6 @@ The MainController image is ~20 KB in a 52 KB slot. `Frame` / `Message` / `Id` /
 ## 11. Open items
 
 1. **`readings` retention** — when and how to downsample stored history.
-2. **MainController self-update** — `targetNodeId == 0` (§8 step 7) needs `UplinkHandler` to recognize `Firmware` addressed to node 0 as itself and write its own application slot with a RAM-resident flash routine (`Node-Flash` §7.1), instead of the (nonexistent, for node 0) relay path. Not yet implemented.
+2. **MainController self-update** (§8 step 7) — needs `UplinkHandler` to recognize `Firmware` addressed to node 0 as itself and write its own application slot with a RAM-resident flash routine (`Node-Flash-Layout-and-Bootloader-Spec.md` §7.1), instead of the (nonexistent, for node 0) relay path. Not yet implemented.
 3. **Map polygon editor** — whether v1 ships the room-polygon drawing tool or point placement only.
-4. **`ATO` data-mode relay** — bring-up confirmed Wi-Fi join and the `+UDCP` TCP peer connect end-to-end against the real server (§3); not yet exercised: the `ATO` transparent byte pipe itself, and the `UplinkHello` token handshake (§5) that authenticates it. Both are firmware work rather than bring-up.
+4. **`ATO` data-mode relay** — the transparent byte pipe itself and the `UplinkHello` token handshake (§5) are not yet exercised end-to-end, only the Wi-Fi join and TCP peer connect underneath them (§3).

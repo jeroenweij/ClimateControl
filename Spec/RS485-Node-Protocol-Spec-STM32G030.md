@@ -1,24 +1,21 @@
 # RS485 Node Bus — Protocol Design Spec (v2)
-### Target MCU: STM32G031F8P6 (was STM32G030F6P6TR) — replaces Arduino/ATmega NodeLib
+### Target MCU: STM32G031F8P6
 
-**Status:** Draft for review
-**Supersedes:** `NodeLib` fixed-frame protocol (magic bytes + packed struct, no CRC)
-**Author's context:** Same physical bus (half-duplex RS485, one master + N slaves), reusing the poll/flush/heartbeat state machine, replacing the wire format with a variable-length, CRC-protected frame.
+**Companion docs:** `Node-Message-Model-Spec.md` (endpoints, operations, reporting model built on this framing), `Node-Bus-Hardware-Design-Spec.md` (physical layer), `Node-Flash-Layout-and-Bootloader-Spec.md` (the bootloader's use of this framing)
 
 ---
 
-## 1. Goals / non-goals
+## 1. Goals
 
-**Goals**
-- Variable-length data field per message (no longer locked to a single `uint8_t` value).
-- CRC-protected frames, so corruption is *detected*, not silently accepted.
-- Reuse the existing round-robin master/slave state machine (`Discover` → `Announce` → `Poll` → `Done` → heartbeat; ops renamed from v1's `DETECTNODES`/`HELLOWORLD`/`SENDQ`/`ENDOFQ` in `Node-Message-Model-Spec.md` §4), since that part works and isn't hardware-specific.
-- Take advantage of STM32G0 peripherals (hardware CRC unit, USART auto-direction-control) that the ATmega/Arduino stack didn't have.
+- Variable-length data field per message.
+- CRC-protected frames — corruption is detected, not silently accepted.
+- A round-robin master/slave state machine: `Discover` → `Announce` → `Poll` → `Done` → heartbeat.
+- Uses STM32G0 peripherals (hardware CRC unit, USART auto-direction-control).
 
-**Non-goals (for v2, call out explicitly if you want these later)**
-- Multi-master arbitration — still single master, polled bus.
-- Guaranteed delivery / retransmission at the protocol level — still best-effort per round, recovered by the next poll cycle or heartbeat timeout.
-- Encryption/authentication — physical bus assumed trusted.
+**Non-goals**
+- Multi-master arbitration — single master, polled bus.
+- Guaranteed delivery / retransmission at the protocol level — best-effort per round, recovered by the next poll cycle or heartbeat timeout.
+- Encryption/authentication — the physical bus is trusted.
 
 ---
 
@@ -26,14 +23,13 @@
 
 | Item | Choice | Notes |
 |---|---|---|
-| MCU | STM32G031F8P6 | Cortex-M0+, 64 MHz max, 64 KB flash, 8 KB SRAM, TSSOP20 (locked in 2026-09-08; was STM32G030F6P6TR — drop-in, +32 KB flash, adds LPUART1 / RTC / TIM2). §7 SRAM budget unchanged. |
-| UART | USART1 | Supports **hardware Driver-Enable (DE)** output — no manual GPIO toggle + `delay()` needed |
-| Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. Standard EIA-485 common-mode range (-7V to +12V) — margin against this bus's ground-offset estimates checked in `Node-Bus-Hardware-Design-Spec.md` §6, comfortable after the both-ends power feed. |
-| Baud rate | **115 200** (§9) | Not an exact integer USART divisor (≈0.08 % generator error at 16 MHz HCLK, negligible next to the crystal-less HSI16 spread); 1.15×10⁷ bit·m/s is deep inside the safe region for the ~100 m / 20-node terminated bus. 250 000 / 500 000 (both exact) are bench-validated fallbacks; 1 Mbit is not used. |
-| CRC engine | Hardware CRC peripheral (`CRC` block) | Offloads CRC calc from CPU, frees it for polling/servo timing |
+| MCU | STM32G031F8P6 | Cortex-M0+, 64 MHz max, 64 KB flash, 8 KB SRAM, TSSOP20. |
+| UART | USART1 | Hardware Driver-Enable (DE) output — no manual GPIO toggle + delay needed. |
+| Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. |
+| Baud rate | **115 200** | Not an exact integer USART divisor (≈0.08% generator error at 16 MHz HCLK) — negligible next to the crystal-less HSI16 clock's own spread. `1.15×10⁷ bit·m/s` for the ~100 m / 20-node terminated bus sits deep inside the safe region. 250 000 / 500 000 (both exact) are bench-validated fallbacks; 1 Mbit is not used. |
+| CRC engine | Hardware CRC peripheral | Offloads CRC calc from the CPU. |
 
-### Why hardware DE control matters
-The old code hand-manages the enable pin (`setEnable()` with 10–15 ms settle delays) because the ATmega has no automatic transceiver-direction feature. STM32G0's USART1 has **DEM/DEP + DEAT/DDAT** — you configure an assertion/de-assertion time in bit-periods and the peripheral toggles the DE pin around each transmission automatically, with no CPU-side delay loop. This removes a whole class of timing bugs and shortens turnaround time between poll and reply. **Recommendation: use hardware DE, drop `setEnable()`/`delay()` entirely.**
+STM32G0's USART1 has `DEM`/`DEP` + `DEAT`/`DDAT` — an assertion/de-assertion time is configured in bit-periods and the peripheral toggles the DE pin around each transmission automatically, with no CPU-side delay loop.
 
 ---
 
@@ -49,105 +45,63 @@ The old code hand-manages the enable pin (`setEnable()` with 10–15 ms settle d
 
 | Field | Size | Description |
 |---|---|---|
-| `SYNC` | 2 bytes | Keep `0xEE 0x42` from v1 for continuity. Only scanned for while the receiver is *not* mid-frame. |
-| `LEN` | 1 byte | Length of `DATA` **only** (0–255). Header (`NODE_ID`/`ENDPOINT`/`OPERATION`) is fixed size and not counted. Cap enforced in firmware at e.g. 32 bytes (see §7) even though the field allows 255 — keeps buffers small and bounds worst-case bus occupancy. |
+| `SYNC` | 2 bytes | `0xEE 0x42`. Only scanned for while the receiver is *not* mid-frame. |
+| `LEN` | 1 byte | Length of `DATA` only (0–255). Header (`NODE_ID`/`ENDPOINT`/`OPERATION`) is fixed size and not counted. Firmware caps this at `MAX_DATA` (§7). |
 | `NODE_ID` | 1 byte | Target/source node address. `0` = master (reserved); `1..MAX_NODES-1` = slaves; `0xFF` = broadcast (`Set`-only, no reply) — see `Node-Message-Model-Spec.md` §2. |
-| `ENDPOINT` | 1 byte | The addressable thing on the node — `NodeLib::Endpoint` enum. Was `CHANNEL`/`ChannelId` (an IO-pin selector); redefined as a flat named-endpoint enum in `Node-Message-Model-Spec.md` §3. |
+| `ENDPOINT` | 1 byte | The addressable thing on the node — `NodeLib::Endpoint` enum, `Node-Message-Model-Spec.md` §3. |
 | `OPERATION` | 1 byte | `NodeLib::Operation` — `Get`/`Set`/`Report`/`Ack`/`Nack` for endpoint access, plus the transport verbs `Discover`/`Announce`/`Poll`/`Done`. Full table in `Node-Message-Model-Spec.md` §4. |
-| `DATA` | `LEN` bytes | Payload — arbitrary bytes (int16/float/string/blob), interpreted per `ENDPOINT` (+ `OPERATION`) convention per `Node-Message-Model-Spec.md` §5, not enforced by the frame. |
-| `CRC16` | 2 bytes | Computed over `NODE_ID..DATA` inclusive (**not** over `SYNC` or `LEN`—see §4 rationale), little-endian on the wire. |
+| `DATA` | `LEN` bytes | Payload — interpreted per `ENDPOINT` (+ `OPERATION`) convention per `Node-Message-Model-Spec.md` §5. |
+| `CRC16` | 2 bytes | Computed over `NODE_ID..DATA` inclusive (not over `SYNC` or `LEN`), little-endian on the wire. |
 
-Total frame overhead is 7 bytes (2 sync + 1 len + 4 header/crc-adjacent... see table) vs. payload; for a 1-byte payload that's a larger relative overhead than v1's fixed 6-byte frame, but you get arbitrary payload sizes in return.
+Total frame overhead is 7 bytes on top of the payload.
 
 ---
 
 ## 4. CRC
 
-- **Algorithm:** CRC-16/CCITT-FALSE (poly `0x1021`, init `0xFFFF`, no reflect, no final XOR) — a common, well-tested 16-bit CRC with good burst-error detection, and directly configurable on STM32G0's CRC peripheral (programmable polynomial size 7/8/16/32 bits, programmable polynomial value, programmable init value — this exact use case is what the G0 CRC block was designed for, unlike older STM32 families locked to CRC-32/Ethernet poly).
-- **Coverage:** `NODE_ID`, `CHANNEL`, `OPERATION`, and all `DATA` bytes. `SYNC` is excluded (it's a framing marker, not payload — including it buys nothing). `LEN` is **included implicitly** by virtue of the receiver knowing where `DATA` ends, but is *not itself* covered by CRC in this scheme — see the resync note in §6 for why that's acceptable here.
-- **On receive:** compute CRC over the received header+data, compare to the trailing 2 bytes. Mismatch → drop frame, do not call any handler, let the round-robin/heartbeat mechanism recover on the next cycle (same philosophy as v1 — no in-band retry).
-- **Implementation:** feed bytes to `CRC->DR` as they arrive (or in one shot from a fully-buffered frame — see §7 for the buffering strategy); read `CRC->DR` for the result. Reset (`CRC->CR |= CRC_CR_RESET`) before each frame.
+- **Algorithm:** CRC-16/CCITT-FALSE (poly `0x1021`, init `0xFFFF`, no reflect, no final XOR) — configurable directly on STM32G0's CRC peripheral (programmable polynomial size 7/8/16/32 bits, programmable polynomial value, programmable init value).
+- **Coverage:** `NODE_ID`, `ENDPOINT`, `OPERATION`, and all `DATA` bytes. `SYNC` is excluded (a framing marker, not payload). `LEN` is covered indirectly — the receiver knows where `DATA` ends from it, but it is not itself included in the CRC computation; a corrupted `LEN` is caught by the CRC check failing on the resulting (wrong) byte range, with overwhelming probability, so a separate check on `LEN` itself isn't needed.
+- **On receive:** compute CRC over the received header+data, compare to the trailing 2 bytes. Mismatch → drop frame, do not call any handler, let the round-robin/heartbeat mechanism recover on the next cycle.
+- **Implementation:** feed bytes to `CRC->DR` as they arrive; read `CRC->DR` for the result. Reset (`CRC->CR |= CRC_CR_RESET`) before each frame.
 
 ---
 
 ## 5. Framing / resync strategy
 
-v1 could get away with no resync logic because every frame was the same fixed size — worst case, one garbled frame, next sync search starts fresh at a known offset. Variable length breaks that assumption: **if the `LEN` byte itself is corrupted, the receiver will consume the wrong number of bytes and misinterpret the following, real frame.**
-
-Chosen mitigation (deliberately not full byte-stuffing/COBS — see rationale below):
+Variable-length frames mean a corrupted `LEN` byte would otherwise make the receiver consume the wrong number of bytes and misinterpret the following, real frame. Mitigation:
 
 1. **CRC catches almost all bad frames.** A corrupted `LEN` will, with overwhelming probability, cause the CRC computed over the (wrong) byte range to fail against the trailing 2 bytes, so the bad frame is rejected rather than silently accepted.
-2. **Inter-byte timeout.** If more than `T_gap` (recommend 2–3 byte-periods at the configured baud — ~175–260 µs at 115 200, §9 item 2) elapses between bytes while mid-frame, abandon the partial frame and return to sync-hunting. This bounds how long a single corruption event can wedge the parser.
-3. **Max frame guard.** If `LEN` (or a corrupted read of it) would make the frame exceed the configured max (§7), abandon and resync immediately rather than blocking on bytes that will never come in the expected window.
-4. **`SYNC` byte still re-armed continuously in payload search**, exactly like v1: even while "in frame," if the resulting frame fails CRC, the next sync search starts from the byte immediately after the failed attempt's SYNC, not from scratch at the buffer start — so a spuriously-matched SYNC inside a garbled stream doesn't cost more than one bad frame.
+2. **Inter-byte timeout.** If more than `T_gap` (2–3 byte-periods at the configured baud, ~175–260 µs at 115 200) elapses between bytes while mid-frame, abandon the partial frame and return to sync-hunting. This bounds how long a single corruption event can wedge the parser.
+3. **Max frame guard.** If `LEN` (or a corrupted read of it) would make the frame exceed the configured max, abandon and resync immediately rather than blocking on bytes that will never come in the expected window.
+4. **`SYNC` re-armed continuously in payload search** — even while "in frame," if the resulting frame fails CRC, the next sync search starts from the byte immediately after the failed attempt's `SYNC`, not from scratch at the buffer start, so a spuriously-matched `SYNC` inside a garbled stream doesn't cost more than one bad frame.
 
-**Why not COBS/byte-stuffing:** on a short, low-noise wired bus with a small, closed set of nodes, CRC + timeout-based resync is simpler to implement and debug on a Cortex-M0+ with 8 KB RAM, and failure mode is "occasionally drop one frame, recovered next poll cycle" rather than "corrupt state." If you move to a longer/noisier bus or higher node count later, COBS is the natural upgrade — flag it as an explicit v3 candidate rather than building it now.
+**Why not COBS/byte-stuffing:** on a short, low-noise wired bus with a small, closed set of nodes, CRC + timeout-based resync is simpler to implement and debug on a Cortex-M0+ with 8 KB RAM, and the failure mode is "occasionally drop one frame, recovered next poll cycle" rather than "corrupt state." A longer/noisier bus or a much higher node count would be the trigger to revisit this.
 
 ---
 
 ## 6. Addressing, topology, operations
 
-The round-robin transport (discovery / poll cycle / heartbeat) carries over from v1 almost line-for-line — it is wire-format-agnostic. The *message semantics* on top of it (endpoints, operation verbs, reporting model) are specified in `Node-Message-Model-Spec.md`; this section covers only the transport-level items.
-
-| Item | v1 | v2 |
-|---|---|---|
-| Master ID | `0`, hardcoded constant | `0`, still reserved |
-| Node ID range | 1–10 (`numNodes = 10`, compile-time) | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 21). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
-| Broadcast | — (none; `DETECTNODES` recognised by op only) | `NODE_ID = 0xFF`, valid with `Operation::Set` only (fire-and-forget, no reply) — `Node-Message-Model-Spec.md` §2 |
-| Discovery | Broadcast `DETECTNODES`, staggered `HELLOWORLD` replies by `(nodeId-1) * nodeSpacing` ms | Same mechanism; ops renamed `Discover` / `Announce`. `Announce` payload carries module type + 96-bit UID for the master's roster. |
-| Poll cycle | Master → `SENDQ` → node dumps queue → `ENDOFQ` → master polls next active node | Same; ops renamed `Poll` / `Done`. A polled node dumps its queued `Report`s (on-change + keepalive, `Node-Message-Model-Spec.md` §6.1). |
-| Heartbeat | Master-side timer reset each full poll round; `ConnectionLost()` on lapse | Same |
-| `Operation` enum | `GET/SET/SETPWM/VALUE/ERROR/SETMODE/DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ` | Redesigned — `Get/Set/Report/Ack/Nack` + `Discover/Announce/Poll/Done`. Full table: `Node-Message-Model-Spec.md` §4. |
+| Item | Value |
+|---|---|
+| Master ID | `0`, reserved |
+| Node ID range | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 21). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
+| Broadcast | `NODE_ID = 0xFF`, valid with `Operation::Set` only (fire-and-forget, no reply) — `Node-Message-Model-Spec.md` §2 |
+| Discovery | Master broadcasts `Discover`; slaves reply with a staggered `Announce` (`(nodeId-1) * nodeSpacing` ms), carrying module type + 96-bit UID for the master's roster. |
+| Poll cycle | Master → `Poll` → node dumps its queued `Report`s (on-change + keepalive, `Node-Message-Model-Spec.md` §6.1) → `Done` → master polls next active node. |
+| Heartbeat | Master-side timer reset each full poll round; `ConnectionLost()` on lapse. |
 
 ---
 
-## 7. Buffering / memory budget (STM32G031F8: 8 KB SRAM total — same as the G030)
+## 7. Buffering / memory budget (8 KB SRAM total)
 
 | Buffer | Size | Notes |
 |---|---|---|
-| RX frame buffer | `2 (sync) + 1 (len) + 3 (header) + MAX_DATA + 2 (crc)` | **`MAX_DATA = 35`** (decided 2026-09-20 — was 32; see §9 item 1) → 43-byte buffer. |
-| TX queue | Same struct as v1 (`messageQueue[queueSize]`), but each entry now needs to own/reference a variable-length payload | Simplest approach: fixed-size queue slots sized at `MAX_DATA` (wastes some RAM per slot but avoids dynamic allocation — appropriate on an 8 KB-RAM MCU). `queueSize = 25` from v1 × 43 bytes/slot ≈ 1.05 KB — fine (measured actual RAM use post-implementation, `Modules/TemperatureNode`: 2384 B / 8192 B (29%) at `MAX_DATA=32`; the +75 B this queue gains at `MAX_DATA=35` is trivial against that headroom). |
-| Avoid heap allocation | — | No `malloc`/`new` for frame data; fixed-size slots only, matching v1's existing no-heap style. |
+| RX frame buffer | `2 (sync) + 1 (len) + 3 (header) + MAX_DATA + 2 (crc)` | `MAX_DATA = 35` → 43-byte buffer. Sized for `Firmware[Write]`'s payload (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2): `1 (FirmwareOp) + 2 (byteOffset) + 32 (data) = 35`, exactly, no slack — the next-largest message type needs nowhere near this much. |
+| TX queue | Fixed-size queue slots sized at `MAX_DATA` (`queueSize = 25` × 43 bytes/slot ≈ 1.05 KB) — no dynamic allocation. |
+| Heap allocation | None — fixed-size slots only, no `malloc`/`new` for frame data. |
 
-This keeps total protocol RAM usage well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. Add the small `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, ~384 B) to this budget.
-
----
-
-## 8. Migration notes from `NodeLib`
-
-**Carries over almost unchanged (conceptually):**
-- `Node` / `NodeMaster` class split and their `HandleMasterMessage` override pattern.
-- Poll → flush → `Done` → advance round-robin state machine (`PollNextNode`, `ActiveNodeCount`, `activeNodes[]`).
-- Discovery/staggered-reply mechanism.
-- Heartbeat/`ConnectionLost()` contract (via `INodeHandler`, renamed from `IVariableHandler` — `Node-Message-Model-Spec.md` §6.2).
-
-**Needs rework:**
-- `Message`/`Id` structs: `Value` (single `uint8_t`) → variable-length `DATA` buffer + explicit `LEN`. Anywhere code does `message.value`, it now needs `message.data`/`message.len`, and typed values (int16, float) out of that buffer need explicit pack/unpack helpers per the `Node-Message-Model-Spec.md` §5 conventions.
-- `Id.channel` (`ChannelId`, IO-pin selector) → `Id.endpoint` (`Endpoint`, flat named-endpoint enum) — `Node-Message-Model-Spec.md` §3.
-- `Operation` enum redesigned (§6 above); the transport ops rename `DETECTNODES/HELLOWORLD/SENDQ/ENDOFQ` → `Discover/Announce/Poll/Done`.
-- Dispatch: `NodeLib` now intercepts the `System*` / `Firmware` / `Diagnostics*` endpoints itself; the module handler sees only its own endpoints (`Node-Message-Model-Spec.md` §6.2).
-- `Node::WriteMessage`/`Node::Loop()`: replace the fixed-size `Frame` struct + raw `Serial1.write((uint8_t*)&m, sizeof(m))` with a byte-stream framer/deframer that computes and appends/verifies CRC16 and handles the variable length + timeout-resync logic from §5.
-- `setEnable()`: remove; replace with USART1 hardware DE configuration (one-time init, no per-message delay code).
-- `numNodes`/`masterNodeId`/`nodeSpacing`: move from `static const int` compile-time constants to constructor/init parameters if you want this new firmware to support a different node count without recompiling the library itself (optional, but cheap to do now).
-
-**New:**
-- CRC peripheral init (polynomial, size, init value) as part of `Node::Init()`.
-- Inter-byte timeout timer for the resync logic in §5 (a free hardware timer channel, or reuse the existing `DelayTimer` pattern from `tools/`).
+Total protocol RAM usage is well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. The `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, ~384 B) adds to this budget.
 
 ---
 
-## 9. Open decisions (need your input before finalizing)
-
-1. ~~**`MAX_DATA` cap**~~ — **decided 2026-09-20: `MAX_DATA = 35`** (was 32). Driven by `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1's OTA `Write` redesign: a double-word-aligned 32-byte firmware data payload (needed so every `Write` chunk maps to an independently-flashable, independently-verifiable double-word-aligned range — see that spec for why) plus `1 (FirmwareOp) + 2 (byteOffset, uint16 LE — the 50 KB app slot fits comfortably)` = 35 bytes exactly, with no slack. No other message type needs anywhere near this much (the next-largest is nowhere close), so 35 is sized specifically for `Firmware[Write]`, not rounded up further speculatively. RAM cost is trivial — see the buffer table above.
-2. ~~**Baud rate**~~ — **115 200 baud, as actually implemented** (`Lib/Board/BoardPins.h`'s `BusBaudRate`). ~100 m total bus (`Node-Bus-Hardware-Design-Spec.md` §7 item 3), 20 nodes, terminated both ends, indoor (~10–40 °C):
-   - **Not an exact integer USART divisor** at either candidate kernel clock (16 MHz/115 200 ≈ 138.9, BRR rounds to 139 → actual ≈115 108 Hz, ≈0.08 % error; 64 MHz/115 200 ≈ 555.6, similarly inexact). That generator error is negligible next to the crystal-less HSI16 clock's own spread (±~1 % indoors, so ~±2 % node-to-node), which is what actually dominates the async-UART framing budget. 250 000 (÷64 at 16 MHz, ÷256 at 64 MHz) and 500 000 (÷128) *are* exact and remain the natural headroom steps if the framing budget is ever found to be tight in the field; 1 Mbit is not used.
-   - **Length·rate = 1.15×10⁷ bit·m/s** — well inside the conservative RS-485 knee (~10⁸) and far inside what the 12 Mbps MAX3485 does over 100 m of terminated pair. Bit period ≈8.7 µs vs. ~0.5 µs one-way cable delay → reflections settle in well under a bit.
-   - A full 50 KB OTA image's transfer time scales with baud (~2.2× slower than at the previously-cited 250 000) — the ~6 s figure in `Node-Flash-Layout-and-Bootloader-Spec.md` §6.2 predates both this baud and the synchronous per-write Ack/Nack protocol (v2) and needs re-deriving, not just rescaling; flagged there rather than fixed here.
-   - USART config: oversampling ×16 and the 3-sample majority vote (both defaults) for noise immunity; the §8 inter-byte timeout is specified in byte-periods so it scales automatically.
-   - The `ControllerNode`↔`Thermostat` link runs the same `Board::BusBaudRate` (`ControllerNode-Thermostat-Link-Spec.md` §3).
-3. **CRC placement (whole-frame vs re-verify per field)** — spec above puts CRC after `DATA`, covering header+data only. Confirm that's acceptable vs. also covering `LEN` (would require restructuring since `LEN` is needed *before* you know where `DATA`/CRC end).
-4. **Backward compatibility** — is this a clean-slate rewrite (old ATmega nodes retired), or do you need v1 and v2 nodes coexisting on the same bus during a transition? That changes whether `SYNC` bytes need to differ between versions so a mixed bus doesn't misparse frames.
-
----
-
-*Happy to turn §3/§5 into actual C structs + a receiver state machine (`enum State { SYNC0, SYNC1, LEN, HEADER, DATA, CRC }`) once the open decisions above are pinned down — that's the natural next artifact.*
+*The natural next artifact once framing changes are needed: a receiver state machine (`enum State { SYNC0, SYNC1, LEN, HEADER, DATA, CRC }`) implementing §3/§5 directly.*

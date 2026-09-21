@@ -43,10 +43,10 @@ On the ControllerNode this is a *second* RS485 front-end (USART2, PA2/PA3, DE PA
 
 ### 3.1 Cable, power, and connector
 
-Direction set 2026-09-11: the Thermostat is **fed from the ControllerNode's own regulated 5V rail** (`Node-Bus-Power-Path-Spec.md` §3 — the same LMR16030 buck output that feeds the CN's own 3.3V LDO and, on a ControllerNode, the servo), not raw 48V and not an independent local supply. A local `XC6206P332MR` (`C5446`, same part used board-wide) drops it to 3.3V on the Thermostat side.
+The Thermostat is **fed from the ControllerNode's own regulated 5V rail** (`Node-Bus-Power-Path-Spec.md` §3 — the same LMR16030 buck output that feeds the CN's own 3.3V LDO and, on a ControllerNode, the servo), not raw 48V and not an independent local supply. A local `XC6206P332MR` (`C5446`, same part used board-wide) drops it to 3.3V on the Thermostat side.
 
-- **4 conductors, no separate ENABLE.** `RS485 A`, `RS485 B`, `+5V`, `GND` — that's it. A separate power-kill line from CN to the Thermostat was considered and dropped: CN can already reset the Thermostat over the link (`Firmware[EnterBootloader]`, §5), a physical reset button already exists on the Thermostat board (inherited from the node-core schematic, §4), and a hung link already parks the damper safely without needing to power-cycle anything (§5.1). Whatever *would* need a hard power-cycle to recover is already covered when the main bus's shared `ENABLE` kills this CN's own buck — the Thermostat's feed collapses with it for free, since it's downstream of the same rail. Independently killing just the Thermostat while the CN stays up solves a problem that doesn't currently exist; adding it would cost a 5th conductor plus a CN-side load switch (`Node-Bus-Power-Path-Spec.md` §3.1-style P-FET) for no identified benefit.
-- **Voltage drop margin is not a constraint.** At the documented worst-case load (§4.5, ~40mA peak) and the `XC6206`'s datasheet-worst-case dropout (350mV @ 100mA — conservative, since our load is well under that test point), the cable can run to roughly 125–200m (26AWG–24AWG stranded) before the far-end LDO loses regulation, using CN's ~5.0V rail as the source. That's far beyond any real duct-to-wall or wall-to-CN run; RS485 itself (several hundred meters at 250kbps, point-to-point, no multidrop reflections to worry about) isn't the limiting factor either. Cable routing and connector cost are what actually bound the practical run, not electronics.
+- **4 conductors, no separate ENABLE.** `RS485 A`, `RS485 B`, `+5V`, `GND` — that's it. A separate power-kill line from CN to the Thermostat isn't needed: CN can already reset the Thermostat over the link (`Firmware[EnterBootloader]`, §5), a physical reset button already exists on the Thermostat board (inherited from the node-core schematic, §4), and a hung link already parks the damper safely without needing to power-cycle anything (§5.1). Whatever would need a hard power-cycle to recover is already covered when the main bus's shared `ENABLE` kills this CN's own buck — the Thermostat's feed collapses with it for free, since it's downstream of the same rail.
+- **Voltage drop margin is not a constraint.** At the documented worst-case load (§4.5, ~40mA peak) and the `XC6206`'s datasheet-worst-case dropout (350mV @ 100mA — conservative, since our load is well under that test point), the cable can run to roughly 125–200m (26AWG–24AWG stranded) before the far-end LDO loses regulation, using CN's ~5.0V rail as the source. That's far beyond any real duct-to-wall or wall-to-CN run; RS485 itself isn't the limiting factor either. Cable routing and connector cost are what actually bound the practical run, not electronics.
 - **Connector: JST-XH, 2.5mm pitch, 4-position** — chosen over RJ45 specifically to keep the Thermostat enclosure compact (§4.6); RJ45's ~16×13.5×20mm mating envelope would blow out the puck's thickness budget, where an XH header mounts flat on the PCB and only needs a small cutout for the plug nose.
 
   | Role | Part | LCSC |
@@ -55,7 +55,7 @@ Direction set 2026-09-11: the Thermostat is **fed from the ControllerNode's own 
   | Cable-side housing | `XHP-4` | `C144403` |
   | Crimp socket contacts (×4/cable end) | `SXH-001T-P0.6` | `C140573` (standard, not the `-N` low-insertion-force variant — this connector is installed once and left, so favor vibration retention over easy insertion) |
 
-  3A/250V rated (far past our ~40mA), 22–28 AWG wire, −25…+85°C — the *standard* compact XH family (9.8mm mounting height), not JST's bulkier "high box" potted-board variant, which shares a confusingly similar `XHP-n` numbering but is taller and meant for a different application. **Verify the friction latch before ordering at volume:** LCSC's own listing metadata tags `XHP-4` as "non-latching," which conflicts with XH's usual friction-latch reputation and isn't contradicted anywhere in JST's datasheet — check a product photo or a sample part.
+  3A/250V rated (far past our ~40mA), 22–28 AWG wire, −25…+85°C — the standard compact XH family (9.8mm mounting height), not JST's bulkier "high box" potted-board variant. Verify the friction latch before ordering at volume — LCSC's own listing metadata tags `XHP-4` as "non-latching," which conflicts with XH's usual friction-latch reputation and isn't contradicted anywhere in JST's datasheet; check a product photo or a sample part.
 
 ### 3.2 A/B line passives — reuses the main-bus scheme (`Node-Bus-Hardware-Design-Spec.md` §6.3), same transceiver
 
@@ -64,7 +64,7 @@ The link uses the same `MAX3485CSA-JSM` (LCSC `C6395158`) as the main bus, so th
 | Part | Value | Populate |
 |---|---|---|
 | Termination | 120 Ω across A–B | **both ends, always** — CN's link-side transceiver and the Thermostat's, permanently populated (not DNP; unlike the main bus, which end is "the end" never changes here) |
-| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | **once for the whole link, at ControllerNode** (the link's master, `LinkMaster`, §5.3) — not at the Thermostat, and not both: a second bias network would just parallel down and skew the idle point for no benefit. `MAX3485` is not true-fail-safe, same as the main bus. **Built 2026-09-11**: `R20`/`R21`, `0603WAF5600T5E`, LCSC `C23204` (Basic part) — R20 A→3V3, R21 B→GND, confirmed on the CN-side link net in the netlist. Actual current draw is ~2.8mA (3.3V across the 560+560Ω pair plus the ~60Ω of parallel A-B termination at both ends) — negligible against the rail. |
+| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | **once for the whole link, at ControllerNode** (the link's master, `LinkMaster`, §5.3) — not at the Thermostat, and not both: a second bias network would just parallel down and skew the idle point for no benefit. `MAX3485` is not true-fail-safe, same as the main bus. `R20`/`R21`, `0603WAF5600T5E`, LCSC `C23204` (Basic part) — R20 A→3V3, R21 B→GND, confirmed on the CN-side link net in the netlist. Actual current draw is ~2.8mA (3.3V across the 560+560Ω pair plus the ~60Ω of parallel A-B termination at both ends) — negligible against the rail. |
 | Series R | 10 Ω in each of A/B | both ends, recommended (not just optional as on the main bus) — the 4-conductor cable here (§3.1) isn't purpose-made 120 Ω-rated RS485 cable the way the main bus's Ethernet patch cable is treated, so the extra ringing/EMI damping is more likely to matter |
 | ESD/surge | SM712 RS-485 TVS, SOT-23-3, pin 1→A, pin 2→B, pin 3→GND | both ends, right at the connector — LCSC `C5199207` (ElecSuper) or `C404012` (genuine Bourns), same as every main-bus node. The Thermostat's connector sits at an exposed wall location, if anything more ESD-exposed than an enclosed duct node. |
 | DE/RE pull-down | 10 kΩ, DE/RE net → GND | both ends, mandatory — same reset-safety reason as the main bus: an unprogrammed or resetting node must not float its driver onto the line. |
@@ -73,15 +73,15 @@ The link uses the same `MAX3485CSA-JSM` (LCSC `C6395158`) as the main bus, so th
 
 ## 4. Thermostat hardware
 
-Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project MCU, locked in 2026-09-08) and the node-core schematic from `Node-Bus-Hardware-Design-Spec.md` §6 (MCU support parts, reset button, SWD, indicator LED, the `InputPullUp` user-button pattern) — it just swaps the main-bus RS-485 front-end for the point-to-point link (§3) and adds a display + a second button.
+The `Thermostat` reuses the **STM32G031F8P6** (project MCU) and the node-core schematic from `Node-Bus-Hardware-Design-Spec.md` §6 (MCU support parts, reset button, SWD, indicator LED, the `InputPullUp` user-button pattern) — it just swaps the main-bus RS-485 front-end for the point-to-point link (§3) and adds a display + a second button.
 
 ### 4.1 Display — I²C OLED
 
-**SSD1306 / SSD1315 128×64 mono OLED.** Part locked 2026-09-11: **Wisevision `X096-2864KSWPG01-H30`** (LCSC `C18723026`), ~$1.86/1 down to ~$1.09 at volume, 955 units in stock at time of selection — re-check stock before a production-size order.
-- **True bare COG module** — SSD1315 chip bonded directly to the glass, 30-pin 0.7 mm-pitch FPC tail exposing every controller pin, no PCB, no onboard regulator of any kind. This is what the power table below assumes; it fully satisfies the "bare-controller module" requirement that was open in §6.
+**SSD1306 / SSD1315 128×64 mono OLED.** Part: **Wisevision `X096-2864KSWPG01-H30`** (LCSC `C18723026`).
+- **True bare COG module** — SSD1315 chip bonded directly to the glass, 30-pin 0.7 mm-pitch FPC tail exposing every controller pin, no PCB, no onboard regulator of any kind.
 - **Panel:** 24.7×16.6×1.3 mm outline, 21.74×11.175 mm active area, white — comfortably inside the §4.6 puck enclosure, and white reads more neutral than the common blue hobbyist panels behind a matte-white front.
-- **I²C pin strapping** (per datasheet §1.5 Pin Definition): `BS0=0, BS1=1, BS2=0` (tie to `VSS`/`VDD`/`VSS`) selects I²C mode; then `CS#→VSS`, `R/W#→VSS`, `E/RD#→VSS` (all tied low, per the datasheet's serial/I²C note); `D0→SCL`, `D1` and `D2` **tied together→SDA** (the controller uses separate internal SDA-in/SDA-out pins that must be shorted externally); `D3–D7` unused, tie to `VSS`. `D/C#` doubles as the I²C slave-address bit `SA0` — **pick whichever ties (`VSS`/`VDD`) doesn't collide with the CHT40MEMS's fixed address on the same shared bus (§4.3)**, check both datasheets before laying out.
-- Also needs, per the datasheet's application circuit: `RES#` driven by an MCU GPIO or simple RC (pull high for normal operation), an `IREF` resistor to `VSS` (segment current reference, ≤ 12.5 µA), a cap from `VCOMH` to `VSS`, and — using the internal DC/DC charge pump so no separate ~7.5–15 V panel rail is needed — `VBAT` tied to the same `VDD`/3.3 V rail with the `C1P/C1N/C2P/C2N` flying capacitors populated per that circuit (size the resistor/caps from the datasheet's own example rather than guessing; not reproduced here). Pins `1`/`30` (N.C., support pins) must still be tied to ground for ESD.
+- **I²C pin strapping** (per datasheet §1.5 Pin Definition): `BS0=0, BS1=1, BS2=0` (tie to `VSS`/`VDD`/`VSS`) selects I²C mode; then `CS#→VSS`, `R/W#→VSS`, `E/RD#→VSS` (all tied low, per the datasheet's serial/I²C note); `D0→SCL`, `D1` and `D2` **tied together→SDA** (the controller uses separate internal SDA-in/SDA-out pins that must be shorted externally); `D3–D7` unused, tie to `VSS`. `D/C#` doubles as the I²C slave-address bit `SA0` — pick whichever ties (`VSS`/`VDD`) doesn't collide with the CHT40MEMS's fixed address on the same shared bus (§4.3), check both datasheets before laying out.
+- Also needs, per the datasheet's application circuit: `RES#` driven by an MCU GPIO or simple RC (pull high for normal operation), an `IREF` resistor to `VSS` (segment current reference, ≤ 12.5 µA), a cap from `VCOMH` to `VSS`, and — using the internal DC/DC charge pump so no separate ~7.5–15 V panel rail is needed — `VBAT` tied to the same `VDD`/3.3 V rail with the `C1P/C1N/C2P/C2N` flying capacitors populated per that circuit. Pins `1`/`30` (N.C., support pins) must still be tied to ground for ESD.
 - I²C: 2 pins (SDA/SCL), **shared** with the room sensor (§4.3) — no extra pins for the sensor.
 - Framebuffer 128×64/8 = **1 KB** of the 8 KB SRAM — fine alongside the link's `Message` buffers.
 - **Constraint is flash, not RAM:** the app slot is 50 KB (`Node-Flash-Layout-and-Bootloader-Spec.md` §3). Driver + framing + app fits, but keep fonts minimal (one small + one large digit font, not a font library).
@@ -97,37 +97,37 @@ Direction set 2026-09-07. The `Thermostat` reuses the **STM32G031F8P6** (project
 
 ### 4.2 Display wake — button press
 
-**No motion/PIR sensor** (rejected 2026-09-07 on BOM cost). The display is woken by a **button press**; after an inactivity timeout it dims (contrast register) then turns off (`0xAE`). Averaged over realistic use the OLED contributes < 0.1 mA — it effectively leaves the power budget, and the screen-off state also avoids burn-in of the static digits. Ignore the "screen dark until touched" UX cost.
+No motion/PIR sensor. The display is woken by a **button press**; after an inactivity timeout it dims (contrast register) then turns off (`0xAE`). Averaged over realistic use the OLED contributes < 0.1 mA — it effectively leaves the power budget, and the screen-off state also avoids burn-in of the static digits.
 
 *Optional:* an ambient-light sensor (phototransistor on an ADC pin, or an I²C ALS on the shared bus) to drop OLED contrast in a dark room — near-zero added cost, not required.
 
 ### 4.3 Buttons & room sensor
 
-- **2 touch buttons, capacitive** — direction set 2026-09-11, driven by a **Holtek BS212C-1** touch-key IC (LCSC `C42372571`, SOT-23-6) rather than mechanical switches, to support the sealed-enclosure look of §4.6 (copper mesh behind the plastic front as the two electrodes, no physical hole/actuator through the case).
-  - `KOUT1`/`KOUT2` are NMOS, active-low, with internal pull-high — the same polarity `Hal::Gpio::Mode::InputPullUp` already assumes for a plain switch-to-GND button, so they wire straight onto the same two MCU GPIOs (`PA11`/`PA12`, §4.4) with **no firmware change**. One channel keeps the node `ErrorHandler` ack role (also clears a link-lost error); the other is the UI's set/adjust control — same mapping as the mechanical design it replaces.
+- **2 touch buttons, capacitive**, driven by a **Holtek BS212C-1** touch-key IC (LCSC `C42372571`, SOT-23-6) rather than mechanical switches, to support the sealed-enclosure look of §4.6 (copper mesh behind the plastic front as the two electrodes, no physical hole/actuator through the case).
+  - `KOUT1`/`KOUT2` are NMOS, active-low, with internal pull-high — the same polarity `Hal::Gpio::Mode::InputPullUp` already assumes for a plain switch-to-GND button, so they wire straight onto the same two MCU GPIOs (`PA11`/`PA12`, §4.4) with no firmware change. One channel keeps the node `ErrorHandler` ack role (also clears a link-lost error); the other is the UI's set/adjust control.
   - `KEY1`/`KEY2` route to the two copper-mesh electrode pads. Per the datasheet, sensitivity is set by electrode/copper area, the plastic's thickness, and — the easy knob during bring-up — a per-channel 0–25 pF capacitor footprint on each `KEY` pin (`Ct`; higher Ct = lower sensitivity, 0 pF = max). Leave the footprint unpopulated until the enclosure's actual plastic thickness is known, then tune empirically.
-  - **Auto-calibration** (power-on, and again after ~1 s idle in normal mode / ~2 s in standby, per datasheet) re-baselines against drift from temperature, humidity and aging of the mesh/adhesive — the reason this part was picked over the touch ICs on the shortlist without it. A stuck-key timeout (60–68 s max key-on time) forces a re-cal if something covers a pad continuously.
-  - Power: ~3.5 µA (3 V) standby, ~0.6 mA typ / 0.9 mA max (3 V) while active — negligible against the §4.5 budget. 0.1 µF decoupling on `VDD` per the datasheet's application circuit; no external LDO needed (the part has its own adaptive voltage-drop immunity to supply noise).
-- **Room temperature/humidity sensor: CYBERSEN CHT40MEMS** (`CHT40MEMS`, JLCPCB `C54305346`) on the shared I²C display bus — chosen 2026-09-07. SHT40-clone in the same DFN-4 1.5×1.5 mm footprint, I²C, ±0.2 °C / ±2.5 % RH, −40…+125 °C, ~$0.31/100. 0 extra pins, no ADC calibration. Humidity is worth having on a thermostat (display, and future comfort/dewpoint logic).
-  - **Lay out the footprint as the standard SHT40 DFN-4** so a genuine Sensirion `SHT40-AD1F-R2` (`C7461846`) drops onto the same pads — the fallback if CHT40MEMS stock (~1.5k units) or humidity quality disappoints. SHTC3 (`C194656`) is *not* pad-compatible (2×2).
-  - **Before committing firmware:** verify from the CHT40MEMS datasheet that it is SHT4x command-compatible (command bytes, CRC-8 poly/init, measurement timing). If so, the existing SHT4x driver just works.
+  - **Auto-calibration** (power-on, and again after ~1 s idle in normal mode / ~2 s in standby, per datasheet) re-baselines against drift from temperature, humidity and aging of the mesh/adhesive. A stuck-key timeout (60–68 s max key-on time) forces a re-cal if something covers a pad continuously.
+  - Power: ~3.5 µA (3 V) standby, ~0.6 mA typ / 0.9 mA max (3 V) while active — negligible against the §4.5 budget. 0.1 µF decoupling on `VDD` per the datasheet's application circuit; no external LDO needed.
+- **Room temperature/humidity sensor: CYBERSEN CHT40MEMS** (`CHT40MEMS`, JLCPCB `C54305346`) on the shared I²C display bus. SHT40-clone in the same DFN-4 1.5×1.5 mm footprint, I²C, ±0.2 °C / ±2.5 % RH, −40…+125 °C. 0 extra pins, no ADC calibration.
+  - The footprint is the standard SHT40 DFN-4 so a genuine Sensirion `SHT40-AD1F-R2` (`C7461846`) drops onto the same pads — the fallback if CHT40MEMS stock or humidity quality disappoints. SHTC3 (`C194656`) is *not* pad-compatible (2×2).
+  - Before committing firmware, verify from the CHT40MEMS datasheet that it is SHT4x command-compatible (command bytes, CRC-8 poly/init, measurement timing). If so, the existing SHT4x driver just works.
   - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDO/MCU/OLED; mill isolation slots around it (Sensirion app-note "thermal decoupling"); vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
   - This part has no protective membrane — keep flux/outgassing away from it (clean assembly, no conformal coat over the sensor).
 
-### 4.4 Example pin map (STM32G031F8P6, TSSOP20)
+### 4.4 Pin map (STM32G031F8P6, TSSOP20)
 
 | Pin | Signal |
 |---|---|
 | 1 / 20 | I²C1 SDA (PB7) / SCL (PB6) — OLED + room sensor |
 | 9 / 10 | link TX / RX (USART2, PA2/PA3) |
 | 8 | link DE (PA1) — half-duplex RS-485 (§3) |
-| 16 / 17 | `KOUT1`/`KOUT2` from the BS212C-1 touch IC — was button 1/2 (PA11 / PA12) |
+| 16 / 17 | `KOUT1`/`KOUT2` from the BS212C-1 touch IC — button 1/2 (PA11 / PA12) |
 | 14 | status LED (PA7) |
 | 6 / 18 / 19 | NRST + reset button / SWDIO / SWCLK |
-| 7 | OLED `RES#` (PA0) — GPIO output, decided 2026-09-12 |
-| 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, gates the `Q3`/`Q4` pair per §4.1's I²C reference circuit; decided 2026-09-12 |
+| 7 | OLED `RES#` (PA0) — GPIO output |
+| 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, gates the `Q3`/`Q4` pair per §4.1's I²C reference circuit |
 
-~10 of 15 usable GPIO — still comfortable headroom.
+~10 of 15 usable GPIO — comfortable headroom.
 
 ### 4.5 Power delivery
 
@@ -135,16 +135,16 @@ The display's ~10 mA typical (≤ ~27 mA peak) is trivial over any reasonable fe
 
 ### 4.6 Enclosure — industrial design direction
 
-Direction set 2026-09-11: style the enclosure after the **IKEA TIMMERFLOTTE** (temp/humidity sensor, ~65×65×18 mm puck) — small rounded disc, matte white, no visible branding/text on the face, nothing on the wall/shelf reading as "a gadget." Concretely, for whoever designs the case:
+Styled after the **IKEA TIMMERFLOTTE** (temp/humidity sensor, ~65×65×18 mm puck) — small rounded disc, matte white, no visible branding/text on the face, nothing on the wall/shelf reading as "a gadget."
 
 - **Form factor:** round puck, roughly TIMMERFLOTTE's ~65 mm width class in plan; depth driven by our stack-up (PCB + OLED module + standoffs), which is very likely thicker than TIMMERFLOTTE's 18 mm once the connector/cable entry (below) is accounted for — treat 18 mm as an aspiration, not a constraint to force.
 - **Finish:** matte white (or matte black to match room trim — pick one per install, not both), no exposed screws on the visible face, seams at the back/rim rather than front.
-- **Face:** the OLED window is the only thing that reads on the front; buttons should sit flush or nearly flush rather than protruding, in keeping with TIMMERFLOTTE's "the whole thing feels like one big button" feel. Reviewers note it has *no* auto-lit display — you press to see the reading — which already matches this spec's §4.2 wake-on-press behavior, so the visual language and the interaction we already designed agree.
+- **Face:** the OLED window is the only thing that reads on the front; buttons should sit flush or nearly flush rather than protruding, in keeping with TIMMERFLOTTE's "the whole thing feels like one big button" feel. It has *no* auto-lit display — you press to see the reading — matching this spec's §4.2 wake-on-press behavior.
 - **Mount:** wall-mount (this is a fixed room thermostat, not a shelf sensor) — a rear plate/bracket the puck clips onto, screw holes hidden behind it.
 
 **Two real deltas from a literal copy:**
-- TIMMERFLOTTE is battery-powered and cable-free; this Thermostat is wired — link plus power, both on the same 4-conductor cable (§3.1, now decided) — so the enclosure needs a cable entry TIMMERFLOTTE doesn't have — round back, cable out the rear/bottom so the front stays clean.
-- TIMMERFLOTTE's whole face is *one* button (read-only device — press to cycle temp/humidity). This Thermostat also drives a setpoint (§4.3, 2 touch buttons), so a literal one-big-button face doesn't carry over as-is without an interaction redesign — still deliberately left for a future pass, not decided here.
+- TIMMERFLOTTE is battery-powered and cable-free; this Thermostat is wired — link plus power, both on the same 4-conductor cable (§3.1) — so the enclosure needs a cable entry TIMMERFLOTTE doesn't have — round back, cable out the rear/bottom so the front stays clean.
+- TIMMERFLOTTE's whole face is *one* button (read-only device — press to cycle temp/humidity). This Thermostat also drives a setpoint (§4.3, 2 touch buttons), so a literal one-big-button face doesn't carry over as-is — left for a future interaction-design pass.
 
 ---
 
@@ -216,8 +216,8 @@ ThermostatFirmware = 0x22   // data[0] = FirmwareOp; "act on my paired Thermosta
 - `ThermostatFirmware[Begin]` is CN-terminated, so its payload differs from the bus `Firmware[Begin]` — it adds a `flags` byte (bit 0 = `Force`, §5.4.1), ~14 bytes, well under `MAX_DATA`.
 - The CN `Report`s `ThermostatFirmware {FirmwareOp::Status, state, expectedOffset, lastError, fwVersion}` up the main bus, copied from the Thermostat's link `Status` (or from cache for a bare `Get`). This carries the Thermostat's running firmware version on demand — no separate "thermostat info" endpoint.
 - The CN keeps a small link cache of the Thermostat's `state` + `fwVersion` (+ `uid`, §5.6), refreshed by a periodic link `Get SystemInfo` / `Get Firmware`, so `Get ThermostatFirmware` is always answerable.
-- One 32-byte chunk crosses the CN at a time (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1 — decided 2026-09-20, was 27) — no image staging. The CN does **not** forward frames between the two buses (`Node-Message-Model-Spec.md` §7): it terminates and re-originates.
-- **Resolved 2026-09-20, implemented:** `ThermostatFirmware[Write]` mirrors `Firmware[Write]`'s move to `Ack`/`Nack` (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2.1) on both hops — this wasn't really optional once decided for `Firmware`, since the same bootloader binary runs on the Thermostat and no longer answers a `Write` with a `Status` `Report` at all. The CN cannot answer synchronously the way it does for `Begin`/`End`/`Activate`/`Abort`/`Get` (which still reply from `ReportThermostatFirmwareStatus()` right after handling the main-bus message): a `Write`'s outcome isn't known until the *separate*, asynchronous CN↔Thermostat link round-trip completes, since the CN terminates and re-originates rather than forwarding. `ControllerHandler::HandleThermostatFirmware()`'s `Write` case now returns immediately after relaying via `ThermostatLink::OtaWrite()` (2-byte offset, 32-byte data, matching `Firmware[Write]`'s new shape exactly); `ThermostatLink::ReceivedMessage()` decodes the Thermostat's own `Ack`/`Nack` reply when it eventually arrives and stages it; `ControllerHandler::Loop()` polls `ThermostatLink::ConsumeWriteReply()` each iteration and, once the outcome is known, queues the corresponding `Ack`/`Nack` (offset + `chunkCrc16` + `programFailed`) up the main bus as `ThermostatFirmware`. `Begin`/`End`/`Abort` are unaffected by this — still `Report`-based on both hops, matching `Node-Flash-Layout-and-Bootloader-Spec.md` §8 item 9's still-open question about whether those should also change for the main-bus `Firmware` endpoint.
+- One 32-byte chunk crosses the CN at a time (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2) — no image staging. The CN does **not** forward frames between the two buses (`Node-Message-Model-Spec.md` §7): it terminates and re-originates.
+- `ThermostatFirmware[Write]` mirrors `Firmware[Write]`'s `Ack`/`Nack` reply on both hops (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.2) — this wasn't optional once decided for `Firmware`, since the bootloader binary running on the Thermostat no longer answers a `Write` with a `Status` `Report` at all. The CN cannot answer synchronously the way it does for `Begin`/`End`/`Activate`/`Abort`/`Get` (which reply from `ReportThermostatFirmwareStatus()` right after handling the main-bus message): a `Write`'s outcome isn't known until the separate, asynchronous CN↔Thermostat link round-trip completes, since the CN terminates and re-originates rather than forwarding. `ControllerHandler::HandleThermostatFirmware()`'s `Write` case returns immediately after relaying via `ThermostatLink::OtaWrite()` (2-byte offset, 32-byte data, matching `Firmware[Write]`'s shape exactly); `ThermostatLink::ReceivedMessage()` decodes the Thermostat's own `Ack`/`Nack` reply when it arrives and stages it; `ControllerHandler::Loop()` polls `ThermostatLink::ConsumeWriteReply()` each iteration and, once the outcome is known, queues the corresponding `Ack`/`Nack` (offset + `chunkCrc16` + `programFailed`) up the main bus as `ThermostatFirmware`. `Begin`/`End`/`Abort` are still `Report`-based on both hops.
 
 #### 5.4.1 Already-current guard
 
@@ -250,28 +250,12 @@ The server models every `ControllerNode` as owning one Thermostat.
 
 Built in firmware: the `EEndpoint`/`EFirmware` additions, the `NodeLib` framing use split (`LinkMaster` added alongside `Node`/`NodeMaster`), `OtaUart` module-aware USART select, and the `ControllerNode` and `Thermostat` modules — the ControllerNode carries the `Damper`, the Room* cache, `LinkMaster`, and the `ThermostatFirmware` relay; the Thermostat is a NodeLib slave on the link with the OLED / CHT40 sensor / buttons still stubbed (they need an I²C HAL).
 
-Built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`); the
-`0x63 ThermostatStatus` decode + `thermostats` table (`controller_node_id`,
-`uid`, `fw_version`, `bl_state`, `link_up`, `last_seen`); the `firmware_images`
-repository (one image per module, module + version parsed from the upload
-filename `<Module>_<major>.<minor>.bin` and cross-checked against the descriptor,
-which the build now fills from `CC_FW_VERSION`); the **Firmware** page, which
-lists every node with its installed version against the held image and gives
-each ControllerNode a second row for its Thermostat, plus per-node and
-per-module ("update all") push buttons that grey out when the target is offline
-or already current; and a single-flight OTA **queue** (one push at a time, the
-rest `state = 'queued'`, fed by both single presses and "update all"). Node
-firmware versions come from `SystemInfo` reports, thermostat versions from
-`0x63`.
+Built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`); the `0x63 ThermostatStatus` decode + `thermostats` table (`controller_node_id`, `uid`, `fw_version`, `bl_state`, `link_up`, `last_seen`); the `firmware_images` repository (one image per module, module + version parsed from the upload filename `<Module>_<major>.<minor>.bin` and cross-checked against the descriptor, which the build fills from `CC_FW_VERSION`); the **Firmware** page, which lists every node with its installed version against the held image and gives each ControllerNode a second row for its Thermostat, plus per-node and per-module ("update all") push buttons that grey out when the target is offline or already current; and a single-flight OTA **queue** (one push at a time, the rest `state = 'queued'`, fed by both single presses and "update all"). Node firmware versions come from `SystemInfo` reports, thermostat versions from `0x63`.
 
-Not built yet: the MainController side (emitting `0x63 ThermostatStatus`,
-`module == 4` routing in the OTA sequence — waits on the MainController uplink
-layer as a whole), the `provision` target's pair mode, the pre-flight
-already-current check against `0x63` before creating a thermostat job, and
-`Force` re-flash.
+Not built yet: the MainController side (emitting `0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, the pre-flight already-current check against `0x63` before creating a thermostat job, and `Force` re-flash.
 
 ---
 
 ## 6. Open items
 
-1. ~~**Control loop location**~~ — **resolved 2026-09-21:** yes, `ControllerNode` runs the room's control loop itself (compares `Thermostat`'s setpoint/room-temp against the shared duct `SupplyTemp` and drives its own damper), with `MainController` only arbitrating a fair-share `DamperBudget` ceiling across nodes, never running the room loop itself — full design in `Damper-Budget-Spec.md`. This confirms the assumption `MainController-Spec.md` §2 was built on.
+1. **Control loop location** — resolved: `ControllerNode` runs the room's control loop itself (compares `Thermostat`'s setpoint/room-temp against the shared duct `SupplyTemp` and drives its own damper), with `MainController` only arbitrating a fair-share `DamperBudget` ceiling across nodes, never running the room loop itself — full design in `Damper-Budget-Spec.md`. This is the assumption `MainController-Spec.md` §2 is built on.
