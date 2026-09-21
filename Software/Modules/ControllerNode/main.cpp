@@ -8,6 +8,7 @@
  *************************************************************/
 
 #include "BoardPins.h"
+#include "BootHealth.h"
 #include "MemoryMap.h"
 #include "System.h"
 
@@ -50,5 +51,6 @@ int main()
         link.Loop();
         thermostatLink.Loop();
         handler.Loop();
+        Tools::BootHealth::ConfirmBootHealthy();
     }
 }

@@ -2,6 +2,7 @@
  * Created by J. Weij
  *************************************************************/
 
+#include "Backup.h"
 #include "Crc.h"
 #include "EEndpoint.h"
 #include "EFirmware.h"
@@ -9,6 +10,7 @@
 #include "MemoryMap.h"
 #include "Uart.h"
 
+#include "FakeBackup.h"
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeFlash.h"
@@ -46,6 +48,7 @@ namespace
         FakeOtaUart::Reset();
         FakeClock::Reset();
         FakeFlash::Reset();
+        FakeBackup::Reset();
     }
 
     // Reuses the real NodeLib::Frame codec, same trick BusHelpers.cpp uses --
@@ -249,6 +252,21 @@ CC_TEST(FirmwareSlave, BeginErasesTheSlotAndMovesToReceiving)
     CC_CHECK_EQ(ReadU32(&tx[idx].data[2]), 0); // expectedOffset
 
     CC_CHECK_EQ(FakeFlash::Data()[0], 0xFF); // slot actually erased
+}
+
+CC_TEST(FirmwareSlave, BeginResetsTheBootFailCounterForTheFreshImage)
+{
+    ResetWorld();
+    Hal::Backup::Write(Hal::Backup::Reg::BootCounter, 4); // as if the previous image had failed to boot 4 times
+    FirmwareSlave slave(kNodeId, kModule);
+    slave.Init();
+
+    InjectOtaFrame(MakeBegin(kModule, validImageSize, 0, 0));
+    Poll(slave);
+
+    // A freshly-received image gets its own full boot-fail budget -- not
+    // whatever was left over from the image it's replacing.
+    CC_CHECK_EQ(Hal::Backup::Read(Hal::Backup::Reg::BootCounter), 0);
 }
 
 CC_TEST(FirmwareSlave, WriteProgramsFlashAndAcksWithTheChunksCrc)

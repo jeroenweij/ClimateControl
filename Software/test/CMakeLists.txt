@@ -51,6 +51,7 @@ target_include_directories(test_fakes PUBLIC
 add_library(nodelib_host STATIC
     ${CC_SW_ROOT}/Lib/Tools/DelayTimer.cpp
     ${CC_SW_ROOT}/Lib/Tools/Logger.cpp
+    ${CC_SW_ROOT}/Lib/Tools/BootHealth.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/Id.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/Frame.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/ErrorHandler.cpp

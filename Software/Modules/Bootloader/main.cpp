@@ -9,6 +9,8 @@
  * Boot decision (§5):
  *   - Board::EnterBootloaderMagic in backup reg  -> stay resident (app asked)
  *   - no valid application image                 -> stay resident
+ *   - too many boots without the app ever proving itself healthy
+ *     (Tools::BootHealth) -> stay resident
  *   - otherwise                                  -> jump to the app
  *
  * Stay-resident behaviour:
@@ -22,6 +24,7 @@
 
 #include "Backup.h"
 #include "BoardPins.h"
+#include "BootHealth.h"
 #include "ConfigStore.h"
 #include "Gpio.h"
 #include "MemoryMap.h"
@@ -86,7 +89,11 @@ int main()
 
     const bool forced = EnterBootloaderRequested();
 
-    if (!forced && Boot::AppImage::IsValid())
+    // Short-circuits deliberately: TooManyFailedBoots() records an attempt as
+    // a side effect, and a forced entry (a normal OTA request) or an already-
+    // invalid image are not boot failures -- only count an attempt when we're
+    // actually about to trust a CRC-valid image and jump to it.
+    if (!forced && Boot::AppImage::IsValid() && !Tools::BootHealth::TooManyFailedBoots())
     {
         Hal::System::JumpToApplication(Board::Flash::AppBase); // never returns
     }

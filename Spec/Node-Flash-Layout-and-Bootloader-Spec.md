@@ -125,7 +125,7 @@ Bootloader entry (0x08000000)
 - **App→bootloader handoff:** app receives `EnterBootloader` (§6.2), writes `ENTER_BL_MAGIC` to `TAMP->BKP0R`, calls `NVIC_SystemReset()`. Backup register survives the warm reset; bootloader consumes and clears it.
 - **Interrupted update is self-healing:** if power drops mid-write, the app region fails its CRC32 check on next boot, so the bootloader stays resident regardless of any flag, re-announces on the bus, and the master restarts the push.
 - **Manufacturing:** a board flashed with *only* the bootloader (+ a provisioning record, §6.3) has no valid app → it comes up in the bootloader and the master loads the app over the bus. Field boards can be built app-less.
-- **Boot-fail counter:** bootloader increments a `TAMP->BKP1R` counter before each jump; the app clears it once it has run healthily for N seconds. Over threshold → stay in bootloader. Closes a real failure mode: a bad OTA push that boots but crashes would otherwise strand the node until someone notices and re-pushes. Not yet implemented.
+- **Boot-fail counter:** bootloader increments a `TAMP->BKP1R` counter (`Tools::BootHealth`) right before attempting to jump to a CRC-valid, non-forced-entry image; the app clears it once it has run for a fixed window (10 s) without ever getting there via a crash. Over 5 attempts without a clear → stay in bootloader, same as a failed CRC. A freshly-received image resets the counter (`FirmwareSlave::HandleBegin`), so it never inherits the previous image's failure count. Closes a real failure mode: a bad OTA push that boots but crashes would otherwise strand the node — CRC-valid, so always eligible to jump — until someone notices and re-pushes.
 
 ---
 

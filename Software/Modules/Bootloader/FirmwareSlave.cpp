@@ -6,6 +6,7 @@
 
 #include "Backup.h"
 #include "BoardPins.h"
+#include "BootHealth.h"
 #include "MemoryMap.h"
 #include "System.h"
 #include "Tick.h"
@@ -236,6 +237,10 @@ void FirmwareSlave::HandleBegin(const Message& m)
         Fault(ErrEraseFailed);
         return;
     }
+
+    // A newly-received image deserves a full boot-fail budget of its own,
+    // not whatever was left over from the image it's replacing.
+    Tools::BootHealth::ResetFailedBootCount();
 
     imageSize         = size;
     imageCrc32        = imageCrc;

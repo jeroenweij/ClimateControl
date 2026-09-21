@@ -4,6 +4,8 @@ add_library(Tools STATIC
     SStream.h
     Logger.h
     Logger.cpp
+    BootHealth.h
+    BootHealth.cpp
 )
 
 target_include_directories(Tools PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

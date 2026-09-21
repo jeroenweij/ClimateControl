@@ -9,6 +9,7 @@
 #include "MemoryMap.h"
 #include "System.h"
 
+#include "BootHealth.h"
 #include "NodeMaster.h"
 
 #include "BudgetAllocator.h"
@@ -39,6 +40,7 @@ int main()
         uplink.Loop();
         master.Loop();
         budgetAllocator.Loop();
+        Tools::BootHealth::ConfirmBootHealthy();
 
         // TODO: further supervisory logic (MainController-Spec.md §2) --
         // expose aggregate state, detect faults.

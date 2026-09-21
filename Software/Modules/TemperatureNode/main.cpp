@@ -7,6 +7,7 @@
  *************************************************************/
 
 #include "BoardPins.h"
+#include "BootHealth.h"
 #include "MemoryMap.h"
 #include "System.h"
 
@@ -37,5 +38,6 @@ int main()
     {
         handler.Loop();
         node.Loop();
+        Tools::BootHealth::ConfirmBootHealthy();
     }
 }

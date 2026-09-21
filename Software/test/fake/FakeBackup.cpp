@@ -4,10 +4,21 @@
 
 #include "Backup.h"
 
+#include "FakeBackup.h"
+
 namespace
 {
     uint32_t registers[2] = {0, 0};
 } // namespace
+
+namespace FakeBackup
+{
+    void Reset()
+    {
+        registers[0] = 0;
+        registers[1] = 0;
+    }
+} // namespace FakeBackup
 
 namespace Hal
 {
