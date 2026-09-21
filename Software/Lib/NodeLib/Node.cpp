@@ -46,6 +46,11 @@ Node::Node() :
 }
 
 Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins) :
+    Node(instance, pins, -1)
+{
+}
+
+Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const int32_t announceSpacingOverride) :
     errorHandler(),
     handler(nullptr),
     nodeId(99), // sentinel until Init() reads it from flash, or NodeMaster sets 0
@@ -54,6 +59,7 @@ Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins) :
     busPins(pins),
     txFrames(0),
     queueDrops(0),
+    announceSpacingOverride(announceSpacingOverride),
     resetPending(false),
     resetToBootloader(false),
     identifyLedOn(false),
@@ -557,10 +563,13 @@ void Node::HandlePollRequest()
         // (always-nonzero) state, so NodeMaster::NodeHello() can tell the two
         // apart from either one without a separate message.
         Message m(nodeId, Operation::Announce);
-        m.data[0] = static_cast<uint8_t>(ConfigStore::GetModule());
-        m.data[1] = 0;
-        m.len     = 2;
-        Hal::Tick::DelayMs(static_cast<uint32_t>((nodeId - 1) * nodeSpacing));
+        m.data[0]              = static_cast<uint8_t>(ConfigStore::GetModule());
+        m.data[1]              = 0;
+        m.len                  = 2;
+        const uint32_t spacing = (announceSpacingOverride >= 0)
+            ? static_cast<uint32_t>(announceSpacingOverride)
+            : static_cast<uint32_t>((nodeId - 1) * nodeSpacing);
+        Hal::Tick::DelayMs(spacing);
         LOG_INFO("Return Announce");
         WriteMessage(m);
     }

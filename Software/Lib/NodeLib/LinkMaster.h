@@ -37,22 +37,26 @@ namespace NodeLib
         void SendToPeer(const Endpoint endpoint, const Operation op, const uint8_t* const data, const uint8_t len);
         void GetFromPeer(const Endpoint endpoint);
 
-        // Force the next poll immediately instead of waiting out the 200 ms
-        // interval -- used to pace an OTA transfer (§5.4).
-        void PollPeerNow();
-
       private:
         void HandleMasterMessage(const Message& m) override;
         void NotePeerAlive();
 
-        static const uint32_t pollIntervalMs = 200;
+        static const uint32_t pollIntervalMs = 100;
         // Link declared down after ~3 missed polls (§5.3).
         static const uint32_t linkTimeoutMs = 3 * pollIntervalMs + pollIntervalMs / 2;
+        // Re-broadcast Discover periodically (not just once at Init()) so a
+        // peer that reboots mid-session -- and so misses the initial
+        // Discover -- still gets re-announced and its bootloader state
+        // re-learned. Independent of pollIntervalMs; no need for it to be fast.
+        static const uint32_t discoverIntervalMs = 5000;
 
         uint8_t           peerId;
         bool              linkUp;
         bool              peerInBootloader;
+        bool              sendOk;
+        bool              discovering;
         Tools::DelayTimer pollTimer;
         Tools::DelayTimer linkTimer;
+        Tools::DelayTimer discoverTimer;
     };
 } // namespace NodeLib

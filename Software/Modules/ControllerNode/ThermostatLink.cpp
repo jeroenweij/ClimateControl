@@ -339,7 +339,6 @@ void ThermostatLink::SendFirmwareOp(const FirmwareOp op, const uint8_t* const pa
         memcpy(&buf[1], payload, n);
     }
     link.SendToPeer(Endpoint::Firmware, Operation::Set, buf, static_cast<uint8_t>(1 + n));
-    link.PollPeerNow();
 }
 
 void ThermostatLink::FillOtaStatus(uint8_t out[9]) const

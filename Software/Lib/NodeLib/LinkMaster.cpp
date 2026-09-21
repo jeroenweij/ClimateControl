@@ -19,8 +19,11 @@ LinkMaster::LinkMaster() :
     peerId(0),
     linkUp(false),
     peerInBootloader(false),
+    sendOk(true),
+    discovering(false),
     pollTimer(),
-    linkTimer()
+    linkTimer(),
+    discoverTimer()
 {
     nodeId = masterNodeId;
 }
@@ -33,8 +36,12 @@ void LinkMaster::Init()
     peerId = ConfigStore::Valid() ? ConfigStore::NodeId() : 0;
     LOG_INFO("LinkMaster peer id " << peerId);
 
-    // One Discover so the peer's Announce tells us app vs. bootloader.
+    // One Discover so the peer's Announce tells us app vs. bootloader; repeated
+    // periodically thereafter (see discoverTimer in Loop()).
     WriteMessage(Message(BROADCAST_NODE, Operation::Discover));
+    discovering = true;
+
+    discoverTimer.Start(discoverIntervalMs);
 
     pollTimer.Start(pollIntervalMs);
 }
@@ -53,11 +60,23 @@ void LinkMaster::Loop()
         }
     }
 
+    if (discoverTimer.Finished())
+    {
+        WriteMessage(Message(BROADCAST_NODE, Operation::Discover));
+        discovering = true;
+        discoverTimer.ReStart();
+    }
+
+    if (sendOk && !discovering && messagesQueued > 0)
+    {
+        flushQueue();
+    }
+
     if (pollTimer.Finished())
     {
-        flushQueue(); // push any injected Set/Get to the peer
         WriteMessage(Message(peerId, Operation::Poll));
-        pollTimer.Start(pollIntervalMs);
+        sendOk = false;
+        pollTimer.ReStart();
     }
 }
 
@@ -79,9 +98,11 @@ void LinkMaster::HandleMasterMessage(const Message& m)
                 // Bootloader Announce carries a state byte at data[1]; the app's
                 // is length 1. A non-zero state means "in the bootloader".
                 peerInBootloader = (m.len >= 2 && m.data[1] != 0);
+                discovering      = false;
                 break;
             case Operation::Done:
-                break; // liveness only -- handled by NotePeerAlive()
+                sendOk = true;
+                break;
             default:
                 break;
         }
@@ -103,11 +124,6 @@ void LinkMaster::SendToPeer(const Endpoint endpoint, const Operation op, const u
 void LinkMaster::GetFromPeer(const Endpoint endpoint)
 {
     QueueMessage(Id(peerId, endpoint, Operation::Get), nullptr, 0);
-}
-
-void LinkMaster::PollPeerNow()
-{
-    pollTimer.Start(0);
 }
 
 bool LinkMaster::LinkUp() const

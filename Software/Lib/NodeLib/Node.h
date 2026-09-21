@@ -43,6 +43,11 @@ namespace NodeLib
         // link (ControllerNode-Thermostat-Link-Spec.md §5).
         Node();
         Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins);
+        // announceSpacingOverride: skip the nodeId-based stagger below and
+        // always wait this many ms before replying to a poll. Thermostat's
+        // link is a fixed point-to-point pair (ControllerNode-Thermostat-Link-
+        // Spec.md) with no other node to collide with, so it passes 0.
+        Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const int32_t announceSpacingOverride);
 
         void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
@@ -106,6 +111,10 @@ namespace NodeLib
 
         uint32_t txFrames;
         uint32_t queueDrops;
+
+        // -1 = auto, stagger by (nodeId - 1) * nodeSpacing ms; nodeId isn't
+        // known until Init() runs, so this can't be resolved at construction.
+        const int32_t announceSpacingOverride;
 
         bool resetPending;
         bool resetToBootloader;

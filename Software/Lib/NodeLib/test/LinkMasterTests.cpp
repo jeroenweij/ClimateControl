@@ -91,6 +91,33 @@ CC_TEST(LinkMaster, PollsThePeerOnTheInterval)
     CC_CHECK(tx[0].id.operation == Operation::Poll);
 }
 
+CC_TEST(LinkMaster, KeepsPollingAfterTheFirstRound)
+{
+    // Regression: pollTimer must re-arm itself, or Poll only ever fires once.
+    ResetWorld();
+    LinkMaster link;
+    link.Init();
+
+    int pollCount = 0;
+    for (int i = 0; i < 5; i++)
+    {
+        FakeBus::Reset();
+        FakeClock::Advance(100);
+        link.Loop();
+
+        Message   tx[4];
+        const int n = LastTx(tx, 4);
+        for (int j = 0; j < n; j++)
+        {
+            if (tx[j].id.operation == Operation::Poll)
+            {
+                pollCount++;
+            }
+        }
+    }
+    CC_CHECK_EQ(pollCount, 5);
+}
+
 CC_TEST(LinkMaster, ForwardsAPeerReportToTheHandler)
 {
     ResetWorld();
@@ -152,6 +179,15 @@ CC_TEST(LinkMaster, InjectedSetReachesThePeerOnTheNextPoll)
     ResetWorld();
     LinkMaster link;
     link.Init();
+
+    // Outbound flush is gated on having confirmed the peer via Announce (not
+    // mid-bootloader) -- prime that first, same as a real bring-up would.
+    Message announce(peerId, Operation::Announce);
+    announce.data[0] = 0;
+    announce.data[1] = 0; // app, not bootloader
+    announce.len     = 2;
+    bus::InjectFrame(announce);
+    link.Loop();
 
     const uint8_t open = 100;
     link.SendToPeer(Endpoint::DamperActual, Operation::Set, &open, 1);

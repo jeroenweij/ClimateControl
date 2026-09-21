@@ -26,7 +26,7 @@ int main()
     // error is negligible next to the HSI16 spread itself
     // (Node-Bus-Hardware-Design-Spec.md §6.1).
 
-    NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart);
+    NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart, 0);
     ThermostatHandler handler(node);
 
     handler.Init();
