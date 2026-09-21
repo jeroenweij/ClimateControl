@@ -35,5 +35,12 @@ namespace NodeLib
         // blocks. Default no-op so a module only overrides what it needs.
         virtual void PrepareForReset() {} // park outputs before an OTA / commanded reset
         virtual void FillStatus(SystemStatus&) {} // contribute app-specific status bits
+
+        // Every frame this node's UART sees, regardless of address match --
+        // called before the address filter, since a shared RS485 bus delivers
+        // every frame to every transceiver anyway (Damper-Budget-Spec.md §3.2).
+        // Slave-side only: a master already gets everything through
+        // ReceivedMessage() by virtue of driving the round-robin itself.
+        virtual void Snoop(const Message&) {}
     };
 } // namespace NodeLib

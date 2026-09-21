@@ -151,6 +151,13 @@ bool Node::ReadMessage(const Message& m)
 
 void Node::HandleMessage(const Message& m)
 {
+    // Every frame this node's UART sees, regardless of who it's addressed to
+    // -- a shared RS485 bus delivers all of them anyway (INodeHandler.h).
+    if (handler)
+    {
+        handler->Snoop(m);
+    }
+
     // Discovery is a broadcast (node == BROADCAST_NODE) -- recognised by its
     // operation, before the address match.
     if (m.id.operation == Operation::Discover)

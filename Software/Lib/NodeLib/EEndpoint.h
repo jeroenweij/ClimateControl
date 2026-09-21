@@ -33,6 +33,7 @@ namespace NodeLib
         DamperTarget = 0x30, // RW  uint8 %
         DamperActual = 0x31, // RO  uint8 %
         DamperMode   = 0x32, // RW  enum: 0 closed 1 open 2 auto 3 manual 4 stalled (RO fault code, Damper::ReportedMode -- never accepted by Set)
+        DamperBudget = 0x33, // RW  uint8 %  -- ceiling on DamperTarget while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md)
 
         // 0x3_  application, TemperatureNode
         SupplyTemp   = 0x38, // RO  int16 centi-degC
@@ -95,6 +96,9 @@ namespace NodeLib
                 break;
             case Endpoint::DamperMode:
                 oStrStream << "DamperMode";
+                break;
+            case Endpoint::DamperBudget:
+                oStrStream << "DamperBudget";
                 break;
             case Endpoint::SupplyTemp:
                 oStrStream << "SupplyTemp";

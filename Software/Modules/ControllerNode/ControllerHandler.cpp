@@ -47,6 +47,8 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     node(node),
     damper(damper),
     thermostatLink(link),
+    supplyTemp(),
+    roomControlLoop(link, supplyTemp, damper),
     reportedActual(0),
     reportedActualValid(false),
     reportedMode(0),
@@ -56,6 +58,8 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
 
 void ControllerHandler::Loop()
 {
+    supplyTemp.Loop();
+    roomControlLoop.Loop();
     damper.Loop();
 
     const uint8_t actual = damper.Actual();
@@ -144,6 +148,22 @@ void ControllerHandler::HandleDamper(const Message& m)
             else if (m.id.operation == Operation::Set && m.len >= 1 && m.data[0] <= 3)
             {
                 damper.SetMode(static_cast<Damper::Mode>(m.data[0]));
+            }
+            else
+            {
+                Nack(m, NackBadRequest);
+            }
+            break;
+
+        case Endpoint::DamperBudget:
+            if (m.id.operation == Operation::Get)
+            {
+                const uint8_t v = roomControlLoop.Budget();
+                Report(Endpoint::DamperBudget, &v, 1);
+            }
+            else if (m.id.operation == Operation::Set && m.len >= 1)
+            {
+                roomControlLoop.SetBudget(m.data[0]);
             }
             else
             {
@@ -265,6 +285,12 @@ void ControllerHandler::ConnectionLost()
     LOG_WARN("Main bus connection lost");
     reportedActualValid = false;
     reportedModeValid   = false;
+    roomControlLoop.ConnectionLost();
+}
+
+void ControllerHandler::Snoop(const Message& m)
+{
+    supplyTemp.Snoop(m);
 }
 
 void ControllerHandler::PrepareForReset()

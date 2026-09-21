@@ -78,8 +78,9 @@ namespace
     }
 } // namespace
 
-UplinkHandler::UplinkHandler(NodeMaster& master) :
+UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocator) :
     master(master),
+    budgetAllocator(budgetAllocator),
     outboundQueue{},
     outboundQueued(0),
     nina(),
@@ -478,6 +479,10 @@ void UplinkHandler::SendKeepalive()
 
 void UplinkHandler::ReceivedMessage(const Message& message)
 {
+    // Bus-side supervision runs regardless of uplink state -- see the class
+    // comment.
+    budgetAllocator.Observe(message);
+
     // Called synchronously from NodeMaster's bus receive path (see the class
     // comment in UplinkHandler.h) -- must only enqueue, never block on NINA.
     if (!nina.InDataMode())

@@ -4,6 +4,8 @@ add_stm32_executable(controllerNode
         ImageInfo.cpp
         Damper.cpp
         ThermostatLink.cpp
+        SupplyTemp.cpp
+        RoomControlLoop.cpp
         ControllerHandler.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/controllerNode.ld
     MODULE ControllerNode

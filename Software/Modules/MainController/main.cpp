@@ -11,6 +11,7 @@
 
 #include "NodeMaster.h"
 
+#include "BudgetAllocator.h"
 #include "UplinkHandler.h"
 
 int main()
@@ -26,7 +27,8 @@ int main()
     // HSI16 spread itself (Node-Bus-Hardware-Design-Spec.md §6.1).
 
     NodeLib::NodeMaster master;
-    UplinkHandler       uplink(master);
+    BudgetAllocator     budgetAllocator(master);
+    UplinkHandler       uplink(master, budgetAllocator);
 
     uplink.Init();
     master.RegisterHandler(&uplink);
@@ -36,8 +38,9 @@ int main()
     {
         uplink.Loop();
         master.Loop();
+        budgetAllocator.Loop();
 
-        // TODO: supervisory logic (MainController-Spec.md §2) -- aggregate
-        // temperatures, expose state, detect faults.
+        // TODO: further supervisory logic (MainController-Spec.md §2) --
+        // expose aggregate state, detect faults.
     }
 }

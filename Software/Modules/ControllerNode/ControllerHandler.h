@@ -8,11 +8,14 @@
 #include "Node.h"
 
 #include "Damper.h"
+#include "RoomControlLoop.h"
+#include "SupplyTemp.h"
 #include "ThermostatLink.h"
 
 // ControllerNode main-bus application logic (INodeHandler for the RS485 bus
 // Node). Serves:
-//   Damper*  (0x30..0x32)  -- this node's own damper
+//   Damper*  (0x30..0x33)  -- this node's own damper, incl. the DamperBudget
+//                             ceiling RoomControlLoop enforces
 //   Room*    (0x40..0x44)  -- the paired Thermostat's state, from the link cache
 //   ThermostatFirmware (0x22) -- relays an image to the Thermostat over the link
 //
@@ -28,6 +31,7 @@ class ControllerHandler : public NodeLib::INodeHandler
     void ConnectionLost() override;
     void PrepareForReset() override;
     void FillStatus(NodeLib::SystemStatus& status) override;
+    void Snoop(const NodeLib::Message& message) override;
 
   private:
     enum ErrorBit : uint16_t
@@ -49,6 +53,8 @@ class ControllerHandler : public NodeLib::INodeHandler
     NodeLib::Node&  node;
     Damper&         damper;
     ThermostatLink& thermostatLink;
+    SupplyTemp      supplyTemp;
+    RoomControlLoop roomControlLoop;
 
     uint8_t reportedActual;
     bool    reportedActualValid;

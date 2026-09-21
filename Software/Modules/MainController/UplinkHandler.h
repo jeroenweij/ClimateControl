@@ -11,6 +11,7 @@
 #include "INodeHandler.h"
 #include "NodeMaster.h"
 
+#include "BudgetAllocator.h"
 #include "NinaAt.h"
 
 // MainController's bridge to the server over the on-board NINA-W152
@@ -20,6 +21,9 @@
 //   - bus -> uplink: registered as the NodeMaster's INodeHandler, so every
 //     frame NodeMaster sees reaches ReceivedMessage() (NodeMaster.cpp already
 //     forwards there for anything past its own Transport bookkeeping).
+//     ReceivedMessage() also feeds BudgetAllocator::Observe() -- unconditionally,
+//     even with the uplink down, since that's bus-side supervision, not
+//     something the uplink should gate (Damper-Budget-Spec.md §5.4).
 //     ReceivedMessage() only enqueues -- it must never block, since NodeMaster
 //     calls it synchronously from inside its own byte-at-a-time bus receive
 //     loop (Node::PumpRx()); a blocking NINA write there, multiplied by a
@@ -36,7 +40,7 @@
 class UplinkHandler : public NodeLib::INodeHandler
 {
   public:
-    explicit UplinkHandler(NodeLib::NodeMaster& master);
+    UplinkHandler(NodeLib::NodeMaster& master, BudgetAllocator& budgetAllocator);
 
     void Init();
     void Loop();
@@ -87,6 +91,7 @@ class UplinkHandler : public NodeLib::INodeHandler
     void EnqueueUplink(const NodeLib::Message& message); // used by Send* above too, for the same reason
 
     NodeLib::NodeMaster& master;
+    BudgetAllocator&     budgetAllocator;
 
     // Bus-side relayed messages, staged here by ReceivedMessage() (called
     // synchronously from the bus receive path -- see the class comment) and
