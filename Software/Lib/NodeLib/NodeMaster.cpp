@@ -118,7 +118,7 @@ void NodeMaster::DetectNodes()
     timeoutTimer.Start(static_cast<Tools::time_a>(nodeSpacing * (maxNodes + 1)));
 }
 
-const uint8_t NodeMaster::ActiveNodeCount() const
+uint8_t NodeMaster::ActiveNodeCount() const
 {
     uint8_t nodeCount = 0;
     for (const auto& nodeActive : slaveNodes)

@@ -42,7 +42,7 @@ void DelayTimer::Stop()
     running = false;
 }
 
-const bool DelayTimer::Finished()
+bool DelayTimer::Finished()
 {
     if (running && ((Hal::Tick::Millis() - startTime) >= delayMs))
     {
@@ -52,7 +52,7 @@ const bool DelayTimer::Finished()
     return false;
 }
 
-const bool DelayTimer::IsRunning() const
+bool DelayTimer::IsRunning() const
 {
     return running;
 }

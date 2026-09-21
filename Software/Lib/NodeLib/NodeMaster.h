@@ -22,7 +22,7 @@ namespace NodeLib
 
         // Nodes currently believed active (seen an Announce). Used e.g. for the
         // uplink's UplinkHello.nodeCount (MainController-Server-Link-Spec.md §5).
-        const uint8_t ActiveNodeCount() const;
+        uint8_t ActiveNodeCount() const;
 
       private:
         enum class EMasterState : uint8_t

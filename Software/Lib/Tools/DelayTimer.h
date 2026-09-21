@@ -20,8 +20,8 @@ namespace Tools
         void ReStart();
         void Stop();
 
-        const bool Finished();
-        const bool IsRunning() const;
+        bool Finished();
+        bool IsRunning() const;
 
       private:
         bool   running;
