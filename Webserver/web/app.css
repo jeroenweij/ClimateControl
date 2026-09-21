@@ -70,6 +70,7 @@ nav a.active { background: var(--accent); color: #fff; }
 }
 .pill.up { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
 .pill.down { background: color-mix(in srgb, var(--err) 25%, transparent); color: var(--err); }
+.pill.warn { background: color-mix(in srgb, var(--warn) 25%, transparent); color: var(--warn); }
 
 main { padding: 1.2rem; max-width: var(--content-width); margin: 0 auto; }
 h2 { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
@@ -188,3 +189,58 @@ td .warn, td.warn { color: var(--warn); font-weight: 600; }
 
 .empty { color: var(--muted); padding: 2rem; text-align: center; }
 .view[hidden] { display: none; }
+
+.override-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.9rem;
+}
+.ov-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.ov-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
+.ov-live {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.ov-row { display: flex; flex-direction: column; gap: 0.35rem; }
+.ov-label { font-size: 0.8rem; color: var(--muted); }
+.ov-label .hint { font-size: 0.75rem; }
+.ov-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.ov-opt {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+.ov-opt.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ov-inline { display: flex; align-items: center; gap: 0.4rem; }
+.ov-inline .ov-num { width: 5.5rem; padding: 0.35rem 0.5rem; }
+.ov-unit { color: var(--muted); font-size: 0.85rem; }
+.ov-set { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+.ov-held {
+  font-size: 0.8rem;
+  color: var(--warn);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ov-held .ov-clear {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--line);
+  color: var(--ink);
+}

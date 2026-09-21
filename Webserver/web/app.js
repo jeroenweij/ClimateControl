@@ -11,8 +11,21 @@ const state = {
   placements: [],
 };
 
-const WRITABLE = ["RoomSetpoint", "DamperTarget", "DamperMode", "RoomMode", "SystemControl"];
-const MODE_ENUM = { 0: "closed", 1: "open", 2: "auto", 3: "manual" };
+// Mirrors NodeLib's damper mode enum (decode.go's damperModes) for display;
+// only 0-3 are ever accepted by a Set (ControllerHandler.cpp's HandleDamper
+// rejects m.data[0] > 3) -- 4 = "stalled" is a read-only fault code, so it
+// gets a label but no button.
+const DAMPER_MODE_LABELS = { 0: "Closed", 1: "Open", 2: "Auto", 3: "Manual", 4: "Stalled" };
+const DAMPER_MODES = [0, 1, 2, 3].map((value) => ({ value, label: DAMPER_MODE_LABELS[value] }));
+function damperModeLabel(v) {
+  return DAMPER_MODE_LABELS[v] ?? `mode(${v})`;
+}
+
+// RoomMode is read-only (mirrors the Thermostat's own control, Node-Message-
+// Model-Spec.md §5) and SystemControl is a one-shot action rather than a
+// held value (Service.SendCommand skips storing it as an override) -- only
+// these three are genuine, holdable overrides.
+const OVERRIDABLE_ENDPOINTS = ["RoomSetpoint", "DamperTarget", "DamperMode"];
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -538,54 +551,141 @@ function onValue(msg) {
 
 // ---- overrides view -------------------------------------------------
 
+let overrideRows = []; // last /api/overrides fetch
+
 async function renderOverrides() {
-  await loadNodes().catch(() => {});
-  fillNodeSelect($("#ov-node"));
-  $("#ov-endpoint").innerHTML = WRITABLE.map((e) => `<option>${e}</option>`).join("");
-  await renderOverrideTable();
+  await Promise.all([loadNodes().catch(() => {}), loadOverrides()]);
+  renderOverrideCards();
 }
 
-async function renderOverrideTable() {
-  const rows = (await api("/api/overrides")) || [];
-  $("#override-table tbody").innerHTML = rows
-    .map(
-      (o) => `<tr>
-        <td>${o.nodeId}</td><td>${o.endpoint}</td><td>${o.value}</td><td>${esc(o.user || "")}</td>
-        <td><button data-del="${o.nodeId}/${o.endpoint}" class="danger">clear</button></td>
-      </tr>`
-    )
-    .join("");
+async function loadOverrides() {
+  overrideRows = (await api("/api/overrides")) || [];
 }
 
-$("#override-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const msg = $("#ov-msg");
-  msg.className = "msg";
-  msg.textContent = "sending…";
+// {DamperMode: Override, DamperTarget: Override, RoomSetpoint: Override}
+function overridesForNode(nodeId) {
+  const out = {};
+  for (const o of overrideRows) if (o.nodeId === nodeId) out[o.endpoint] = o;
+  return out;
+}
+
+function renderOverrideCards() {
+  const nodes = state.nodes.filter(isControllerLike);
+  $("#override-empty").hidden = nodes.length > 0;
+  $("#override-cards").innerHTML = nodes.map(renderOverrideCard).join("");
+}
+
+function liveText(nodeId, endpoint, fmt) {
+  const v = state.values.get(key(nodeId, endpoint));
+  return v && (v.value.kind === "number" || v.value.kind === "enum") ? fmt(v.value) : "—";
+}
+
+function renderOverrideCard(n) {
+  const ov = overridesForNode(n.id);
+  const roomTxt = liveText(n.id, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`);
+  const setTxt = liveText(n.id, "RoomSetpoint", (v) => `${v.num.toFixed(1)}°C`);
+  const damperTxt = liveText(n.id, "DamperActual", (v) => `${v.num.toFixed(0)}%`);
+  const modeTxt = liveText(n.id, "DamperMode", (v) => damperModeLabel(v.num));
+
+  return `<div class="ov-card">
+    <div class="ov-head">
+      <b>${n.id} — ${esc(n.name || n.module)}</b>
+      <span class="pill ${STATUS_PILL[n.status] || "down"}">${esc(n.status)}</span>
+    </div>
+    <div class="ov-live">
+      <span>room ${roomTxt}</span><span>setpoint ${setTxt}</span>
+      <span>damper ${damperTxt}</span><span>mode ${modeTxt}</span>
+    </div>
+
+    <div class="ov-row">
+      <div class="ov-label">Damper mode</div>
+      <div class="ov-buttons">
+        ${DAMPER_MODES.map(
+          (m) => `<button type="button" class="ov-opt${heldAt(ov.DamperMode, m.value) ? " active" : ""}"
+            data-node="${n.id}" data-endpoint="DamperMode" data-value="${m.value}">${m.label}</button>`
+        ).join("")}
+      </div>
+      ${heldBadge(n.id, ov.DamperMode, damperModeLabel)}
+    </div>
+
+    <div class="ov-row">
+      <div class="ov-label">Damper target <span class="hint">— only acted on in Manual mode</span></div>
+      <div class="ov-inline">
+        <input type="number" min="0" max="100" step="5" class="ov-num" data-endpoint="DamperTarget"
+          value="${ov.DamperTarget ? ov.DamperTarget.value : ""}" placeholder="${damperTxt}">
+        <span class="ov-unit">%</span>
+        <button type="button" class="ov-set" data-node="${n.id}" data-endpoint="DamperTarget">Set &amp; hold</button>
+      </div>
+      ${heldBadge(n.id, ov.DamperTarget, (v) => `${v}%`)}
+    </div>
+
+    <div class="ov-row">
+      <div class="ov-label">Room setpoint</div>
+      <div class="ov-inline">
+        <input type="number" min="10" max="30" step="0.5" class="ov-num" data-endpoint="RoomSetpoint"
+          value="${ov.RoomSetpoint ? ov.RoomSetpoint.value : ""}" placeholder="${setTxt}">
+        <span class="ov-unit">°C</span>
+        <button type="button" class="ov-set" data-node="${n.id}" data-endpoint="RoomSetpoint">Set &amp; hold</button>
+      </div>
+      ${heldBadge(n.id, ov.RoomSetpoint, (v) => `${Number(v).toFixed(1)}°C`)}
+    </div>
+
+    <span class="msg" data-role="ov-msg"></span>
+  </div>`;
+}
+
+function heldAt(o, value) {
+  return !!o && Number(o.value) === value;
+}
+
+function heldBadge(nodeId, o, fmt) {
+  if (!o) return "";
+  return `<div class="ov-held">held at ${esc(fmt(o.value))}${o.user ? ` by ${esc(o.user)}` : ""}
+    <button type="button" class="ov-clear" data-node="${nodeId}" data-endpoint="${o.endpoint}">clear</button></div>`;
+}
+
+async function sendOverride(nodeId, endpoint, value, msgEl) {
+  if (!OVERRIDABLE_ENDPOINTS.includes(endpoint) || Number.isNaN(value)) return;
+  msgEl.className = "msg";
+  msgEl.textContent = "sending…";
   try {
     await api("/api/commands", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        node: parseInt($("#ov-node").value, 10),
-        endpoint: $("#ov-endpoint").value,
-        value: parseFloat($("#ov-value").value),
-      }),
+      body: JSON.stringify({ node: nodeId, endpoint, value }),
     });
-    msg.className = "msg ok";
-    msg.textContent = "queued";
-    renderOverrideTable();
+    await loadOverrides();
+    renderOverrideCards();
   } catch (err) {
-    msg.className = "msg err";
-    msg.textContent = err.message;
+    msgEl.className = "msg err";
+    msgEl.textContent = err.message;
   }
-});
+}
 
-$("#override-table").addEventListener("click", async (e) => {
-  const t = e.target.dataset.del;
-  if (!t) return;
-  await api(`/api/overrides/${t}`, { method: "DELETE" });
-  renderOverrideTable();
+$("#override-cards").addEventListener("click", async (e) => {
+  const t = e.target;
+  const nodeId = parseInt(t.dataset.node, 10);
+  if (!nodeId) return;
+  const msgEl = t.closest(".ov-card").querySelector('[data-role="ov-msg"]');
+
+  if (t.classList.contains("ov-opt")) {
+    await sendOverride(nodeId, t.dataset.endpoint, parseFloat(t.dataset.value), msgEl);
+  } else if (t.classList.contains("ov-set")) {
+    const input = t.closest(".ov-inline").querySelector(".ov-num");
+    if (input.value === "") return;
+    await sendOverride(nodeId, t.dataset.endpoint, parseFloat(input.value), msgEl);
+  } else if (t.classList.contains("ov-clear")) {
+    msgEl.className = "msg";
+    msgEl.textContent = "clearing…";
+    try {
+      await api(`/api/overrides/${nodeId}/${t.dataset.endpoint}`, { method: "DELETE" });
+      await loadOverrides();
+      renderOverrideCards();
+    } catch (err) {
+      msgEl.className = "msg err";
+      msgEl.textContent = err.message;
+    }
+  }
 });
 
 // ---- status view --------------------------------------------------
@@ -606,6 +706,7 @@ function roomOrDuct(nodeId) {
 }
 
 const STATUS_CLASS = { online: "on", offline: "off", unexpected: "warn", "link-down": "warn" };
+const STATUS_PILL = { online: "up", offline: "down", unexpected: "warn", "link-down": "warn" };
 
 function renderNodeTable() {
   $("#node-table tbody").innerHTML = state.nodes
@@ -916,10 +1017,14 @@ $("#floor-delete").addEventListener("click", async () => {
 
 // ---- helpers -----------------------------------------------------
 
+function isControllerLike(n) {
+  return n.module === "ControllerNode" || n.module === "Unknown";
+}
+
 function fillNodeSelect(sel, controllersOnly = false) {
   const prev = sel.value;
   let list = state.nodes;
-  if (controllersOnly) list = list.filter((n) => n.module === "ControllerNode" || n.module === "Unknown");
+  if (controllersOnly) list = list.filter(isControllerLike);
   sel.innerHTML = list.map((n) => `<option value="${n.id}">${n.id} — ${esc(n.name || n.module)}</option>`).join("");
   if (prev) sel.value = prev;
 }

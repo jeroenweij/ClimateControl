@@ -43,17 +43,10 @@
 
   <section id="view-overrides" class="view" hidden>
     <h2>Overrides</h2>
-    <form id="override-form" class="card">
-      <label>Node <select id="ov-node"></select></label>
-      <label>Endpoint <select id="ov-endpoint"></select></label>
-      <label>Value <input id="ov-value" type="number" step="0.1"></label>
-      <button type="submit">Send &amp; hold</button>
-      <span id="ov-msg" class="msg"></span>
-    </form>
-    <h3>Held values</h3>
-    <table id="override-table"><thead><tr>
-      <th>Node</th><th>Endpoint</th><th>Value</th><th>By</th><th></th>
-    </tr></thead><tbody></tbody></table>
+    <p class="hint">Setting a value here holds it — the server keeps re-asserting it, even across a
+      reboot or bus reconnect, until you clear it.</p>
+    <div id="override-cards" class="override-grid"></div>
+    <p id="override-empty" class="empty" hidden>No controller nodes on the roster yet.</p>
   </section>
 
   <section id="view-status" class="view" hidden>
