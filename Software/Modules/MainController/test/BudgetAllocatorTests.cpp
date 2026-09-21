@@ -182,6 +182,41 @@ CC_TEST(BudgetAllocator, WeightsByEachRoomsDemand)
     CC_CHECK_EQ(p3, 0); // no floor -- Damper-Budget-Spec.md §5.2
 }
 
+CC_TEST(BudgetAllocator, SplitRoundsToNearestRatherThanFlooring)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ConfigStore::Module::ControllerNode);
+    Announce(3, ConfigStore::Module::ControllerNode);
+    StartPolling(master);
+
+    // Weights land at 1 and 2 (RoomDemandPercent's own default deadband/full-
+    // authority scale) -- pool is 100 (2 nodes), so the exact split is
+    // 33.33/66.67. Flooring both would give 33/66 (summing to 99, one point
+    // short of the pool); rounding to nearest gives 33/67, using the whole
+    // pool.
+    ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2033); // 0.33C past the 0.30C deadband -- weight 1
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 2000);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2035); // 0.35C past deadband -- weight 2
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   p2, p3;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK_EQ(p2, 33);
+    CC_CHECK_EQ(p3, 67);
+    CC_CHECK_EQ(static_cast<int>(p2) + p3, 100); // the whole pool actually gets used
+}
+
 CC_TEST(BudgetAllocator, WaterFillsOverflowFromAClampedNodeIntoTheRest)
 {
     ResetWorld();

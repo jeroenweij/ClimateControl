@@ -80,3 +80,21 @@ CC_TEST(RoomDemandPercent, CustomDeadbandAndFullAuthorityAreHonoured)
     CC_CHECK_EQ(RoomDemandPercent(1500, 2300, 2000, 100, 300), 100);
     CC_CHECK_EQ(RoomDemandPercent(1500, 2100, 2000, 100, 300), 0);
 }
+
+CC_TEST(RoomDemandPercent, RoundsToNearestRatherThanFlooring)
+{
+    // 1.0C deadband, 3.0C span (fullAuthority 300, deadband 100) -> span = 200.
+    // error 1.99C -> want = 99, exactly half of span -> true value 49.5%,
+    // which should round up to 50, not floor to 49.
+    CC_CHECK_EQ(RoomDemandPercent(1500, 2199, 2000, 100, 300), 50);
+
+    // Default deadband(30)/fullAuthority(300) -> span = 270. error 1.64C ->
+    // want = 134 -> true value 134*100/270 = 49.6%, rounds up to 50 (floor
+    // would give 49).
+    CC_CHECK_EQ(RoomDemandPercent(1500, 2164, 2000), 50);
+
+    // error 0.58C -> want = 28 -> true value 28*100/270 = 10.37%, which
+    // rounds DOWN to 10, same as floor would give -- confirms this weighs
+    // the actual fractional part rather than just always adding one.
+    CC_CHECK_EQ(RoomDemandPercent(1500, 2058, 2000), 10);
+}

@@ -48,5 +48,8 @@ uint8_t NodeLib::RoomDemandPercent(
     {
         return 100;
     }
-    return static_cast<uint8_t>((static_cast<int32_t>(want) * 100) / span);
+    // Round to nearest, not floor -- (want * 100) / span truncates down, which
+    // would understate every room's demand by up to ~1 point for no reason.
+    const int32_t numerator = static_cast<int32_t>(want) * 100;
+    return static_cast<uint8_t>((numerator + span / 2) / span);
 }

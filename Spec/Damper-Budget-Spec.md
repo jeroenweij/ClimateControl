@@ -274,4 +274,5 @@ Considered and rejected: exposing the servo's native `0–180°` range (or raw P
 
 1. **Tunable constants are defaults, not bench-validated:** `roomDeadbandCentiC = 30` (0.3 °C), `fullAuthorityCentiC = 300` (3 °C), `SupplyTemp::staleTimeoutMs = 5 min`, `BudgetAllocator::recomputeIntervalMs = 30 s`. Revisit once real thermostats/dampers are on a bench.
 2. **`BudgetAllocator` keeps no state across a `MainController` reset** — it recomputes fresh from whatever `Report`s arrive after reboot; a node's own 30-minute disconnect ramp (§4.3) covers the gap while `MainController` is down, so this is believed fine, not re-litigated here.
-3. **Rounding in the water-fill (§5.2) and in `RoomDemandPercent`'s linear scale should be round-to-nearest, not floor** — current code (`RoomDemand.cpp`, `BudgetAllocator::Recompute()`) still floors throughout (plain integer division); a small, low-risk follow-up.
+
+`RoomDemandPercent`'s linear scale (§2) and `BudgetAllocator`'s water-fill (§5.2) both round to nearest rather than floor — a plain `/` would understate every value by up to a point, compounding across the proportional split and the redistribution pass.

@@ -22,6 +22,14 @@ namespace
     {
         return static_cast<int16_t>(static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
     }
+
+    // Round to nearest, not floor -- a plain '/' here would understate every
+    // node's share a little, and the understatement compounds across the
+    // proportional split and the water-fill redistribution below.
+    uint32_t DivRoundNearest(const uint32_t numerator, const uint32_t denominator)
+    {
+        return (numerator + denominator / 2) / denominator;
+    }
 } // namespace
 
 BudgetAllocator::SRoom::SRoom() :
@@ -131,7 +139,7 @@ void BudgetAllocator::Recompute()
     bool     clamped[NodeLib::MAX_NODES];
     for (uint8_t i = 0; i < onlineCount; i++)
     {
-        give[i]    = weightSum > 0 ? (pool * weight[i]) / weightSum : pool / onlineCount;
+        give[i]    = weightSum > 0 ? DivRoundNearest(pool * weight[i], weightSum) : DivRoundNearest(pool, onlineCount);
         clamped[i] = false;
     }
 
@@ -172,7 +180,7 @@ void BudgetAllocator::Recompute()
         {
             if (!clamped[i])
             {
-                give[i] += openWeight > 0 ? (overflow * weight[i]) / openWeight : overflow / openCount;
+                give[i] += openWeight > 0 ? DivRoundNearest(overflow * weight[i], openWeight) : DivRoundNearest(overflow, openCount);
             }
         }
     }
