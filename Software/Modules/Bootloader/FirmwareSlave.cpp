@@ -330,7 +330,9 @@ void FirmwareSlave::AckFromFlash(const uint16_t offset, const uint8_t count)
 
 uint16_t FirmwareSlave::ChunkCrc(const uint32_t address, const uint8_t count)
 {
-    return crc.Compute(reinterpret_cast<const uint8_t*>(address), count);
+    uint8_t buf[ChunkDataLen];
+    Hal::Flash::Read(address, buf, count);
+    return crc.Compute(buf, count);
 }
 
 void FirmwareSlave::QueueWriteReply(
@@ -361,8 +363,9 @@ void FirmwareSlave::HandleEnd()
     }
     Hal::Crc restore(Hal::Crc::Poly::Ccitt16); // put the peripheral back for Frame
 
-    const uint32_t trailing =
-        *reinterpret_cast<const volatile uint32_t*>(Board::Flash::AppBase + imageSize - 4U);
+    uint8_t trailingBytes[4];
+    Hal::Flash::Read(Board::Flash::AppBase + imageSize - 4U, trailingBytes, sizeof(trailingBytes));
+    const uint32_t trailing = ReadU32(trailingBytes);
 
     if (computed == trailing && computed == imageCrc32)
     {

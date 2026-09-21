@@ -98,3 +98,12 @@ size_t Hal::Flash::Program(const uint32_t address, const uint8_t* const data, co
     FLASH->CR &= ~FLASH_CR_PG;
     return programmed;
 }
+
+void Hal::Flash::Read(const uint32_t address, uint8_t* const out, const size_t len)
+{
+    const uint8_t* const src = reinterpret_cast<const uint8_t*>(address);
+    for (size_t i = 0; i < len; i++)
+    {
+        out[i] = src[i];
+    }
+}

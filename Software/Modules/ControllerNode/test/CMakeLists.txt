@@ -25,3 +25,20 @@ cc_add_test(ControllerHandlerTests
     INCLUDES ${CN_DIR}
 )
 target_compile_definitions(ControllerHandlerTests PRIVATE CC_BOARD_ControllerNode)
+
+cc_add_test(ThermostatLinkTests
+    SOURCES
+        ThermostatLinkTests.cpp
+        ${CN_DIR}/Damper.cpp
+        ${CN_DIR}/ThermostatLink.cpp
+    INCLUDES ${CN_DIR}
+)
+target_compile_definitions(ThermostatLinkTests PRIVATE CC_BOARD_ControllerNode)
+
+cc_add_test(DamperTests
+    SOURCES
+        DamperTests.cpp
+        ${CN_DIR}/Damper.cpp
+    INCLUDES ${CN_DIR}
+)
+target_compile_definitions(DamperTests PRIVATE CC_BOARD_ControllerNode)

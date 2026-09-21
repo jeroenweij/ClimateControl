@@ -30,6 +30,8 @@ add_library(test_fakes STATIC
     fake/FakeCrc.cpp
     fake/FakeGpio.cpp
     fake/FakeAdc.cpp
+    fake/FakeFlash.cpp
+    fake/FakeOtaUart.cpp
     fake/FakeSystem.cpp
     fake/FakeBackup.cpp
     fake/FakeConfigStore.cpp
@@ -42,6 +44,7 @@ target_include_directories(test_fakes PUBLIC
     ${CC_SW_ROOT}/Lib/Tools
     ${CC_SW_ROOT}/Lib/Board
     ${CC_SW_ROOT}/Lib/NodeLib
+    ${CC_SW_ROOT}/Modules/Bootloader
 )
 
 # --- the portable production code, built for the host ---------------------
@@ -84,3 +87,4 @@ add_subdirectory(${CC_SW_ROOT}/Lib/NodeLib/test             ${CMAKE_BINARY_DIR}/
 add_subdirectory(${CC_SW_ROOT}/Modules/TemperatureNode/test ${CMAKE_BINARY_DIR}/TemperatureNode_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/ControllerNode/test  ${CMAKE_BINARY_DIR}/ControllerNode_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/MainController/test  ${CMAKE_BINARY_DIR}/MainController_test)
+add_subdirectory(${CC_SW_ROOT}/Modules/Bootloader/test       ${CMAKE_BINARY_DIR}/Bootloader_test)

@@ -38,5 +38,18 @@ namespace Hal
         // resume from the returned count, never re-call Program() over bytes
         // already reported committed.
         size_t Program(const uint32_t address, const uint8_t* const data, const size_t len);
+
+        // Reads 'len' bytes from flash at 'address' -- memory-mapped, no
+        // peripheral interaction needed on real hardware (this is exactly what
+        // a raw pointer cast already does), but gives callers like
+        // Modules/Bootloader/FirmwareSlave.cpp a named, fakeable read instead
+        // of dereferencing Board::Flash::AppBase directly, which a host test
+        // can't do safely (that's a real MCU address). Only used for small,
+        // bounded reads (a write chunk's CRC, the trailing image CRC) -- the
+        // whole-image CRC check still reads flash in place via Hal::Crc::
+        // Compute32() directly, deliberately not routed through here, since
+        // buffering up to 50 KB through this call would blow the 8 KB RAM
+        // budget for no production benefit.
+        void Read(const uint32_t address, uint8_t* const out, const size_t len);
     } // namespace Flash
 } // namespace Hal
