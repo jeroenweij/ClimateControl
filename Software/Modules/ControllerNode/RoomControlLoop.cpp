@@ -43,7 +43,7 @@ void RoomControlLoop::SetBudget(const uint8_t percent)
     connectionLost = false;
     rampTimer.Stop();
 
-    if (damper.Target() > budget)
+    if (damper.GetMode() == Damper::Mode::Auto && damper.Target() > budget)
     {
         damper.SetTarget(budget); // re-clamp immediately, not just on the next Loop() tick
     }

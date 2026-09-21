@@ -65,6 +65,10 @@ void Uart::Init(const uint32_t, const Instance, const UartPins&)
 {
 }
 
+void Uart::Init(const uint32_t, const Instance, const UartPin&, const UartPin&)
+{
+}
+
 bool Uart::Available() const
 {
     return rxCursor < rxLength;

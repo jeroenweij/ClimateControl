@@ -29,6 +29,7 @@ add_library(test_fakes STATIC
     fake/FakeBus.cpp
     fake/FakeCrc.cpp
     fake/FakeGpio.cpp
+    fake/FakeAdc.cpp
     fake/FakeSystem.cpp
     fake/FakeBackup.cpp
     fake/FakeConfigStore.cpp
@@ -81,4 +82,5 @@ add_subdirectory(${CC_SW_ROOT}/Lib/Tools/test               ${CMAKE_BINARY_DIR}/
 add_subdirectory(${CC_SW_ROOT}/Lib/HAL/test                 ${CMAKE_BINARY_DIR}/HAL_test)
 add_subdirectory(${CC_SW_ROOT}/Lib/NodeLib/test             ${CMAKE_BINARY_DIR}/NodeLib_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/TemperatureNode/test ${CMAKE_BINARY_DIR}/TemperatureNode_test)
+add_subdirectory(${CC_SW_ROOT}/Modules/ControllerNode/test  ${CMAKE_BINARY_DIR}/ControllerNode_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/MainController/test  ${CMAKE_BINARY_DIR}/MainController_test)
