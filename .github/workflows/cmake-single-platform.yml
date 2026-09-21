@@ -83,6 +83,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # UplinkHandlerTests compiles UplinkHandler.cpp same as the build job
+      # does -- needs the same placeholder (see that job's own comment).
+      - name: Generate placeholder Secrets.h
+        run: cp ${{ env.SOURCE_DIR }}/Modules/MainController/Secrets.example.h ${{ env.SOURCE_DIR }}/Modules/MainController/Secrets.h
+
       # Host build -- uses the runner's native g++, no ARM toolchain needed.
       - name: Build and run unit tests
         working-directory: ${{ env.SOURCE_DIR }}
