@@ -274,4 +274,4 @@ already-current check against `0x63` before creating a thermostat job, and
 
 ## 6. Open items
 
-1. **Control loop location:** confirm — does `ControllerNode` itself run the room's thermostat control loop (compare `Thermostat`'s setpoint/room-temp against damper position and act locally), with `MainController` only seeing the results over the main bus? This is the assumption `MainController-Spec.md` §2 is currently built on.
+1. ~~**Control loop location**~~ — **resolved 2026-09-21:** yes, `ControllerNode` runs the room's control loop itself (compares `Thermostat`'s setpoint/room-temp against the shared duct `SupplyTemp` and drives its own damper), with `MainController` only arbitrating a fair-share `DamperBudget` ceiling across nodes, never running the room loop itself — full design in `Damper-Budget-Spec.md`. This confirms the assumption `MainController-Spec.md` §2 was built on.

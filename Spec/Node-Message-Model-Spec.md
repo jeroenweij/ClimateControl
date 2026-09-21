@@ -56,6 +56,7 @@ enum class Endpoint : uint8_t
     DamperTarget   = 0x30,  // RW  uint8 %
     DamperActual   = 0x31,  // RO  uint8 %
     DamperMode     = 0x32,  // RW  enum: 0 closed 1 open 2 auto 3 manual; 4 stalled (RO fault code, Set never accepts it)
+    DamperBudget   = 0x33,  // RW  uint8 %  -- ceiling on DamperTarget while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md)
 
     // 0x3_  application, TemperatureNode
     SupplyTemp     = 0x38,  // RO  int16 centi-degC
@@ -162,6 +163,7 @@ class INodeHandler
     // Optional hooks -- NodeLib calls these while handling the blocks above.
     virtual void PrepareForReset() {}                       // e.g. park the damper before an OTA reset
     virtual void FillStatus(SystemStatus&) {}               // app-specific state / errorFlags bits
+    virtual void Snoop(const Message&) {}                    // every frame this node's UART sees, regardless of address match (Damper-Budget-Spec.md §3.2 -- ControllerNode uses this to learn SupplyTemp from a node's traffic it's not addressed by)
 };
 ```
 

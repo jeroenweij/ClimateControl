@@ -82,3 +82,4 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `MainController-Server-Link-Spec.md` | MainController ↔ server link: relay NodeLib frames verbatim over one LAN TCP socket; server decodes + stores to SQLite + serves an SPA (HTTP + WebSocket); `0x60` uplink endpoint block; OTA-over-uplink |
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
+| `Damper-Budget-Spec.md` | `ControllerNode`'s room control loop (setpoint/room-temp vs. shared duct `SupplyTemp`) and `MainController`'s fair-share `DamperBudget` allocation across online `ControllerNode`s |
