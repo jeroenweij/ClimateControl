@@ -116,16 +116,22 @@ CC_TEST(ThermostatLink, OtaBeginEntersBootloaderFirstWhenPeerIsInTheApp)
 {
     ResetWorld();
     World w;
+    AnnouncePeer(false); // outbound flush is gated on having confirmed the peer first
+    w.link.Loop();
 
     const bool started = w.thermostatLink.OtaBegin(4, 512, 0x1234, 0x0102, false);
     CC_CHECK(started);
     Flush(w.link);
 
     Message   tx[4];
-    const int n = bus::DecodeTx(tx, 4);
-    int       idx;
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = -1;
     CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Set, &idx));
-    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::EnterBootloader));
+    CC_CHECK(idx >= 0);
+    if (idx >= 0)
+    {
+        CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::EnterBootloader));
+    }
 }
 
 CC_TEST(ThermostatLink, OtaBeginGoesStraightToTransferWhenPeerAlreadyInBootloader)
@@ -327,15 +333,20 @@ CC_TEST(ThermostatLink, OtaActivateSendsAndMarksDone)
 {
     ResetWorld();
     World w;
+    AnnouncePeer(false); // outbound flush is gated on having confirmed the peer first
+    w.link.Loop();
 
     w.thermostatLink.OtaActivate();
     Flush(w.link);
 
     Message   tx[4];
-    const int n = bus::DecodeTx(tx, 4);
-    int       idx;
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = -1;
     CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Set, &idx));
-    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Activate));
+    if (idx >= 0)
+    {
+        CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Activate));
+    }
 
     uint8_t status[9];
     w.thermostatLink.FillOtaStatus(status);
@@ -346,6 +357,8 @@ CC_TEST(ThermostatLink, OtaAbortResetsToIdleAndClearsTheError)
 {
     ResetWorld();
     World w;
+    AnnouncePeer(false); // outbound flush is gated on having confirmed the peer first
+    w.link.Loop();
 
     w.thermostatLink.OtaBegin(4, 512, 0, 0, false); // -> EnteringBootloader
     Flush(w.link); // drain the queued EnterBootloader before Abort queues its own message
@@ -353,10 +366,13 @@ CC_TEST(ThermostatLink, OtaAbortResetsToIdleAndClearsTheError)
     Flush(w.link);
 
     Message   tx[4];
-    const int n = bus::DecodeTx(tx, 4);
-    int       idx;
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = -1;
     CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Set, &idx));
-    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Abort));
+    if (idx >= 0)
+    {
+        CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Abort));
+    }
 
     uint8_t status[9];
     w.thermostatLink.FillOtaStatus(status);
@@ -368,16 +384,21 @@ CC_TEST(ThermostatLink, PushSetpointSendsRoomSetpointToThePeer)
 {
     ResetWorld();
     World w;
+    AnnouncePeer(false); // outbound flush is gated on having confirmed the peer first
+    w.link.Loop();
 
     w.thermostatLink.PushSetpoint(2150); // 21.50C
     FakeClock::Advance(250); // no PollPeerNow() here -- goes out on the regular poll interval
     Flush(w.link);
 
     Message   tx[4];
-    const int n = bus::DecodeTx(tx, 4);
-    int       idx;
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = -1;
     CC_CHECK(FindMessage(tx, n, Endpoint::RoomSetpoint, Operation::Set, &idx));
-    CC_CHECK_EQ(static_cast<int16_t>(tx[idx].data[0] | (tx[idx].data[1] << 8)), 2150);
+    if (idx >= 0)
+    {
+        CC_CHECK_EQ(static_cast<int16_t>(tx[idx].data[0] | (tx[idx].data[1] << 8)), 2150);
+    }
 }
 
 CC_TEST(ThermostatLink, ConnectionLostInvalidatesRoomAndFailsAnInFlightTransfer)

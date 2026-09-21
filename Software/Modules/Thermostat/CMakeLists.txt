@@ -3,6 +3,8 @@ add_stm32_executable(thermostat
         main.cpp
         ImageInfo.cpp
         ThermostatHandler.cpp
+        Cht40.cpp
+        Ssd1306.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/thermostat.ld
     MODULE Thermostat
     LIBRARIES

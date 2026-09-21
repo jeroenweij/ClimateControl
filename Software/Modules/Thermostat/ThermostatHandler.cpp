@@ -2,7 +2,9 @@
  * Created by J. Weij
  *************************************************************/
 
+#include "BoardPins.h"
 #include "Logger.h"
+#include "Tick.h"
 
 #include "EEndpoint.h"
 #include "EOperation.h"
@@ -26,6 +28,17 @@ namespace
     constexpr uint32_t sampleIntervalMs    = 2000;
     constexpr uint32_t keepaliveIntervalMs = 60000;
 
+    // Setpoint adjust (§4.3's touch buttons): each press steps 0.5 degC,
+    // clamped to a fixed comfort range -- no adjust-mode/timeout state, one
+    // press is one step.
+    constexpr int16_t SetpointStepCentiDegC = 50;
+    constexpr int16_t SetpointMinCentiDegC  = 1900;
+    constexpr int16_t SetpointMaxCentiDegC  = 2300;
+
+    // How long the panel stays lit after the last button press (§4.2:
+    // "woken by a button press... after an inactivity timeout it... turns off").
+    constexpr uint32_t DisplayAwakeMs = 10000;
+
     void PackU16(uint8_t* const p, const uint16_t v)
     {
         p[0] = static_cast<uint8_t>(v);
@@ -45,6 +58,13 @@ namespace
 
 ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     node(node),
+    i2c({Board::I2cSda, Board::I2cScl, Board::I2cAf}),
+    sensor(i2c),
+    display(i2c),
+    oledPower(Board::OledPowerEnable, Hal::Gpio::Mode::Output),
+    oledReset(Board::OledReset, Hal::Gpio::Mode::Output),
+    buttonDown(Board::UserButton, Hal::Gpio::Mode::InputPullUp),
+    buttonUp(Board::UserButton2, Hal::Gpio::Mode::InputPullUp),
     setpoint(2100), // 21.00 degC
     roomTemp(2100),
     humidity(4500),
@@ -56,16 +76,34 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     everReported(false),
     damperActual(0),
     damperMode(0),
+    downWasPressed(false),
+    upWasPressed(false),
+    linkUp(false),
+    displayOn(false),
     sampleTimer(),
-    keepaliveTimer()
+    keepaliveTimer(),
+    displayTimer()
 {
 }
 
 void ThermostatHandler::Init()
 {
-    // TODO: bring up I2C1, the SSD1306 and the CHT40; configure the two buttons.
+    // OLED VBAT is behind an MCU-gated load switch, Hi-Z (off) by default at
+    // reset (ControllerNode-Thermostat-Link-Spec.md §4.1) -- power it, then
+    // pulse RES# per the datasheet's reset circuit (hold low >= 3us).
+    oledPower.Write(true);
+    Hal::Tick::DelayMs(5); // let VBAT settle before reset/I2C bring-up
+    oledReset.Write(false);
+    Hal::Tick::DelayUs(10);
+    oledReset.Write(true);
+
+    i2c.Init();
+    display.Init();
+    display.Off(); // starts asleep; a button press wakes it (§4.2)
+
     sampleTimer.Start(sampleIntervalMs);
     keepaliveTimer.Start(keepaliveIntervalMs);
+    SampleRoom(); // a real first reading now, rather than waiting sampleIntervalMs
 }
 
 void ThermostatHandler::Loop()
@@ -90,20 +128,94 @@ void ThermostatHandler::Loop()
 
 void ThermostatHandler::SampleRoom()
 {
-    // TODO: read CHT40 temperature + humidity over I2C1. Placeholder: hold the
-    // last value so PublishRoom stays quiet until a real reading moves it.
+    int16_t  centiDegC;
+    uint16_t centiHumidity;
+    if (sensor.Measure(centiDegC, centiHumidity))
+    {
+        roomTemp = centiDegC;
+        humidity = centiHumidity;
+    }
+    // else: keep the last good reading -- retried on the next sampleTimer tick.
 }
 
 void ThermostatHandler::ServiceButtons()
 {
-    // TODO: Board::UserButton = ack / clear link-lost; Board::Button2 = setpoint
-    // adjust. For now the setpoint only changes via a master override.
+    const bool downPressed = !buttonDown.Read(); // active-low
+    const bool upPressed   = !buttonUp.Read();
+
+    if (downPressed && !downWasPressed)
+    {
+        setpoint = static_cast<int16_t>(setpoint - SetpointStepCentiDegC);
+        if (setpoint < SetpointMinCentiDegC)
+        {
+            setpoint = SetpointMinCentiDegC;
+        }
+        WakeDisplay();
+    }
+    if (upPressed && !upWasPressed)
+    {
+        setpoint = static_cast<int16_t>(setpoint + SetpointStepCentiDegC);
+        if (setpoint > SetpointMaxCentiDegC)
+        {
+            setpoint = SetpointMaxCentiDegC;
+        }
+        WakeDisplay();
+    }
+
+    downWasPressed = downPressed;
+    upWasPressed   = upPressed;
+}
+
+void ThermostatHandler::WakeDisplay()
+{
+    if (!displayOn)
+    {
+        display.On();
+        displayOn = true;
+    }
+    displayTimer.Start(DisplayAwakeMs);
 }
 
 void ThermostatHandler::RenderDisplay()
 {
-    // TODO: draw setpoint / roomTemp / humidity / roomMode and the cached
-    // damperActual / damperMode to the SSD1306. Sleep the panel on inactivity.
+    if (displayTimer.Finished())
+    {
+        display.Off();
+        displayOn = false;
+    }
+    if (!displayOn)
+    {
+        return;
+    }
+
+    display.Clear();
+
+    // Room temperature, big, top-left; degree mark; link status top-right.
+    display.DrawNumber(2, 2, 14, 24, 3, roomTemp / 10, 1);
+    display.FillCircle(72, 6, 2, true);
+    if (linkUp)
+    {
+        display.FillCircle(120, 6, 3, true);
+    }
+    else
+    {
+        display.DrawCircle(120, 6, 3, true);
+    }
+
+    // Setpoint, smaller, bottom-left, with a small square "target" marker.
+    display.DrawRect(2, 42, 5, 5, true);
+    display.DrawNumber(10, 40, 7, 12, 1, setpoint / 10, 1);
+
+    // Humidity, bottom-middle.
+    display.DrawNumber(66, 40, 7, 12, 1, static_cast<int>(humidity / 100), 0);
+    display.FillCircle(90, 44, 1, true);
+    display.FillCircle(93, 47, 1, true);
+
+    // Damper position, bottom row.
+    display.DrawRect(2, 58, 60, 5, true);
+    display.FillRect(4, 60, (56 * damperActual) / 100, 1, true);
+
+    display.Flush();
 }
 
 void ThermostatHandler::PublishRoom(const bool force)
@@ -196,10 +308,18 @@ void ThermostatHandler::ConnectionLost()
 {
     // Hold the setpoint locally (we are its source of truth) and flag the UI.
     LOG_WARN("ControllerNode link lost");
-    // TODO: show a "no link" indicator on the display.
+    linkUp = false;
+}
+
+void ThermostatHandler::Snoop(const Message&)
+{
+    // This link is a fixed point-to-point pair -- any frame at all on this
+    // node's UART can only be from the ControllerNode, so it's sufficient
+    // liveness evidence on its own (unlike the shared main bus).
+    linkUp = true;
 }
 
 void ThermostatHandler::PrepareForReset()
 {
-    // TODO: blank / sleep the OLED before the OTA reset.
+    display.Off();
 }

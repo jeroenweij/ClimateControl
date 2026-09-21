@@ -5,8 +5,13 @@
 #pragma once
 
 #include "DelayTimer.h"
+#include "Gpio.h"
+#include "I2c.h"
 #include "INodeHandler.h"
 #include "Node.h"
+
+#include "Cht40.h"
+#include "Ssd1306.h"
 
 // Thermostat application logic (INodeHandler for the point-to-point link Node).
 //
@@ -14,11 +19,6 @@
 // nothing on the slave side (ControllerNode-Thermostat-Link-Spec.md §5.2). It
 // is the SOURCE OF TRUTH for the Room* endpoints and pushes Reports on change;
 // it caches DamperActual / DamperMode from the ControllerNode for the display.
-//
-// Peripheral drivers are not wired yet: the SSD1306 OLED, the CHT40 room sensor
-// and the two buttons all hang off I2C1 / GPIO (Board:: pins) and need an I2C
-// HAL that does not exist. Sensor values below are placeholders so the reporting
-// path is exercised; every peripheral touch point is marked TODO.
 class ThermostatHandler : public NodeLib::INodeHandler
 {
   public:
@@ -30,15 +30,25 @@ class ThermostatHandler : public NodeLib::INodeHandler
     void ReceivedMessage(const NodeLib::Message& message) override;
     void ConnectionLost() override;
     void PrepareForReset() override;
+    void Snoop(const NodeLib::Message& message) override;
 
   private:
-    void SampleRoom(); // TODO: read CHT40 over I2C1
-    void ServiceButtons(); // TODO: read Board::UserButton / Board::Button2
-    void RenderDisplay(); // TODO: draw to the SSD1306 over I2C1
+    void SampleRoom();
+    void ServiceButtons(); // +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
+    void RenderDisplay();
+    void WakeDisplay(); // turns the panel on (if asleep) and restarts its inactivity timer
 
     void PublishRoom(const bool force);
 
     NodeLib::Node& node;
+
+    Hal::I2c  i2c;
+    Cht40     sensor;
+    Ssd1306   display;
+    Hal::Gpio oledPower; // VBAT load-switch gate -- HIGH = OLED powered
+    Hal::Gpio oledReset; // active-low, pulsed once at bring-up
+    Hal::Gpio buttonDown; // Board::UserButton  (PA11) -- setpoint -0.5
+    Hal::Gpio buttonUp; // Board::UserButton2 (PA12) -- setpoint +0.5
 
     // Room* -- source of truth
     int16_t  setpoint; // centi-degC
@@ -57,6 +67,12 @@ class ThermostatHandler : public NodeLib::INodeHandler
     uint8_t damperActual;
     uint8_t damperMode;
 
+    bool downWasPressed;
+    bool upWasPressed;
+    bool linkUp; // any frame at all on this point-to-point link counts (Snoop())
+    bool displayOn;
+
     Tools::DelayTimer sampleTimer;
     Tools::DelayTimer keepaliveTimer;
+    Tools::DelayTimer displayTimer; // panel sleeps when this elapses (§4.2)
 };
