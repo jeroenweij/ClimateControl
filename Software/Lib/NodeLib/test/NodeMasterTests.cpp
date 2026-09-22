@@ -38,6 +38,28 @@ namespace
         bus::InjectFrame(m);
     }
 
+    // Announce from a slave currently resident in the bootloader: data[1] is
+    // its (always-nonzero) bootloader state, per Node.cpp's HandlePollRequest
+    // / Boot::FirmwareSlave::SendAnnounce shape.
+    void AnnounceFromBootloader(const uint8_t nodeId, const uint8_t module)
+    {
+        Message m(nodeId, Operation::Announce);
+        m.data[0] = module;
+        m.data[1] = 1; // bl-idle
+        m.len     = 2;
+        bus::InjectFrame(m);
+    }
+
+    // Drives one full round-robin lap against a single active node that never
+    // replies: a Poll goes out, pollTimeoutMs(200) elapses, Loop() processes
+    // the timeout and (if forgiven) sends the next Poll right back at it.
+    void TimeOutOnePoll(NodeMaster& master)
+    {
+        FakeClock::Advance(200); // NodeMaster.h's pollTimeoutMs
+        master.Loop(); // Polling -> Flush (timeout seen, inBootloader-- if set)
+        master.Loop(); // Flush -> PollNextNode() (re-sends the Poll)
+    }
+
     // DetectNodes() is async: Init() only fires the broadcast and arms
     // timeoutTimer. Advancing the clock past the window and running Loop()
     // twice -- once for Detecting -> Flush, once for Flush -> PollNextNode()
@@ -111,6 +133,79 @@ CC_TEST(NodeMaster, PollsOnlyDiscoveredNodesInOrder)
     n = bus::DecodeTx(tx, 4);
     CC_CHECK_EQ(n, 1);
     CC_CHECK_EQ(tx[0].id.node, 2);
+}
+
+CC_TEST(NodeMaster, ForgivesBootloaderPollTimeoutsWithinTheGraceBudget)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    AnnounceFromBootloader(4, 1);
+    FinishDetectionAndStartPolling(master);
+    CC_CHECK_EQ(master.ActiveNodeCount(), 1);
+
+    // Well within the 200-timeout budget: node 4 stays active, still the
+    // only node being polled.
+    for (int i = 0; i < 50; i++)
+    {
+        TimeOutOnePoll(master);
+    }
+    CC_CHECK_EQ(master.ActiveNodeCount(), 1);
+
+    Message tx[4];
+    int     n = bus::DecodeTx(tx, 4);
+    CC_CHECK(n > 0);
+    CC_CHECK_EQ(tx[n - 1].id.node, 4);
+    CC_CHECK(tx[n - 1].id.operation == Operation::Poll);
+}
+
+CC_TEST(NodeMaster, DeclaresABootloaderNodeLostOnceItsGraceBudgetRunsOut)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    AnnounceFromBootloader(4, 1);
+    FinishDetectionAndStartPolling(master);
+    CC_CHECK_EQ(master.ActiveNodeCount(), 1);
+
+    // The grace budget is 200 *missed-poll* events, not 200 TimeOutOnePoll()
+    // calls -- this span of simulated time also crosses detectIntervalMs
+    // (15s), so some calls land on the periodic re-Discover cycle instead of
+    // a real poll timeout and don't consume any budget. Pump well past the
+    // worst case (200 real timeouts plus however many re-Discover detours
+    // that takes) and just check it eventually gives up, rather than
+    // asserting a call count coupled to that unrelated cadence.
+    bool declaredLost = false;
+    for (int i = 0; i < 2000; i++)
+    {
+        TimeOutOnePoll(master);
+        if (master.ActiveNodeCount() == 0)
+        {
+            declaredLost = true;
+            break;
+        }
+    }
+    CC_CHECK(declaredLost);
+}
+
+CC_TEST(NodeMaster, DeclaresAnOrdinaryNodeLostOnItsFirstMissedPoll)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    Announce(4, 1); // no bootloader flag -- no grace budget at all
+    FinishDetectionAndStartPolling(master);
+    CC_CHECK_EQ(master.ActiveNodeCount(), 1);
+
+    FakeClock::Advance(200);
+    master.Loop();
+    CC_CHECK_EQ(master.ActiveNodeCount(), 0);
 }
 
 CC_TEST(NodeMaster, IgnoresAnnounceForAnOutOfRangeNode)

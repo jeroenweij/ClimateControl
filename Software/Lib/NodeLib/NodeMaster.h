@@ -40,7 +40,20 @@ namespace NodeLib
 
             bool    active;
             uint8_t moduleType;
-            bool    inBootloader;
+
+            // Countdown of consecutive missed polls still forgiven while this
+            // node last announced itself as being in the bootloader (Loop()'s
+            // Polling case) -- a flash erase/program run can legitimately
+            // stall its poll replies for a while. Set to 200 (an otherwise
+            // arbitrary budget, not related to pollTimeoutMs despite sharing
+            // its value) on every bootloader Announce/Hello and only ever
+            // decremented by an actual timeout, so a node that keeps
+            // re-announcing (DetectNodes()'s periodic rediscovery) never
+            // exhausts it. Backstops the case where the node has *also*
+            // stopped replying to Discover -- i.e. is genuinely gone, not
+            // just busy -- so it still eventually gets declared Lost instead
+            // of being forgiven forever.
+            uint8_t inBootloader;
         };
 
         void DetectNodes();

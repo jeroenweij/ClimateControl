@@ -29,7 +29,7 @@ NodeMaster::NodeMaster() :
 NodeMaster::SNode::SNode() :
     active(false),
     moduleType(0),
-    inBootloader(false)
+    inBootloader(0)
 {
 }
 
@@ -95,6 +95,7 @@ void NodeMaster::Loop()
                 {
                     state = EMasterState::Flush;
                     ResetHearthBeat();
+                    slaveNodes[pendingPollNode - 1].inBootloader--;
                     break;
                 }
                 LOG_WARN("Lost Node " << pendingPollNode);
@@ -211,7 +212,7 @@ void NodeMaster::NodeHello(int nodeId, uint8_t module, bool bootloader)
         LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? 'B' : 'A'));
         slaveNodes[nodeId - 1].active       = true;
         slaveNodes[nodeId - 1].moduleType   = module;
-        slaveNodes[nodeId - 1].inBootloader = bootloader;
+        slaveNodes[nodeId - 1].inBootloader = bootloader ? 200 : 0;
         nodesFound                          = true;
     }
 }
