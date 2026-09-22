@@ -705,8 +705,8 @@ function roomOrDuct(nodeId) {
   return parts.join(" · ") || "—";
 }
 
-const STATUS_CLASS = { online: "on", offline: "off", unexpected: "warn", "link-down": "warn" };
-const STATUS_PILL = { online: "up", offline: "down", unexpected: "warn", "link-down": "warn" };
+const STATUS_CLASS = { online: "on", bootloader: "warn", offline: "off", unexpected: "warn", "link-down": "warn" };
+const STATUS_PILL = { online: "up", bootloader: "warn", offline: "down", unexpected: "warn", "link-down": "warn" };
 
 function renderNodeTable() {
   $("#node-table tbody").innerHTML = state.nodes

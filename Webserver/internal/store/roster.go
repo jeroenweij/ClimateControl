@@ -20,20 +20,23 @@ type ExpectedNode struct {
 // RosterNode is the merged view of one node: what the config expects plus what
 // has actually been seen on the bus, reduced to a single status.
 type RosterNode struct {
-	ID        int    `json:"id"`
-	Module    string `json:"module"`
-	Name      string `json:"name"`
-	Note      string `json:"note"`
-	Expected  bool   `json:"expected"`
-	Seen      bool   `json:"seen"` // ever reported to this server
-	Online    bool   `json:"online"`
-	FWVersion int    `json:"fwVersion"` // running firmware, major<<8 | minor (0 = unknown)
-	FirstSeen int64  `json:"firstSeen"`
-	LastSeen  int64  `json:"lastSeen"`
-	// Status is one of "online", "offline", "unexpected". "unexpected" wins
-	// when a node is on the bus but not in the expected roster; "offline"
-	// covers an expected node that is not currently reporting, including the
-	// case where no MainController is connected at all.
+	ID         int    `json:"id"`
+	Module     string `json:"module"`
+	Name       string `json:"name"`
+	Note       string `json:"note"`
+	Expected   bool   `json:"expected"`
+	Seen       bool   `json:"seen"` // ever reported to this server
+	Online     bool   `json:"online"`
+	FWVersion  int    `json:"fwVersion"` // running firmware, major<<8 | minor (0 = unknown)
+	FirstSeen  int64  `json:"firstSeen"`
+	LastSeen   int64  `json:"lastSeen"`
+	Bootloader bool   `json:"bootloader"` // last known state (Roster/NodePresence) is the bootloader, not the app
+	// Status is one of "online", "bootloader", "offline", "unexpected".
+	// "unexpected" wins when a node is on the bus but not in the expected
+	// roster; "offline" covers an expected node that is not currently
+	// reporting, including the case where no MainController is connected at
+	// all; "bootloader" is an expected, online node whose last known state
+	// (Roster/NodePresence) is the bootloader rather than its app.
 	Status string `json:"status"`
 }
 
@@ -174,6 +177,7 @@ func (s *Store) Roster(ctx context.Context, masterOnline bool) ([]RosterNode, er
 		n := get(sn.ID)
 		n.Seen = true
 		n.Online = sn.Online && masterOnline
+		n.Bootloader = sn.State != 0
 		n.FWVersion = sn.FWVersion
 		n.FirstSeen = sn.FirstSeen
 		n.LastSeen = sn.LastSeen
@@ -192,6 +196,8 @@ func (s *Store) Roster(ctx context.Context, masterOnline bool) ([]RosterNode, er
 		switch {
 		case !n.Expected:
 			n.Status = "unexpected"
+		case n.Online && n.Bootloader:
+			n.Status = "bootloader"
 		case n.Online:
 			n.Status = "online"
 		default:

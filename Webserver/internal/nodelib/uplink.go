@@ -47,19 +47,27 @@ func ParseRosterEntry(data []byte) (RosterEntry, bool) {
 	}, true
 }
 
-// NodePresence is a 0x62 Report: a node joined (Up) or dropped.
+// NodePresence is a 0x62 Report: a node joined (Up) or dropped. Bootloader
+// mirrors Roster's per-node bootloader bit at the moment of the transition --
+// a live update in between Roster's periodic full-snapshot dumps.
 type NodePresence struct {
-	NodeID uint8
-	Module Module
-	Up     bool
+	NodeID     uint8
+	Module     Module
+	Up         bool
+	Bootloader bool
 }
 
 // ParseNodePresence decodes a 0x62 Report payload.
 func ParseNodePresence(data []byte) (NodePresence, bool) {
-	if len(data) < 3 {
+	if len(data) < 4 {
 		return NodePresence{}, false
 	}
-	return NodePresence{NodeID: data[0], Module: Module(data[1]), Up: data[2] != 0}, true
+	return NodePresence{
+		NodeID:     data[0],
+		Module:     Module(data[1]),
+		Up:         data[2] != 0,
+		Bootloader: data[3] != 0,
+	}, true
 }
 
 // ThermostatStatus is a 0x63 Report: the presence, bootloader state, running

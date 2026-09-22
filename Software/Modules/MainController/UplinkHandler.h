@@ -88,6 +88,11 @@ class UplinkHandler : public NodeLib::INodeHandler
     void SendUplinkHello();
     void SendRoster();
     void SendKeepalive();
+    // Diffs every node's current active/bootloader state against the
+    // snapshot SendRoster() last took and emits a NodePresence Report for
+    // anything that changed -- a live update in between Roster's periodic
+    // full-snapshot dumps. Idempotent to call when nothing changed.
+    void CheckNodePresence();
     void EnqueueUplink(const NodeLib::Message& message); // used by Send* above too, for the same reason
 
     NodeLib::NodeMaster& master;
@@ -103,6 +108,14 @@ class UplinkHandler : public NodeLib::INodeHandler
     static const uint8_t outboundQueueSize = 32;
     NodeLib::Message     outboundQueue[outboundQueueSize];
     uint8_t              outboundQueued;
+
+    // Last active/bootloader state CheckNodePresence() has told the server
+    // about, indexed nodeId-1. Seeded by SendRoster() itself (so the roster
+    // dump and the snapshot never disagree, and the very next CheckNodePresence()
+    // after a (re)connect is a no-op -- Roster already reported the
+    // post-reconnect truth, nothing "changed" on top of that).
+    bool nodePresenceActive[NodeLib::MAX_NODES];
+    bool nodePresenceBootloader[NodeLib::MAX_NODES];
 
     NinaAt nina;
 

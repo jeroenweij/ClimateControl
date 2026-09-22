@@ -83,6 +83,8 @@ UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocato
     budgetAllocator(budgetAllocator),
     outboundQueue{},
     outboundQueued(0),
+    nodePresenceActive{},
+    nodePresenceBootloader{},
     nina(),
     uplinkCrc(),
     uplinkFrame(uplinkCrc),
@@ -373,6 +375,13 @@ void UplinkHandler::DrainDataMode()
         helloSent = true;
         keepaliveTimer.Start(KeepaliveIntervalMs);
     }
+    else
+    {
+        // Only after the roster dump has seeded the snapshot -- on this same
+        // tick post-(re)connect it would otherwise compare against last
+        // session's stale snapshot instead of what SendRoster() just sent.
+        CheckNodePresence();
+    }
 
     bool sawByte = false;
     while (nina.Available())
@@ -471,9 +480,18 @@ void UplinkHandler::SendRoster()
     // lastSeenMs(4) -- terminated by nodeId 0xFF (MainController-Server-Link-
     // Spec.md §5). state is just the bootloader bit for now; Roster's shape
     // leaves room to widen it later without another wire change.
+    //
+    // Also (re)seeds nodePresenceActive/nodePresenceBootloader for every id,
+    // active or not, so the CheckNodePresence() right after this always sees
+    // "nothing changed" -- this dump just reported the current truth.
     for (uint8_t nodeId = 1; nodeId <= NodeLib::MAX_NODES; nodeId++)
     {
-        if (!master.NodeActive(nodeId))
+        const bool active                  = master.NodeActive(nodeId);
+        const bool bootloader              = master.NodeInBootloader(nodeId);
+        nodePresenceActive[nodeId - 1]     = active;
+        nodePresenceBootloader[nodeId - 1] = bootloader;
+
+        if (!active)
         {
             continue;
         }
@@ -481,7 +499,7 @@ void UplinkHandler::SendRoster()
         uint8_t payload[7];
         payload[0] = nodeId;
         payload[1] = master.NodeModule(nodeId);
-        payload[2] = master.NodeInBootloader(nodeId) ? 1 : 0;
+        payload[2] = bootloader ? 1 : 0;
         PackU32(&payload[3], master.NodeLastContactMs(nodeId));
 
         Message entry(Id(0, Endpoint::Roster, Operation::Report));
@@ -494,6 +512,36 @@ void UplinkHandler::SendRoster()
     }
 
     EnqueueUplink(Message(Id(0, Endpoint::Roster, Operation::Report), static_cast<uint8_t>(0xFF)));
+}
+
+void UplinkHandler::CheckNodePresence()
+{
+    for (uint8_t nodeId = 1; nodeId <= NodeLib::MAX_NODES; nodeId++)
+    {
+        const uint8_t idx        = nodeId - 1;
+        const bool    active     = master.NodeActive(nodeId);
+        const bool    bootloader = master.NodeInBootloader(nodeId);
+        if (active == nodePresenceActive[idx] && bootloader == nodePresenceBootloader[idx])
+        {
+            continue;
+        }
+        nodePresenceActive[idx]     = active;
+        nodePresenceBootloader[idx] = bootloader;
+
+        const uint8_t payload[4] = {
+            nodeId,
+            master.NodeModule(nodeId),
+            static_cast<uint8_t>(active ? 1 : 0),
+            static_cast<uint8_t>(bootloader ? 1 : 0),
+        };
+        Message m(Id(0, Endpoint::NodePresence, Operation::Report));
+        m.len = sizeof(payload);
+        for (uint8_t i = 0; i < m.len; i++)
+        {
+            m.data[i] = payload[i];
+        }
+        EnqueueUplink(m);
+    }
 }
 
 void UplinkHandler::SendKeepalive()

@@ -82,6 +82,54 @@ func TestRosterClassification(t *testing.T) {
 	}
 }
 
+func TestRosterClassifiesABootloaderNode(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+
+	if err := st.SyncConfigExpectedNodes(ctx, []ExpectedNode{{ID: 1, Module: "ControllerNode"}}); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if err := st.UpsertNode(ctx, 1, nodelib.ModuleControllerNode, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNodeState(ctx, 1, 1); err != nil { // 1 = bootloader
+		t.Fatal(err)
+	}
+
+	got, err := st.Roster(ctx, true)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	st1 := statusByID(got)
+	if st1[1] != "bootloader" {
+		t.Errorf("node 1 = %q, want bootloader", st1[1])
+	}
+
+	// Master offline overrides bootloader same as it does online -- the bus
+	// link itself is down, so "believed in the bootloader" isn't meaningful.
+	got, err = st.Roster(ctx, false)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	st2 := statusByID(got)
+	if st2[1] != "offline" {
+		t.Errorf("node 1 (master down) = %q, want offline", st2[1])
+	}
+
+	// Back to the app: state 0 clears it even though the node is still online.
+	if err := st.SetNodeState(ctx, 1, 0); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.Roster(ctx, true)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	st3 := statusByID(got)
+	if st3[1] != "online" {
+		t.Errorf("node 1 (back to app) = %q, want online", st3[1])
+	}
+}
+
 func TestSyncConfigExpectedNodesRemoval(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)

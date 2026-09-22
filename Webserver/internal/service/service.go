@@ -169,7 +169,9 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 
 // OnRosterEntry records one node from a roster stream.
 func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
-	_ = s.st.UpsertNode(context.Background(), int(e.NodeID), e.Module, true)
+	ctx := context.Background()
+	_ = s.st.UpsertNode(ctx, int(e.NodeID), e.Module, true)
+	_ = s.st.SetNodeState(ctx, int(e.NodeID), int(e.State))
 	s.warnIfUnexpected(int(e.NodeID), e.Module)
 	s.hb.PublishPresence(int(e.NodeID), e.Module, true)
 	// SystemInfo (running firmware version) is Get-only on the node side --
@@ -178,9 +180,18 @@ func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	s.send.SendGet(int(e.NodeID), nodelib.EndpointSystemInfo)
 }
 
-// OnPresence records a node up/down transition.
+// OnPresence records a node up/down transition. Uses UpsertNode (an upsert)
+// rather than a plain UPDATE so a node whose very first sighting is a live
+// NodePresence (up between two Roster dumps, not yet in the table at all)
+// still gets a row -- a plain UPDATE would silently affect nothing.
 func (s *Service) OnPresence(p nodelib.NodePresence) {
-	_ = s.st.SetNodeOnline(context.Background(), int(p.NodeID), p.Up)
+	ctx := context.Background()
+	_ = s.st.UpsertNode(ctx, int(p.NodeID), p.Module, p.Up)
+	state := 0
+	if p.Bootloader {
+		state = 1
+	}
+	_ = s.st.SetNodeState(ctx, int(p.NodeID), state)
 	s.hb.PublishPresence(int(p.NodeID), p.Module, p.Up)
 	if p.Up {
 		s.warnIfUnexpected(int(p.NodeID), p.Module)

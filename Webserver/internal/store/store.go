@@ -71,7 +71,7 @@ type Node struct {
 	FWVersion int    `json:"fwVersion"`
 	FirstSeen int64  `json:"firstSeen"`
 	LastSeen  int64  `json:"lastSeen"`
-	State     int    `json:"state"`
+	State     int    `json:"state"` // 0 = app, 1 = bootloader -- Roster/NodePresence's state/bootloader bit
 	Online    bool   `json:"online"`
 }
 
@@ -100,11 +100,10 @@ func (s *Store) SetNodeFirmware(ctx context.Context, id, version int) error {
 	return err
 }
 
-// SetNodeOnline flips just the online flag (heartbeat / presence).
-func (s *Store) SetNodeOnline(ctx context.Context, id int, online bool) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET online = ?, last_seen = ? WHERE id = ?`,
-		boolInt(online), time.Now().Unix(), id)
+// SetNodeState records a node's app/bootloader state (Node.State: 0 = app,
+// 1 = bootloader), as learned from a Roster entry or a NodePresence report.
+func (s *Store) SetNodeState(ctx context.Context, id, state int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE nodes SET state = ? WHERE id = ?`, state, id)
 	return err
 }
 

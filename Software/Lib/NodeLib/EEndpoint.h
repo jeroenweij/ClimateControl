@@ -58,7 +58,7 @@ namespace NodeLib
         // RS485 bus (MainController-Server-Link-Spec.md §5).
         UplinkHello      = 0x60, // MC->S  Report  fwVersion(2) uptimeSec(4) nodeCount(1) authToken(16)
         Roster           = 0x61, // S<->MC Get/Report  one {nodeId,module,state,lastSeenMs} per frame, 0xFF node terminates
-        NodePresence     = 0x62, // MC->S  Report  nodeId(1) module(1) up(1)
+        NodePresence     = 0x62, // MC->S  Report  nodeId(1) module(1) up(1) bootloader(1)
         ThermostatStatus = 0x63, // MC->S  Report  controllerNodeId(1) linkUp(1) blState(1) fwMajor(1) fwMinor(1) uid[12]
         Keepalive        = 0x64, // MC<->S Get/Report  no payload
         OtaControl       = 0x65, // S<->MC Set/Report  image push start/abort/progress
