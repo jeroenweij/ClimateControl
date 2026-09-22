@@ -208,6 +208,64 @@ CC_TEST(NodeMaster, DeclaresAnOrdinaryNodeLostOnItsFirstMissedPoll)
     CC_CHECK_EQ(master.ActiveNodeCount(), 0);
 }
 
+CC_TEST(NodeMaster, RosterGettersReflectAnAppNodesAnnounce)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    FakeClock::Advance(discoveryWindowMs);
+    Announce(4, 2); // TemperatureNode, no bootloader flag
+    master.Loop(); // Detecting -> Flush
+    master.Loop(); // Flush -> PollNextNode() (processes the Announce on the way)
+
+    CC_CHECK(master.NodeActive(4));
+    CC_CHECK(!master.NodeInBootloader(4));
+    CC_CHECK_EQ(master.NodeLastContactMs(4), FakeClock::Now());
+
+    // Never announced -- reads as inactive/not-in-bootloader/never-contacted,
+    // same as an out-of-range id.
+    CC_CHECK(!master.NodeActive(5));
+    CC_CHECK(!master.NodeInBootloader(5));
+    CC_CHECK_EQ(master.NodeLastContactMs(5), 0);
+    CC_CHECK(!master.NodeActive(0));
+    CC_CHECK(!master.NodeActive(240));
+}
+
+CC_TEST(NodeMaster, NodeInBootloaderReflectsAnAnnouncedBootloaderState)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    AnnounceFromBootloader(4, 1);
+    FinishDetectionAndStartPolling(master);
+
+    CC_CHECK(master.NodeActive(4));
+    CC_CHECK(master.NodeInBootloader(4));
+}
+
+CC_TEST(NodeMaster, NodeLastContactMsAdvancesOnASuccessfulPollDone)
+{
+    ResetWorld();
+    NodeMaster master;
+    master.Init();
+    FakeBus::Reset();
+
+    Announce(4, 1);
+    FinishDetectionAndStartPolling(master); // sends the first Poll to node 4
+    const uint32_t contactAtAnnounce = master.NodeLastContactMs(4);
+
+    FakeClock::Advance(50);
+    bus::InjectFrame(Message(4, Operation::Done));
+    master.Loop();
+
+    CC_CHECK(master.NodeLastContactMs(4) > contactAtAnnounce);
+    CC_CHECK_EQ(master.NodeLastContactMs(4), FakeClock::Now());
+}
+
 CC_TEST(NodeMaster, IgnoresAnnounceForAnOutOfRangeNode)
 {
     ResetWorld();

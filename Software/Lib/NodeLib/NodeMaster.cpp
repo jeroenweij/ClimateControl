@@ -3,6 +3,7 @@
  *************************************************************/
 
 #include "Logger.h"
+#include "Tick.h"
 
 #include "Id.h"
 #include "NodeMaster.h"
@@ -29,7 +30,8 @@ NodeMaster::NodeMaster() :
 NodeMaster::SNode::SNode() :
     active(false),
     moduleType(0),
-    inBootloader(0)
+    inBootloader(0),
+    lastContactMs(0)
 {
 }
 
@@ -40,6 +42,33 @@ uint8_t NodeMaster::NodeModule(const uint8_t nodeId) const
         return 0;
     }
     return slaveNodes[nodeId - 1].moduleType;
+}
+
+bool NodeMaster::NodeActive(const uint8_t nodeId) const
+{
+    if (nodeId < 1 || nodeId > maxNodes)
+    {
+        return false;
+    }
+    return slaveNodes[nodeId - 1].active;
+}
+
+bool NodeMaster::NodeInBootloader(const uint8_t nodeId) const
+{
+    if (nodeId < 1 || nodeId > maxNodes)
+    {
+        return false;
+    }
+    return slaveNodes[nodeId - 1].inBootloader > 0;
+}
+
+uint32_t NodeMaster::NodeLastContactMs(const uint8_t nodeId) const
+{
+    if (nodeId < 1 || nodeId > maxNodes)
+    {
+        return 0;
+    }
+    return slaveNodes[nodeId - 1].lastContactMs;
 }
 
 void NodeMaster::Init()
@@ -182,6 +211,7 @@ void NodeMaster::HandleInternalOperation(const Message& m)
             {
                 state = EMasterState::Flush;
                 ResetHearthBeat();
+                slaveNodes[pendingPollNode - 1].lastContactMs = Hal::Tick::Millis();
             }
             break;
         }
@@ -210,9 +240,10 @@ void NodeMaster::NodeHello(int nodeId, uint8_t module, bool bootloader)
     if (nodeId > 0 && nodeId <= maxNodes)
     {
         LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? 'B' : 'A'));
-        slaveNodes[nodeId - 1].active       = true;
-        slaveNodes[nodeId - 1].moduleType   = module;
-        slaveNodes[nodeId - 1].inBootloader = bootloader ? 200 : 0;
-        nodesFound                          = true;
+        slaveNodes[nodeId - 1].active        = true;
+        slaveNodes[nodeId - 1].moduleType    = module;
+        slaveNodes[nodeId - 1].inBootloader  = bootloader ? 200 : 0;
+        slaveNodes[nodeId - 1].lastContactMs = Hal::Tick::Millis();
+        nodesFound                           = true;
     }
 }

@@ -467,8 +467,32 @@ void UplinkHandler::SendUplinkHello()
 
 void UplinkHandler::SendRoster()
 {
-    // No physical nodes on this bus yet -- an empty roster is just the
-    // terminator (MainController-Server-Link-Spec.md §5).
+    // One Report per active node -- nodeId(1) module(1) state(1)
+    // lastSeenMs(4) -- terminated by nodeId 0xFF (MainController-Server-Link-
+    // Spec.md §5). state is just the bootloader bit for now; Roster's shape
+    // leaves room to widen it later without another wire change.
+    for (uint8_t nodeId = 1; nodeId <= NodeLib::MAX_NODES; nodeId++)
+    {
+        if (!master.NodeActive(nodeId))
+        {
+            continue;
+        }
+
+        uint8_t payload[7];
+        payload[0] = nodeId;
+        payload[1] = master.NodeModule(nodeId);
+        payload[2] = master.NodeInBootloader(nodeId) ? 1 : 0;
+        PackU32(&payload[3], master.NodeLastContactMs(nodeId));
+
+        Message entry(Id(0, Endpoint::Roster, Operation::Report));
+        entry.len = sizeof(payload);
+        for (uint8_t i = 0; i < entry.len; i++)
+        {
+            entry.data[i] = payload[i];
+        }
+        EnqueueUplink(entry);
+    }
+
     EnqueueUplink(Message(Id(0, Endpoint::Roster, Operation::Report), static_cast<uint8_t>(0xFF)));
 }
 

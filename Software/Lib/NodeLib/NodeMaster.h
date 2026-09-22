@@ -24,6 +24,22 @@ namespace NodeLib
         // uplink's UplinkHello.nodeCount (MainController-Server-Link-Spec.md §5).
         uint8_t ActiveNodeCount() const;
 
+        // The below three back the uplink's Roster report (§5): one entry per
+        // NodeActive() node, giving UplinkHandler::SendRoster() everything it
+        // needs without reaching into SNode directly. nodeId is 1..maxNodes;
+        // out of range reads as not-active / not-in-bootloader / 0.
+
+        // Whether nodeId currently has an unexpired Announce/poll contact.
+        bool NodeActive(const uint8_t nodeId) const;
+
+        // Whether nodeId's last known state is the bootloader (SNode's
+        // inBootloader grace countdown, still nonzero).
+        bool NodeInBootloader(const uint8_t nodeId) const;
+
+        // MainController uptime-ms at nodeId's last contact (an Announce or a
+        // successful Poll/Done) -- Roster's lastSeenMs.
+        uint32_t NodeLastContactMs(const uint8_t nodeId) const;
+
       private:
         enum class EMasterState : uint8_t
         {
@@ -54,6 +70,13 @@ namespace NodeLib
             // just busy -- so it still eventually gets declared Lost instead
             // of being forgiven forever.
             uint8_t inBootloader;
+
+            // MainController uptime-ms (Hal::Tick::Millis()) at this node's
+            // last real contact -- a fresh Announce (NodeHello()) or a
+            // successful Poll/Done. Never touched by a forgiven bootloader
+            // timeout, so it actually reflects staleness. Backs Roster's
+            // lastSeenMs (MainController-Server-Link-Spec.md §5).
+            uint32_t lastContactMs;
         };
 
         void DetectNodes();
