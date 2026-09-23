@@ -171,6 +171,30 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleNodeLog drains a node's DiagLog ring and returns the lines (oldest
+// first). Reading empties the ring on the node.
+func (s *Server) handleNodeLog(w http.ResponseWriter, r *http.Request) {
+	node, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || node < 1 || node > 254 {
+		writeErr(w, http.StatusBadRequest, "bad node id")
+		return
+	}
+	lines, err := s.svc.ReadNodeLog(r.Context(), node)
+	switch {
+	case errors.Is(err, service.ErrDownlinkUnavailable):
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, service.ErrLogReadBusy):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrNodeNoReply):
+		// Whatever arrived before the node stopped answering is still useful.
+		writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error(), "node": node, "lines": lines})
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"node": node, "lines": lines})
+	}
+}
+
 func (s *Server) handleListOverrides(w http.ResponseWriter, r *http.Request) {
 	node, _ := strconv.Atoi(r.URL.Query().Get("node"))
 	ovs, err := s.svc.Store().Overrides(r.Context(), node)

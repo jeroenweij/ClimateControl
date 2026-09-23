@@ -10,6 +10,13 @@ var ErrNotWritable = errors.New("endpoint is not writable")
 // outbound queue is full.
 var ErrDownlinkUnavailable = errors.New("downlink unavailable (no MainController or queue full)")
 
+// ErrNodeNoReply is returned when a node did not answer a request within its
+// timeout.
+var ErrNodeNoReply = errors.New("node did not reply")
+
+// ErrLogReadBusy is returned when that node's log is already being read.
+var ErrLogReadBusy = errors.New("this node's log is already being read")
+
 // ErrOtaBusy is returned when a firmware push is already running.
 var ErrOtaBusy = errors.New("a firmware push is already in progress")
 

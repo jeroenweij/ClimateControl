@@ -2,9 +2,12 @@
  * Created by J. Weij
  *************************************************************/
 
+#include <string.h>
+
 #include "EEndpoint.h"
 #include "EFirmware.h"
 #include "EOperation.h"
+#include "LogRing.h"
 #include "Node.h"
 
 #include "BusHelpers.h"
@@ -344,4 +347,68 @@ CC_TEST(Node, ConnectionLostFiresAfterAPolledNodeGoesQuiet)
     node.Loop();
 
     CC_CHECK_EQ(handler.lost, 1);
+}
+
+CC_TEST(Node, DiagLogDrainsBufferedLogLinesOnePerGetThenReportsEmpty)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+    Tools::LogRing::Clear(); // drop whatever Init() logged
+    Tools::LogRing::Push("I", "first line");
+    Tools::LogRing::Push("W", "second line");
+
+    const char* const expected[] = {"I: first line", "W: second line"};
+    for (int i = 0; i < 3; i++)
+    {
+        FakeBus::Reset();
+        bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLog, Operation::Get)));
+        Flush(node);
+
+        Message   tx[8];
+        const int n = bus::DecodeTx(tx, 8);
+        int       idx;
+        CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Report, &idx));
+        if (i < 2)
+        {
+            CC_CHECK_EQ(tx[idx].len, strlen(expected[i]));
+            CC_CHECK(memcmp(tx[idx].data, expected[i], tx[idx].len) == 0);
+        }
+        else
+        {
+            CC_CHECK_EQ(tx[idx].len, 0); // drained
+        }
+    }
+}
+
+CC_TEST(Node, DiagLogFitsOneBusMessageEvenForAnOverlongLogLine)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+    Tools::LogRing::Clear();
+    Tools::LogRing::Push("E", "0123456789012345678901234567890123456789012345678901234567890123456789");
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLog, Operation::Get)));
+    Flush(node);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    int       idx;
+    CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Report, &idx));
+    CC_CHECK_EQ(tx[idx].len, Tools::LogRing::LineSize);
+}
+
+CC_TEST(Node, DiagLogNacksAnythingButGet)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLog, Operation::Set), static_cast<uint8_t>(0)));
+    Flush(node);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Nack, nullptr));
 }

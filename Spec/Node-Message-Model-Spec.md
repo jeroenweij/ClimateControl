@@ -69,7 +69,7 @@ enum class Endpoint : uint8_t
     DiagRxCounters = 0x50,  // RO  rxFrames(4) crcErrors(4) resyncs(4) interByteTimeouts(4)   -- from Frame
     DiagTxCounters = 0x51,  // RO  txFrames(4) queueDrops(4)                                    -- from Node
     DiagLastError  = 0x52,  // RO  code(1) uptimeAtFault(4) context(2)                           -- from ErrorHandler
-    DiagLog        = 0x53,  // RO  Get -> Report next buffered log line (string); empty when drained
+    DiagLog        = 0x53,  // RO  Get -> Report the oldest buffered log line ("<level>: <message>", ≤ 32 chars, one bus message); empty when drained; a leading "~ <n> lost" line means the ring overflowed
     DiagReset      = 0x54,  // WO  Set -> clear the counters
 };
 ```
@@ -142,7 +142,7 @@ One handler per node. `NodeLib` intercepts and fully handles three endpoint bloc
 | `Transport` | the master/slave state machine |
 | `System*` | `ConfigStore` (module, uid), the app image descriptor (fwVersion), a `Node` uptime/error tally; `SystemControl` reset via the backup-register handoff in `Node-Flash-Layout-and-Bootloader-Spec.md` §5 |
 | `Firmware` (`0x20` only) | the OTA path — app running: persist the enter-bootloader flag + reset; bootloader: the transfer. `ThermostatFirmware` (`0x22`) is **not** intercepted — it reaches the ControllerNode's handler, which relays it over the link (`ControllerNode-Thermostat-Link-Spec.md` §5.4). |
-| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains a small in-RAM log ring `Tools::Logger` writes into |
+| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains `Tools::LogRing` — 10 lines × 32 characters (320 B) that every `LOG_*` macro feeds, oldest overwritten first, one line per `Get` |
 
 The module's handler only ever receives its own application / `Room` endpoints (plus `ThermostatFirmware` on the ControllerNode):
 
@@ -182,5 +182,4 @@ This resolves which endpoint values apply on the link: the named-endpoint ones (
 
 ## 8. Open items
 
-1. **`DiagLog` buffer size** — how many lines × how many chars of the 8 KB SRAM budget (`RS485-Node-Protocol-Spec-STM32G030.md` §7)? A tentative 8 × 48 B ≈ 384 B. Not yet built.
-2. **Keepalive interval and per-endpoint deadbands** — ~60 s assumed in §6.1; the exact value and the per-endpoint deadbands need confirming once real sensors are on a bench. Not yet built (`Node::PublishIfChanged` and the keepalive timer are still to come).
+1. **Keepalive interval and per-endpoint deadbands** — ~60 s assumed in §6.1; the exact value and the per-endpoint deadbands need confirming once real sensors are on a bench. Not yet built (`Node::PublishIfChanged` and the keepalive timer are still to come).

@@ -5,6 +5,7 @@
 #include "Backup.h"
 #include "BoardPins.h"
 #include "ImageDescriptor.h"
+#include "LogRing.h"
 #include "Logger.h"
 #include "MemoryMap.h"
 #include "System.h"
@@ -402,9 +403,11 @@ void Node::HandleDiagnosticsMessage(const Message& m)
                 SendNack(m);
                 break;
             }
-            // Empty => log drained. TODO: a small line ring buffer fed by
-            // Tools::Logger, drained one line per Get.
-            SendReport(Endpoint::DiagLog, nullptr, 0);
+            // The oldest buffered log line (Tools::LogRing, fed by every
+            // LOG_* macro), one per Get; an empty Report means drained.
+            uint8_t      line[Tools::LogRing::LineSize];
+            const size_t length = Tools::LogRing::Pop(line, sizeof(line));
+            SendReport(Endpoint::DiagLog, line, static_cast<uint8_t>(length));
             break;
         }
 

@@ -35,6 +35,10 @@ type Service struct {
 	ota  *otaDriver
 	mcFW int // MainController running firmware (major<<8|minor), from UplinkHello; 0 = unknown
 
+	// A node's DiagLog is being drained (ReadNodeLog): its Reports go here
+	// instead of the readings store.
+	diagLog map[int]chan nodelib.Frame
+
 	// The connected MainController is its bootloader, not the application: an
 	// UplinkHello with fwVersion 0 (the bootloader has no version of its own;
 	// every application image carries a non-zero one).
@@ -54,7 +58,7 @@ type Service struct {
 
 // New builds the service. Call SetSender once the uplink server exists.
 func New(st *store.Store, hb *hub.Hub, log *slog.Logger) *Service {
-	return &Service{st: st, hb: hb, log: log, fwRequested: make(map[int]bool)}
+	return &Service{st: st, hb: hb, log: log, fwRequested: make(map[int]bool), diagLog: make(map[int]chan nodelib.Frame)}
 }
 
 // SetSender installs the downlink path (breaks the construction cycle).
@@ -161,6 +165,11 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 			// OTA progress, not sensor data -- hand it to the driver instead
 			// of the readings store (ota.go).
 			s.onFirmwareReport(f)
+			return
+		}
+		if f.Endpoint == nodelib.EndpointDiagLog {
+			// A log line, not sensor data -- hand it to the reader waiting on it.
+			s.onDiagLog(f)
 			return
 		}
 		v := nodelib.DecodeValue(f.Endpoint, f.Data)

@@ -4,6 +4,8 @@ add_library(Tools STATIC
     SStream.h
     Logger.h
     Logger.cpp
+    LogRing.h
+    LogRing.cpp
     BootHealth.h
     BootHealth.cpp
 )
@@ -24,6 +26,8 @@ add_library(ToolsOs STATIC
     SStream.h
     Logger.h
     Logger.cpp
+    LogRing.h
+    LogRing.cpp
     BootHealth.h
     BootHealth.cpp
 )

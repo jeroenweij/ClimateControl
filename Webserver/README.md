@@ -317,6 +317,7 @@ the wire protocol changes.
 | `GET /api/state` | full current-state snapshot (same shape as the WS `snapshot`) |
 | `GET /api/nodes` | roster |
 | `GET /api/readings?node=&endpoint=&from=&to=&limit=` | history series |
+| `GET /api/nodes/{id}/log` | drain a node's `DiagLog` ring over the bus — its last few log lines, oldest first (reading empties it on the node) |
 | `POST /api/commands` `{node,endpoint,value}` | queue a `Set`; held as an override |
 | `GET/DELETE /api/overrides[/{node}/{endpoint}]` | held values |
 | `GET/POST/DELETE /api/floors[/{id}]`, `GET /api/floors/{id}/image` | floor plans |

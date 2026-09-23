@@ -100,7 +100,7 @@ Variable-length frames mean a corrupted `LEN` byte would otherwise make the rece
 | TX queue | Fixed-size queue slots sized at `MAX_DATA` (`queueSize = 25` × 43 bytes/slot ≈ 1.05 KB) — no dynamic allocation. |
 | Heap allocation | None — fixed-size slots only, no `malloc`/`new` for frame data. |
 
-Total protocol RAM usage is well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. The `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, ~384 B) adds to this budget.
+Total protocol RAM usage is well under 2 KB, leaving headroom for application state (endpoint values, timers) on the 8 KB part. The `Diagnostics` log ring (`Node-Message-Model-Spec.md` §3, 320 B) adds to this budget.
 
 ---
 

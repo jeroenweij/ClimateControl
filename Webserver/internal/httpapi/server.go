@@ -36,6 +36,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/state", s.handleState)
 	mux.HandleFunc("GET /api/nodes", s.handleNodes)
+	mux.HandleFunc("GET /api/nodes/{id}/log", s.handleNodeLog)
 	mux.HandleFunc("GET /api/expected-nodes", s.handleListExpectedNodes)
 	mux.HandleFunc("PUT /api/expected-nodes/{id}", s.handleSetExpectedNode)
 	mux.HandleFunc("DELETE /api/expected-nodes/{id}", s.handleDeleteExpectedNode)
