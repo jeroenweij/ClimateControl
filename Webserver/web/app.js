@@ -7,6 +7,7 @@ const state = {
   nodes: [],           // from /api/nodes
   main: null,
   uplinkUp: false,
+  bootloader: false, // the far end of the uplink is MainController's bootloader
   floors: [],
   placements: [],
 };
@@ -59,7 +60,8 @@ function handleEvent(msg) {
       for (const v of msg.values || []) state.values.set(key(v.node, v.endpoint), v);
       state.main = msg.main && msg.main.type ? msg.main : state.main;
       state.uplinkUp = msg.uplinkUp;
-      setLinkState(msg.uplinkUp);
+      state.bootloader = !!msg.bootloader;
+      setLinkState(msg.uplinkUp, state.bootloader);
       refreshCurrentView();
       break;
     case "value":
@@ -76,10 +78,12 @@ function handleEvent(msg) {
     case "main":
       state.main = msg;
       state.uplinkUp = msg.online;
-      setLinkState(msg.online);
+      state.bootloader = !!msg.bootloader;
+      setLinkState(msg.online, state.bootloader);
       // Master up/down flips every node between online and offline.
       loadNodes().then(refreshCurrentView).catch(() => {});
       if (currentView() === "status") renderMainStatus();
+      if (currentView() === "firmware") loadFirmware(); // MainController row: status + installed version
       break;
     case "ota":
       if (currentView() === "firmware") loadFirmware();
@@ -87,10 +91,10 @@ function handleEvent(msg) {
   }
 }
 
-function setLinkState(up) {
+function setLinkState(up, bootloader) {
   const el = $("#link-state");
-  el.textContent = up ? "uplink up" : "uplink down";
-  el.className = "pill " + (up ? "up" : "down");
+  el.textContent = up ? (bootloader ? "MainController bootloader" : "uplink up") : "uplink down";
+  el.className = "pill " + (up ? (bootloader ? "warn" : "up") : "down");
 }
 
 // ---- router ------------------------------------------------------------
@@ -724,8 +728,8 @@ function renderNodeTable() {
 function renderMainStatus() {
   const s = state.main && state.main.status;
   const el = $("#main-status");
-  if (!s) {
-    el.innerHTML = `<div><b>${state.uplinkUp ? "connected" : "no MainController"}</b><span>uplink</span></div>`;
+  if (!s || state.bootloader) {
+    el.innerHTML = `<div><b>${state.uplinkUp ? (state.bootloader ? "bootloader" : "connected") : "no MainController"}</b><span>uplink</span></div>`;
     return;
   }
   const kv = (label, val) => `<div><b>${val}</b><span>${label}</span></div>`;
@@ -742,7 +746,8 @@ function renderMainStatus() {
 
 // ---- firmware view ----------------------------------------------
 
-const fwState = { images: [], targets: [] };
+const fwState = { images: [], targets: [], jobs: [], jobsExpanded: false };
+const FW_JOBS_SHOWN = 25; // the rest of the retained history sits behind "Show more"
 
 async function renderFirmware() {
   await loadFirmware();
@@ -817,7 +822,15 @@ function renderFirmwareNodes() {
 }
 
 function renderFirmwareJobs(jobs) {
-  $("#fw-job-table tbody").innerHTML = (jobs || [])
+  fwState.jobs = jobs || [];
+  const hidden = Math.max(0, fwState.jobs.length - FW_JOBS_SHOWN);
+  const shown = fwState.jobsExpanded ? fwState.jobs : fwState.jobs.slice(0, FW_JOBS_SHOWN);
+
+  const more = $("#fw-job-more");
+  more.hidden = hidden === 0;
+  more.textContent = fwState.jobsExpanded ? "Show fewer" : `Show more (${hidden})`;
+
+  $("#fw-job-table tbody").innerHTML = shown
     .map((j) => {
       const pct = j.size ? Math.round((j.lastOffset / j.size) * 100) : 0;
       return `<tr>
@@ -828,6 +841,11 @@ function renderFirmwareJobs(jobs) {
     })
     .join("");
 }
+
+$("#fw-job-more").addEventListener("click", () => {
+  fwState.jobsExpanded = !fwState.jobsExpanded;
+  renderFirmwareJobs(fwState.jobs);
+});
 
 $("#fw-upload-form").addEventListener("submit", async (e) => {
   e.preventDefault();

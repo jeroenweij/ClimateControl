@@ -107,9 +107,24 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 		return 0, err
 	}
 	s.hb.PublishOta(hub.OtaEvent{JobID: jobID, State: "queued", NodeID: nodeID, Size: len(bin)})
+	s.PruneOta()
 
 	s.kickOta()
 	return jobID, nil
+}
+
+// PruneOta drops finished push records beyond the newest store.OtaJobsKept and
+// deletes the image copy each one kept. Called when a push is queued and when
+// one finishes (and once at startup), so the queue never grows without bound.
+func (s *Service) PruneOta() {
+	paths, err := s.st.PruneOtaJobs(context.Background())
+	if err != nil {
+		s.log.Warn("ota: prune old jobs", "err", err)
+		return
+	}
+	for _, p := range paths {
+		_ = os.Remove(p)
+	}
 }
 
 // kickOta starts the next queued push if nothing is running. It is safe to call
@@ -308,6 +323,7 @@ func (d *otaDriver) done(state, errMsg string, offset int) {
 			Offset: offset, Size: len(d.image), Error: errMsg,
 		})
 		close(d.doneCh)
+		d.svc.PruneOta()
 		// Hand off to the next queued push, if any.
 		go d.svc.kickOta()
 	})

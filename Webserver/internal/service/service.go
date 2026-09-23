@@ -35,6 +35,11 @@ type Service struct {
 	ota  *otaDriver
 	mcFW int // MainController running firmware (major<<8|minor), from UplinkHello; 0 = unknown
 
+	// The connected MainController is its bootloader, not the application: an
+	// UplinkHello with fwVersion 0 (the bootloader has no version of its own;
+	// every application image carries a non-zero one).
+	mcBootloader bool
+
 	// Nodes we've already asked for SystemInfo this process's lifetime, so a
 	// node's steady stream of ordinary Reports doesn't re-send the Get on
 	// every single one while we wait for the (once-per-boot) answer.
@@ -59,10 +64,26 @@ func (s *Service) SetSender(snd Sender) { s.send = snd }
 func (s *Service) Store() *store.Store { return s.st }
 func (s *Service) Hub() *hub.Hub       { return s.hb }
 
-// MasterOnline reports whether a MainController is currently connected. When it
-// is not, every node is treated as offline (there is no bus to hear them on).
-func (s *Service) MasterOnline() bool {
+// UplinkConnected reports whether anything -- MainController's application or
+// its bootloader -- is currently attached to the uplink.
+func (s *Service) UplinkConnected() bool {
 	return s.send != nil && s.send.Connected()
+}
+
+// MasterBootloader reports whether the attached MainController is sitting in
+// its bootloader (it can receive a firmware push, but runs no bus).
+func (s *Service) MasterBootloader() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mcBootloader && s.UplinkConnected()
+}
+
+// MasterOnline reports whether a MainController application is currently
+// connected and running the bus. When it is not -- no uplink, or only the
+// bootloader -- every node is treated as offline (there is no bus to hear
+// them on).
+func (s *Service) MasterOnline() bool {
+	return s.UplinkConnected() && !s.MasterBootloader()
 }
 
 // MainControllerFW returns the MainController's running firmware version
@@ -108,17 +129,25 @@ func (s *Service) warnIfUnexpected(id int, module nodelib.Module) {
 
 // OnConnect asks for a fresh roster and re-asserts stored overrides.
 func (s *Service) OnConnect(h nodelib.UplinkHello) {
-	s.hb.SetUplink(true)
 	s.mu.Lock()
 	s.mcFW = int(h.FWVersion)
+	s.mcBootloader = h.FWVersion == 0
+	boot := s.mcBootloader
 	s.mu.Unlock()
+	// After the state above, so a browser that refetches on this event sees it.
+	s.hb.SetUplink(true, boot)
 	s.send.Send(nodelib.Frame{Node: nodelib.NodeMaster, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpGet})
 	s.reassertOverrides(0)
 	s.kickOta() // resume any push that was waiting for the downlink
 }
 
 // OnDisconnect flags the uplink down.
-func (s *Service) OnDisconnect() { s.hb.SetUplink(false) }
+func (s *Service) OnDisconnect() {
+	s.mu.Lock()
+	s.mcBootloader = false
+	s.mu.Unlock()
+	s.hb.SetUplink(false, false)
+}
 
 // OnNodeFrame handles a relayed bus frame.
 func (s *Service) OnNodeFrame(f nodelib.Frame) {

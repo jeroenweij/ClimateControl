@@ -231,3 +231,59 @@ func TestStartOTAMainControllerImageRules(t *testing.T) {
 		t.Fatalf("MC image to node 3: got %v, want ErrOtaTargetMismatch", err)
 	}
 }
+
+// An UplinkHello with fwVersion 0 is the MainController bootloader: the uplink
+// is up and it can be pushed to, but nothing runs the bus, so every bus node
+// must read offline -- and the MC row says so.
+func TestBootloaderHelloTakesBusNodesOffline(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	if err := svc.Store().UpsertNode(ctx, 2, nodelib.ModuleControllerNode, true); err != nil {
+		t.Fatal(err)
+	}
+
+	status := func() (mc FwTarget, node FwTarget) {
+		v, err := svc.FirmwareView(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tg := range v.Targets {
+			switch {
+			case tg.NodeID == 0:
+				mc = tg
+			case tg.NodeID == 2 && tg.Target == "node":
+				node = tg
+			}
+		}
+		return
+	}
+
+	// Application running (non-zero version): master and bus node online.
+	svc.OnConnect(nodelib.UplinkHello{FWVersion: 0x0001})
+	if !svc.MasterOnline() || svc.MasterBootloader() {
+		t.Fatal("app hello: want master online, not bootloader")
+	}
+	mc, node := status()
+	if mc.Status != "online" || !node.Online {
+		t.Fatalf("app: mc=%q node online=%v", mc.Status, node.Online)
+	}
+
+	// Bootloader (version 0): uplink still connected, but not the master.
+	svc.OnConnect(nodelib.UplinkHello{FWVersion: 0})
+	if svc.MasterOnline() || !svc.MasterBootloader() || !svc.UplinkConnected() {
+		t.Fatal("bootloader hello: want uplink up, bootloader, master not online")
+	}
+	mc, node = status()
+	if mc.Status != "bootloader" || !mc.Online || mc.InstalledStr != "?" {
+		t.Errorf("mc row = %+v, want status bootloader, online, version ?", mc)
+	}
+	if node.Online || node.Status == "online" {
+		t.Errorf("bus node still %q/online=%v while the MainController is in its bootloader", node.Status, node.Online)
+	}
+
+	// Disconnect clears it.
+	svc.OnDisconnect()
+	if svc.MasterBootloader() {
+		t.Error("bootloader flag survived a disconnect")
+	}
+}

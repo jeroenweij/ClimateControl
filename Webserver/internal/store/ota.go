@@ -60,6 +60,49 @@ func (s *Store) UpdateOtaJob(ctx context.Context, id int64, state string, lastOf
 	return err
 }
 
+// OtaJobsKept is how many push records are retained; older finished ones are
+// pruned (PruneOtaJobs).
+const OtaJobsKept = 100
+
+// PruneOtaJobs deletes finished (done/error) jobs older than the newest
+// OtaJobsKept records and returns their image paths so the caller can remove
+// the files. A queued or running job is never deleted, however old.
+func (s *Store) PruneOtaJobs(ctx context.Context) ([]string, error) {
+	var cutoff int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM ota_jobs ORDER BY id DESC LIMIT 1 OFFSET ?`, OtaJobsKept-1).Scan(&cutoff)
+	if err == sql.ErrNoRows {
+		return nil, nil // fewer than OtaJobsKept records
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT image_path FROM ota_jobs WHERE id < ? AND state IN ('done','error')`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for rows.Next() {
+		var p sql.NullString
+		if err := rows.Scan(&p); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if p.String != "" {
+			paths = append(paths, p.String)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	_, err = s.db.ExecContext(ctx, `DELETE FROM ota_jobs WHERE id < ? AND state IN ('done','error')`, cutoff)
+	return paths, err
+}
+
 // OtaJob returns one job.
 func (s *Store) OtaJob(ctx context.Context, id int64) (OtaJob, error) {
 	return scanOtaJob(s.db.QueryRowContext(ctx, otaSelect+` WHERE id = ?`, id))

@@ -82,6 +82,7 @@ func run(cfgPath string, log *slog.Logger) error {
 
 	hb := hub.New()
 	svc := service.New(st, hb, log)
+	svc.PruneOta()
 
 	up := uplink.New(token, svc, func(bool) {}, log)
 	svc.SetSender(up)

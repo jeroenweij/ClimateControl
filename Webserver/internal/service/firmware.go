@@ -148,11 +148,15 @@ func (s *Service) FirmwareView(ctx context.Context) (FirmwareView, error) {
 // targetNodeId = 0 (MainController-Server-Link-Spec.md §8).
 func (s *Service) mainControllerTarget(byModule map[string]store.FirmwareImage, pending map[[2]any]string, allowDowngrade bool) FwTarget {
 	mod := nodelib.ModuleMainController.String()
-	online := s.MasterOnline()
+	online := s.UplinkConnected() // the bootloader can be pushed to too
 	fw := s.MainControllerFW()
+	status := boolWord(online, "online", "offline")
+	if s.MasterBootloader() {
+		status = "bootloader"
+	}
 	t := FwTarget{
 		NodeID: 0, Name: "MainController", Module: mod, Target: "node",
-		Status: boolWord(online, "online", "offline"), Online: online,
+		Status: status, Online: online,
 		Installed: fw, InstalledStr: verStr(fw),
 	}
 	img, hasImg := byModule[mod]

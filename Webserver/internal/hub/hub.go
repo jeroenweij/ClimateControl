@@ -33,7 +33,11 @@ type MainEvent struct {
 	Type   string             `json:"type"` // "main"
 	Status nodelib.MainStatus `json:"status"`
 	Online bool               `json:"online"`
-	TS     int64              `json:"ts"`
+	// Bootloader: the uplink is up but it is MainController's bootloader on
+	// the other end, not the running application -- the bus is unmanaged, so
+	// every bus node is offline.
+	Bootloader bool  `json:"bootloader"`
+	TS         int64 `json:"ts"`
 }
 
 // OtaEvent carries firmware-push progress.
@@ -59,6 +63,8 @@ type Hub struct {
 	main     MainEvent
 	subs     map[chan []byte]struct{}
 	uplinkUp bool
+
+	bootloader bool
 }
 
 // New returns an empty hub.
@@ -135,20 +141,24 @@ func (h *Hub) PublishMain(st nodelib.MainStatus, online bool) {
 	h.mu.Lock()
 	h.main = ev
 	h.uplinkUp = online
+	h.bootloader = false // only the running application reports MainStatus
 	h.mu.Unlock()
 	h.broadcast(ev)
 }
 
-// SetUplink records and broadcasts just the socket up/down state.
-func (h *Hub) SetUplink(up bool) {
+// SetUplink records and broadcasts just the socket up/down state, and whether
+// the far end is MainController's bootloader rather than its application.
+func (h *Hub) SetUplink(up, bootloader bool) {
 	h.mu.Lock()
-	changed := h.uplinkUp != up
+	changed := h.uplinkUp != up || h.bootloader != bootloader
 	h.uplinkUp = up
+	h.bootloader = bootloader
 	m := h.main
 	h.mu.Unlock()
 	if changed {
 		m.Type = "main"
 		m.Online = up
+		m.Bootloader = bootloader
 		m.TS = time.Now().UnixMilli()
 		h.broadcast(m)
 	}
@@ -166,16 +176,19 @@ type Snapshot struct {
 	Values   []ValueEvent `json:"values"`
 	Main     MainEvent    `json:"main"`
 	UplinkUp bool         `json:"uplinkUp"`
+	// Bootloader: see MainEvent.Bootloader.
+	Bootloader bool `json:"bootloader"`
 }
 
 // SnapshotJSON returns the marshalled current state.
 func (h *Hub) SnapshotJSON() []byte {
 	h.mu.RLock()
 	snap := Snapshot{
-		Type:     "snapshot",
-		Values:   make([]ValueEvent, 0, len(h.values)),
-		Main:     h.main,
-		UplinkUp: h.uplinkUp,
+		Type:       "snapshot",
+		Values:     make([]ValueEvent, 0, len(h.values)),
+		Main:       h.main,
+		UplinkUp:   h.uplinkUp,
+		Bootloader: h.bootloader,
 	}
 	for _, v := range h.values {
 		snap.Values = append(snap.Values, v)

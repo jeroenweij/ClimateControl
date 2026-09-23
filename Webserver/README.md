@@ -136,7 +136,7 @@ The roster drives the node status shown in the UI and API:
 | status | meaning |
 |---|---|
 | `online` | in the roster and currently reporting on the bus |
-| `offline` | in the roster but not reporting — or **no MainController is connected** (then every node is offline) |
+| `offline` | in the roster but not reporting — or **no MainController is connected**, or it is sitting in its bootloader (then every node is offline) |
 | `unexpected` | seen on the bus but **not** in the roster — a wrong node id, a stray node, or one you still need to add |
 
 Edit the file and `sudo systemctl restart ccserver` to apply changes.
@@ -205,6 +205,9 @@ cycle.
    greyed out otherwise. *Update all* (next to the image) does every eligible
    node of that type. **One push runs at a time** — the rest queue, in the
    *Update queue* table, whether they came from one button or many.
+   The table shows the 25 most recent pushes with a *Show more* button for the
+   rest; the server keeps the last 100 and automatically deletes older
+   finished ones (and their stored image copies).
 
 Each **ControllerNode** has two rows: its own firmware, and its paired
 **Thermostat**'s (pushed over the private ControllerNode↔Thermostat link — that

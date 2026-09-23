@@ -33,7 +33,7 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":       true,
-		"uplinkUp": s.svc.MasterOnline(),
+		"uplinkUp": s.svc.UplinkConnected(),
 	})
 }
 
@@ -495,7 +495,7 @@ func (s *Server) writeEnqueueResult(w http.ResponseWriter, ids []int64, err erro
 }
 
 func (s *Server) handleListOTA(w http.ResponseWriter, r *http.Request) {
-	jobs, err := s.svc.Store().OtaJobs(r.Context(), 50)
+	jobs, err := s.svc.Store().OtaJobs(r.Context(), store.OtaJobsKept)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
