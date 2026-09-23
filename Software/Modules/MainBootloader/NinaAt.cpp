@@ -30,9 +30,8 @@ NinaAt::NinaAt() :
 
 void NinaAt::Init()
 {
-    // NinaCts/NinaRts (PA0/PA1) are USART2's own hardware CTS/RTS alternate
-    // function -- NinaUart::Init() configures and drives them, nothing to do
-    // here (this used to bit-bang NinaRts as a plain GPIO output, which
+    // NinaRts (PA1) is USART2's own hardware RTS alternate function --
+    // NinaUart::Init() configures and drives it, nothing to do here (this used to bit-bang NinaRts as a plain GPIO output, which
     // fought NinaUart::Init()'s AF1 pin config for the same physical pin --
     // see NinaUart.cpp's Init() comment).
     uart.Init(NinaBaud);

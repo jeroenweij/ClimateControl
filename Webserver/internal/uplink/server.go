@@ -29,6 +29,10 @@ type Handler interface {
 	OnPresence(p nodelib.NodePresence)
 	OnMainStatus(s nodelib.MainStatus)
 	OnThermostatStatus(t nodelib.ThermostatStatus)
+
+	// OnOtaFrame is an OtaControl / OtaData frame (0x65/0x66) -- MainController's
+	// own bootloader answering a self-update push.
+	OnOtaFrame(f nodelib.Frame)
 }
 
 // Server accepts one MainController connection at a time.
@@ -240,6 +244,8 @@ func (c *conn) dispatch(f nodelib.Frame, h Handler) {
 		if t, ok := nodelib.ParseThermostatStatus(f.Data); ok {
 			h.OnThermostatStatus(t)
 		}
+	case f.Endpoint == nodelib.EndpointOtaControl || f.Endpoint == nodelib.EndpointOtaData:
+		h.OnOtaFrame(f)
 	case f.Endpoint == nodelib.EndpointKeepalive:
 		c.send(nodelib.Frame{Node: nodelib.NodeMaster, Endpoint: nodelib.EndpointKeepalive, Operation: nodelib.OpReport})
 	case f.Endpoint == nodelib.EndpointUplinkHello:

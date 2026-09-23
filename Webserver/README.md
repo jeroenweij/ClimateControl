@@ -211,9 +211,12 @@ Each **ControllerNode** has two rows: its own firmware, and its paired
 ControllerNode must be running its application, and the link must be up).
 
 The **MainController** is the first row (id `MC`); its version comes from the
-uplink handshake and a push is a self-update (`targetNodeId = 0`). The bus and
-this server link drop while it reboots into its bootloader — the UI asks to
-confirm.
+uplink handshake and a push is a self-update (`targetNodeId = 0`). The server
+parks it in its own bootloader (`SystemControl` to node 0), which reconnects to
+this server over Wi-Fi and receives the image over `OtaControl` / `OtaData`
+(`../Spec/MainController-Server-Link-Spec.md` §5, §8). The bus and this server
+link drop while it reboots — the UI asks to confirm — and the push shows
+*entering bootloader* until the bootloader reconnects (up to two minutes).
 
 **Backup** — the entire state is one SQLite file:
 

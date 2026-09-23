@@ -16,9 +16,9 @@
 using Boot::NinaUart;
 
 // Hardware-owning driver for the on-board NINA-W152 (MainController-Spec.md
-// §5): RESET_NINA GPIO, USART2 with hardware RTS/CTS flow control (NinaUart
-// -- NinaCts/NinaRts are USART2 alternate-function pins, not plain GPIOs;
-// see NinaUart.cpp), and the line parser above. Two operating modes:
+// §5): RESET_NINA GPIO, USART2 with hardware RTS (NinaUart -- NinaRts is a
+// USART2 alternate-function pin, not a plain GPIO; see NinaUart.cpp), and the
+// line parser above. Two operating modes:
 //
 //   - Command mode: one outstanding AT command at a time via SendCommand() /
 //     PollResult(); unsolicited URCs drain through NextEvent() regardless of

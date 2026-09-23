@@ -4,8 +4,11 @@
 
 #include <stdio.h>
 
+#include "Backup.h"
 #include "ImageDescriptor.h"
 #include "Logger.h"
+#include "MemoryMap.h"
+#include "System.h"
 #include "Tick.h"
 
 #include "Secrets.h"
@@ -96,7 +99,9 @@ UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocato
     backoffMs(BackoffInitialMs),
     helloSent(false),
     keepaliveTimer(),
-    linkWatchdog()
+    linkWatchdog(),
+    resetPending(false),
+    resetToBootloader(false)
 {
 }
 
@@ -397,6 +402,11 @@ void UplinkHandler::DrainDataMode()
 
     DrainOutboundQueue();
 
+    if (resetPending)
+    {
+        PerformPendingReset(); // never returns
+    }
+
     if (sawByte)
     {
         linkWatchdog.Start(LinkWatchdogMs);
@@ -437,18 +447,58 @@ void UplinkHandler::EnqueueUplink(const Message& message)
 
 void UplinkHandler::HandleUplinkFrame(const Message& message)
 {
+    // NODE 0 is this MainController, never a bus node -- a relayed-range
+    // endpoint addressed to it is for us, not for the bus.
+    if (message.id.node == 0 && message.id.endpoint == Endpoint::SystemControl)
+    {
+        HandleSelfControl(message);
+        return;
+    }
+
     if (IsRelayedEndpoint(message.id.endpoint))
     {
         master.QueueMessage(message);
         return;
     }
 
-    // Uplink-block frame from the server. Only Keepalive is answered today --
-    // Roster/OtaControl/OtaData handling is future work (Open item,
-    // MainController-Server-Link-Spec.md §11).
+    // Uplink-block frame from the server. Only Keepalive is answered here --
+    // OtaControl/OtaData belong to MainBootloader, never the running app;
+    // Roster Get is an Open item (MainController-Server-Link-Spec.md §11).
     if (message.id.endpoint == Endpoint::Keepalive && message.id.operation == Operation::Get)
     {
         EnqueueUplink(Message(Id(0, Endpoint::Keepalive, Operation::Report)));
+    }
+}
+
+void UplinkHandler::HandleSelfControl(const Message& message)
+{
+    if (message.id.operation != Operation::Set || message.len < 1 || (message.data[0] != 1 && message.data[0] != 2))
+    {
+        EnqueueUplink(Message(Id(0, Endpoint::SystemControl, Operation::Nack)));
+        return;
+    }
+
+    EnqueueUplink(Message(Id(0, Endpoint::SystemControl, Operation::Ack)));
+    resetToBootloader = (message.data[0] == 2);
+    resetPending      = true;
+}
+
+void UplinkHandler::PerformPendingReset()
+{
+    LOG_INFO("Commanded reset (" << (resetToBootloader ? "bootloader" : "app") << ")");
+    if (resetToBootloader)
+    {
+        Hal::Backup::Write(Hal::Backup::Reg::Boot, Board::EnterBootloaderMagic);
+    }
+
+    // The Ack was only queued into the TX ring buffer by DrainOutboundQueue()
+    // -- wait for it to actually leave the UART before the reset kills the
+    // peripheral (same reasoning as Node::PerformPendingReset()).
+    nina.RawUart().FlushTx();
+
+    Hal::System::Reset(); // never returns
+    while (true)
+    {
     }
 }
 

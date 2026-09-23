@@ -11,10 +11,12 @@
 #include "System.h"
 
 #include "EEndpoint.h"
+#include "EFirmware.h"
 #include "Firmware.h"
 
 using Boot::Firmware;
 using NodeLib::Endpoint;
+using NodeLib::FirmwareError;
 using NodeLib::Id;
 using NodeLib::Message;
 using NodeLib::Operation;
@@ -41,17 +43,15 @@ namespace
     // lastError(1) fwVersion(2 LE).
     constexpr uint8_t StatusLen = 8;
 
-    // Local lastError codes (surfaced verbatim to the server).
-    enum : uint8_t
-    {
-        ErrNone        = 0,
-        ErrBadSize     = 1,
-        ErrEraseFailed = 2,
-        ErrProgramFail = 3,
-        ErrOverrun     = 4,
-        ErrCrcMismatch = 5,
-        ErrBadState    = 6,
-    };
+    // lastError codes, surfaced verbatim to the server -- the shared
+    // NodeLib::FirmwareError numbering, so one error vocabulary covers the bus
+    // bootloader and this one.
+    constexpr uint8_t ErrNone        = static_cast<uint8_t>(FirmwareError::None);
+    constexpr uint8_t ErrBadSize     = static_cast<uint8_t>(FirmwareError::BadSize);
+    constexpr uint8_t ErrEraseFailed = static_cast<uint8_t>(FirmwareError::EraseFailed);
+    constexpr uint8_t ErrOverrun     = static_cast<uint8_t>(FirmwareError::Overrun);
+    constexpr uint8_t ErrCrcMismatch = static_cast<uint8_t>(FirmwareError::CrcMismatch);
+    constexpr uint8_t ErrBadState    = static_cast<uint8_t>(FirmwareError::BadState);
 
     uint32_t ReadU32(const uint8_t* const p)
     {

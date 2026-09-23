@@ -58,6 +58,8 @@ const (
 	EndpointNodePresence     Endpoint = 0x62
 	EndpointThermostatStatus Endpoint = 0x63
 	EndpointKeepalive        Endpoint = 0x64
+	EndpointOtaControl       Endpoint = 0x65
+	EndpointOtaData          Endpoint = 0x66
 	EndpointMainStatus       Endpoint = 0x67
 )
 
@@ -89,6 +91,8 @@ var endpointNames = map[Endpoint]string{
 	EndpointNodePresence:       "NodePresence",
 	EndpointThermostatStatus:   "ThermostatStatus",
 	EndpointKeepalive:          "Keepalive",
+	EndpointOtaControl:         "OtaControl",
+	EndpointOtaData:            "OtaData",
 	EndpointMainStatus:         "MainStatus",
 }
 

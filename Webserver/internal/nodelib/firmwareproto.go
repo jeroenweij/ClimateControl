@@ -10,7 +10,8 @@ import (
 // Both endpoints are ordinary relayed bus frames (block 0x10-0x50); driving
 // the OTA sequence is entirely the server's job, matching what a plain bus
 // node's Endpoint::Firmware slave (and a ControllerNode's ThermostatFirmware
-// relay) actually expect -- there is no separate uplink-only OTA protocol.
+// relay) actually expect. MainController's own update uses the uplink-only
+// OtaControl / OtaData pair instead (otacontrol.go).
 type FirmwareOp uint8
 
 const (

@@ -68,13 +68,12 @@ void NinaUart::Init(const uint32_t baudRate)
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->APBENR1 |= RCC_APBENR1_USART2EN;
 
-    // PA0 = USART2_CTS, PA1 = USART2_RTS, PA2 = USART2_TX, PA3 = USART2_RX --
-    // all AF1 (Lib/Board/BoardPins.h's NinaCts/NinaRts/Usart2Tx/Usart2Rx).
-    SetModer(GPIOA, 0, ModeAf);
+    // PA1 = USART2_RTS, PA2 = USART2_TX, PA3 = USART2_RX -- all AF1
+    // (Lib/Board/BoardPins.h's NinaRts/Usart2Tx/Usart2Rx). PA0 (NinaCts) is
+    // deliberately left alone -- see the CR3 comment below.
     SetModer(GPIOA, 1, ModeAf);
     SetModer(GPIOA, 2, ModeAf);
     SetModer(GPIOA, 3, ModeAf);
-    SetAf(GPIOA, 0, 1u);
     SetAf(GPIOA, 1, 1u);
     SetAf(GPIOA, 2, 1u);
     SetAf(GPIOA, 3, 1u);
@@ -83,14 +82,14 @@ void NinaUart::Init(const uint32_t baudRate)
 
     USART2->CR1 = 0;
     USART2->BRR = (SystemCoreClock + baudRate / 2u) / baudRate;
-    // Hardware 4-wire flow control -- NOT USART_CR3_DEM (RS485 driver-
-    // enable): this is a point-to-point link to the NINA module, which
-    // drives its own RTS/CTS in u-connectXpress's default 4-wire mode
-    // (MainController-Server-Link-Spec.md §3). RTSE holds the MCU's own
-    // nRTS (PA1) low only while room remains in the RX ring's hardware
-    // stand-in; CTSE stalls TX (WriteBytes()'s TXE wait below) while NINA's
-    // nRTS (wired to our CTS, PA0) says it isn't ready.
-    USART2->CR3 = USART_CR3_RTSE | USART_CR3_CTSE;
+    // RTSE: the USART itself drives nRTS (PA1) -- low (NINA clear to send)
+    // whenever RDR is empty, which is the same line state the app's NinaAt
+    // holds by hand (Modules/MainController/NinaAt.cpp), plus it throttles
+    // NINA if the ISR ever can't drain RDR in time (a flash erase stalls
+    // instruction fetch). NOT USART_CR3_DEM (RS485 driver-enable), and
+    // deliberately no CTSE: TX is unthrottled, exactly as on the bench-proven
+    // app path, so an unasserted NINA RTS can never hang WriteBytes().
+    USART2->CR3 = USART_CR3_RTSE;
     USART2->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_UE;
 
     // Highest priority (STM32G0's 2 priority bits -> 0..3), same reasoning as

@@ -214,6 +214,17 @@ func (s *Service) OnThermostatStatus(t nodelib.ThermostatStatus) {
 	s.hb.PublishThermostat(int(t.ControllerNodeID), t.LinkUp)
 }
 
+// OnOtaFrame feeds an OtaControl / OtaData frame from MainController's
+// bootloader to the active push driver, if it is a MainController push.
+func (s *Service) OnOtaFrame(f nodelib.Frame) {
+	s.mu.Lock()
+	d := s.ota
+	s.mu.Unlock()
+	if d != nil {
+		d.onOtaFrame(f)
+	}
+}
+
 // onFirmwareReport feeds a relayed Firmware / ThermostatFirmware Report to
 // the active push driver, if this frame belongs to it.
 func (s *Service) onFirmwareReport(f nodelib.Frame) {

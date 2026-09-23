@@ -85,9 +85,15 @@ class UplinkHandler : public NodeLib::INodeHandler
     void DrainDataMode();
     void DrainOutboundQueue(); // writes everything ReceivedMessage() has queued to NINA
     void HandleUplinkFrame(const NodeLib::Message& message);
-    void SendUplinkHello();
-    void SendRoster();
-    void SendKeepalive();
+    // SystemControl addressed to the MainController itself (NODE = 0, never
+    // relayed onto the bus): 1 = reset -> app, 2 = reset -> bootloader.
+    // Acks, then arms resetPending -- the reset itself runs from
+    // DrainDataMode() once the Ack has been written out.
+    void              HandleSelfControl(const NodeLib::Message& message);
+    [[noreturn]] void PerformPendingReset();
+    void              SendUplinkHello();
+    void              SendRoster();
+    void              SendKeepalive();
     // Diffs every node's current active/bootloader state against the
     // snapshot SendRoster() last took and emits a NodePresence Report for
     // anything that changed -- a live update in between Roster's periodic
@@ -137,4 +143,7 @@ class UplinkHandler : public NodeLib::INodeHandler
     bool              helloSent;
     Tools::DelayTimer keepaliveTimer;
     Tools::DelayTimer linkWatchdog;
+
+    bool resetPending;
+    bool resetToBootloader;
 };
