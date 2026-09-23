@@ -127,6 +127,7 @@ namespace Boot
         bool    opReplyNack;
         uint8_t opReplyError;
 
+        Hal::Gpio         activityLed;
         Hal::Gpio         errorLed;
         Tools::DelayTimer heartbeatTimer;
     };

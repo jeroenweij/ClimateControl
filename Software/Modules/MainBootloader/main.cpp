@@ -54,6 +54,7 @@ namespace
 
         while (true)
         {
+            firmware.Loop();
             uplink.Loop();
         }
     }

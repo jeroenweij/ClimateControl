@@ -2,10 +2,12 @@
  * Created by J. Weij
  *************************************************************/
 
+#include "BoardPins.h"
 #include "Crc.h"
 #include "MemoryMap.h"
 
 #include "FakeBackup.h"
+#include "FakeClock.h"
 #include "FakeFlash.h"
 #include "Test.h"
 
@@ -310,4 +312,70 @@ CC_TEST(Firmware, StatusGetReportsExpectedOffsetAndFwVersion)
     CC_CHECK_EQ(reply.data[2], 0);
     CC_CHECK_EQ(reply.data[6], 99); // fwVersion lo
     CC_CHECK_EQ(reply.data[7], 0);
+}
+
+namespace
+{
+    bool LedOn(const Hal::Pin& led)
+    {
+        return (led.port->ODR & led.pin) != 0;
+    }
+} // namespace
+
+CC_TEST(Firmware, HeartbeatBlinksTheActivityLedSoTheBootloaderIsRecognisable)
+{
+    ResetWorld();
+    FakeClock::Reset();
+    Firmware fw;
+    fw.Init();
+    CC_CHECK(!LedOn(Board::ActivityLed));
+
+    fw.Loop(); // heartbeat period not elapsed yet
+    CC_CHECK(!LedOn(Board::ActivityLed));
+
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(LedOn(Board::ActivityLed));
+
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(!LedOn(Board::ActivityLed));
+    CC_CHECK(!LedOn(Board::ErrorLed));
+}
+
+CC_TEST(Firmware, HeartbeatBlinksFasterWhileAnImageIsBeingReceived)
+{
+    ResetWorld();
+    FakeClock::Reset();
+    Firmware fw;
+    fw.Init();
+
+    Message reply;
+    fw.OnControl(MakeBegin(Board::Flash::AppDescriptorOffset + 32 + 4 + 32, 0, 1));
+    fw.PopReply(reply);
+
+    FakeClock::Advance(500); // first tick still uses the idle period, then arms the fast one
+    fw.Loop();
+    const bool afterFirst = LedOn(Board::ActivityLed);
+    FakeClock::Advance(80);
+    fw.Loop();
+    CC_CHECK(LedOn(Board::ActivityLed) != afterFirst);
+}
+
+CC_TEST(Firmware, AFaultStopsTheActivityBlinkAndBlinksTheErrorLedInstead)
+{
+    ResetWorld();
+    FakeClock::Reset();
+    Firmware fw;
+    fw.Init();
+
+    fw.OnControl(MakeBegin(4, 0, 1)); // too small -> Error state
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(LedOn(Board::ErrorLed));
+    CC_CHECK(!LedOn(Board::ActivityLed));
+
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(!LedOn(Board::ErrorLed)); // blinking, not stuck on
 }

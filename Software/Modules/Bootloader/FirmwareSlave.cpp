@@ -110,6 +110,7 @@ FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     opReplyPending(false),
     opReplyNack(false),
     opReplyError(ErrNone),
+    activityLed(Board::ActivityLed, Hal::Gpio::Mode::Output),
     errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
     heartbeatTimer()
 {
@@ -119,6 +120,7 @@ void FirmwareSlave::Init()
 {
     uart.Init(Board::BusBaudRate, module);
     heartbeatTimer.Start(HeartbeatMs);
+    activityLed.Write(false);
     errorLed.Write(false);
 }
 
@@ -527,6 +529,7 @@ void FirmwareSlave::Heartbeat()
     if (heartbeatTimer.Finished())
     {
         errorLed.Write(state == State::Error ? !errorLed.Read() : false);
+        activityLed.Write(state == State::Error ? false : !activityLed.Read());
         heartbeatTimer.Start(state == State::Receiving ? 80 : HeartbeatMs);
     }
 }

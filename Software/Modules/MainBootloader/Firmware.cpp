@@ -23,6 +23,9 @@ using NodeLib::Operation;
 
 namespace
 {
+    constexpr uint32_t HeartbeatMs          = 500;
+    constexpr uint32_t ReceivingHeartbeatMs = 80;
+
     // OtaControl Set payload for ControlOp::Begin: op(1) imageSize(4)
     // imageCrc32(4) fwVersion(2). No module byte -- MainController only ever
     // has the one application slot, unlike the bus's Endpoint::Firmware.
@@ -90,13 +93,27 @@ Firmware::Firmware() :
     partialCommitted(0),
     replyPending(false),
     pendingReply(),
-    errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output)
+    activityLed(Board::ActivityLed, Hal::Gpio::Mode::Output),
+    errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
+    heartbeatTimer()
 {
 }
 
 void Firmware::Init()
 {
+    activityLed.Write(false);
     errorLed.Write(false);
+    heartbeatTimer.Start(HeartbeatMs);
+}
+
+void Firmware::Loop()
+{
+    if (heartbeatTimer.Finished())
+    {
+        errorLed.Write(state == State::Error ? !errorLed.Read() : false);
+        activityLed.Write(state == State::Error ? false : !activityLed.Read());
+        heartbeatTimer.Start(state == State::Receiving ? ReceivingHeartbeatMs : HeartbeatMs);
+    }
 }
 
 bool Firmware::PopReply(Message& out)
@@ -381,7 +398,6 @@ void Firmware::Fault(const uint8_t error)
     // below for Begin/End) actually correlates to the request that failed.
     state     = State::Error;
     lastError = error;
-    errorLed.Write(true);
 }
 
 void Firmware::FaultControl(const uint8_t error)

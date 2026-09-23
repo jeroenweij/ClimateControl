@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "Crc.h"
+#include "DelayTimer.h"
 #include "Flash.h"
 #include "Gpio.h"
 
@@ -32,6 +33,12 @@ namespace Boot
         Firmware();
 
         void Init();
+
+        // Heartbeat LEDs -- how you can tell the unit is in its bootloader:
+        // the activity LED blinks (slowly while idle or bringing the uplink
+        // up, fast while an image is being received); after a fault it stops
+        // and the error LED blinks instead. Call from the super-loop.
+        void Loop();
 
         void OnControl(const NodeLib::Message& m);
         void OnData(const NodeLib::Message& m);
@@ -99,6 +106,8 @@ namespace Boot
         bool             replyPending;
         NodeLib::Message pendingReply;
 
-        Hal::Gpio errorLed;
+        Hal::Gpio         activityLed;
+        Hal::Gpio         errorLed;
+        Tools::DelayTimer heartbeatTimer;
     };
 } // namespace Boot

@@ -35,13 +35,18 @@ void Gpio::Write(const bool value)
     {
         return;
     }
+    // A driven push-pull output reads back its own level on real hardware
+    // (IDR follows ODR), which Read()-then-toggle code such as the
+    // bootloaders' heartbeat LEDs relies on.
     if (value)
     {
         pin.port->ODR |= pin.pin;
+        pin.port->IDR |= pin.pin;
     }
     else
     {
         pin.port->ODR &= ~static_cast<uint32_t>(pin.pin);
+        pin.port->IDR &= ~static_cast<uint32_t>(pin.pin);
     }
 }
 
