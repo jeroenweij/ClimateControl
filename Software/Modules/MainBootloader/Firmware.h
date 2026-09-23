@@ -17,7 +17,7 @@ namespace Boot
     // MainController's own bootloader-side OTA target: erases/programs/
     // verifies the MC's single application slot in response to the server's
     // Endpoint::OtaControl / Endpoint::OtaData uplink messages
-    // (MainController-Server-Link-Spec.md §5, §11 item 6).
+    // (MainController-Server-Link-Spec.md §5, §8 step 7).
     //
     // Point-to-point over NINA (always-on full duplex via UplinkHandler, no
     // RS485 poll/Announce discipline), so unlike Modules/Bootloader/

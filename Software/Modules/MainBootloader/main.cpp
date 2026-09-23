@@ -6,7 +6,7 @@
  * TemperatureNode/Thermostat). MainController has no bus to be OTA'd over
  * while resident here; instead it dials out to the server itself over the
  * on-board NINA-W152, the same uplink the running app uses
- * (MainController-Server-Link-Spec.md §5, §11 item 9).
+ * (MainController-Server-Link-Spec.md §5, §8 step 7).
  *
  * Boot decision (Node-Flash-Layout-and-Bootloader-Spec.md §5):
  *   - Board::EnterBootloaderMagic in backup reg  -> stay resident (app asked)
