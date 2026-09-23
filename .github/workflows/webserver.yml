@@ -1,0 +1,73 @@
+# CI for the Go building server in Webserver/.
+#   check : gofmt, go vet, unit tests with the race detector
+#   build : cross-compile ccserver for the boxes it is deployed on (64-bit and
+#           32-bit ARM Linux, x86-64 Linux)
+name: Webserver
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "Webserver/**"
+      - ".github/workflows/webserver.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "Webserver/**"
+      - ".github/workflows/webserver.yml"
+
+defaults:
+  run:
+    working-directory: Webserver
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: Webserver/go.mod
+          cache-dependency-path: Webserver/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race: the OTA driver and the uplink/hub/service layers are concurrent.
+      - name: go test
+        run: go test -race -timeout 180s ./...
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: arm64, goarm: "" }
+          - { goos: linux, goarch: arm, goarm: "7" }
+          - { goos: linux, goarch: amd64, goarm: "" }
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: Webserver/go.mod
+          cache-dependency-path: Webserver/go.sum
+
+      - name: Build ccserver
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: go build -trimpath -o bin/ccserver-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ccserver
