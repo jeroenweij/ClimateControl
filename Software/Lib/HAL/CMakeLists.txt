@@ -78,3 +78,20 @@ add_library(HalCore STATIC
     ${HAL_CORE_SOURCES}
 )
 configure_hal_target(HalCore)
+
+# Same sources as HalCore, but always -Os regardless of CMAKE_BUILD_TYPE --
+# for Modules/MainBootloader only, which (unlike Modules/Bootloader) needs
+# enough extra logic (NINA bring-up/uplink) that HalCore's Debug-config
+# default optimisation (CMake's implicit -O0 for Debug -- no project-wide
+# CMAKE_CXX_FLAGS_DEBUG override exists) blew the shared 10 KB bootloader
+# partition (Node-Flash-Layout-and-Bootloader-Spec.md §3) by several hundred
+# bytes in Debug even though Release fit comfortably. mainBootloader's own
+# sources already force -Os regardless of build type (its own
+# CMakeLists.txt); this gives the HAL code it calls into the same treatment
+# instead of inheriting whatever -O level the ambient CMAKE_BUILD_TYPE
+# happens to imply.
+add_library(HalCoreOs STATIC
+    ${HAL_CORE_SOURCES}
+)
+configure_hal_target(HalCoreOs)
+target_compile_options(HalCoreOs PRIVATE -Os)

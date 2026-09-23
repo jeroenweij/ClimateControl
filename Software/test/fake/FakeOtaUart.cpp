@@ -52,7 +52,7 @@ void OtaUart::Init(const uint32_t, const uint8_t)
 {
 }
 
-bool OtaUart::Available()
+bool OtaUart::Available() const
 {
     return rxCursor < rxLength;
 }

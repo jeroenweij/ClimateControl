@@ -4,6 +4,8 @@ C++ firmware for an HVAC climate-control system: one central `MainController` pl
 
 See `Spec/` for the full design docs — read those before making architectural changes; this file is a quick orientation, not a substitute.
 
+**Writing/editing specs:** describe the current design only, as a clean reference — not a decision log. Don't write "decided/implemented on <date>", don't say a design "supersedes" or reference what it replaced, don't keep old/rejected designs around as a paper trail. If an old design's rationale still matters, fold it into the current description as plain reasoning, not history. Exception: a doc's own "Open items" section is for tracking real outstanding work (what's not yet done/decided) — that's fine to keep, just state it plainly without the decision-log framing either.
+
 ## Project structure
 
 ```

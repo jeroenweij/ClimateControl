@@ -90,3 +90,4 @@ add_subdirectory(${CC_SW_ROOT}/Modules/Thermostat/test       ${CMAKE_BINARY_DIR}
 add_subdirectory(${CC_SW_ROOT}/Modules/ControllerNode/test  ${CMAKE_BINARY_DIR}/ControllerNode_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/MainController/test  ${CMAKE_BINARY_DIR}/MainController_test)
 add_subdirectory(${CC_SW_ROOT}/Modules/Bootloader/test       ${CMAKE_BINARY_DIR}/Bootloader_test)
+add_subdirectory(${CC_SW_ROOT}/Modules/MainBootloader/test   ${CMAKE_BINARY_DIR}/MainBootloader_test)

@@ -135,7 +135,7 @@ void OtaUart::Init(const uint32_t baudRate, const uint8_t module)
     NVIC_EnableIRQ(irqn);
 }
 
-bool OtaUart::Available()
+bool OtaUart::Available() const
 {
     return rxRing.head != rxRing.tail;
 }

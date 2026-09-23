@@ -46,7 +46,7 @@ namespace Boot
         // module is the ConfigStore module byte (4 = Thermostat -> USART2).
         void Init(const uint32_t baudRate, const uint8_t module);
 
-        bool    Available();
+        bool    Available() const;
         uint8_t Read();
 
         // Blocks until the last byte has left the shift register (so DE has

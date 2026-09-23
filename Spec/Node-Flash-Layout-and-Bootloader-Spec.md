@@ -238,32 +238,33 @@ class ConfigStore
 
 ## 7. Per-board notes
 
-**One bootloader binary, all four boards.** The master and the nodes are updated by different mechanisms, but that does **not** split the bootloader — it branches at runtime on `ConfigStore::Valid()`:
+**Two bootloader binaries.** `Software/Modules/Bootloader` is the board-agnostic RS485 OTA slave for `ControllerNode`/`TemperatureNode`/`Thermostat`. `Software/Modules/MainBootloader` is a separate, MainController-only binary that owns the on-board NINA-W152 directly and updates MainController over the server uplink instead (§7.1) — MainController is the bus master, never a bus slave, so it has no bus to receive a push over and no way to relay a push to itself.
 
-| bootloader is running on | `ConfigStore::Valid()` | stay-resident behaviour |
+| bootloader binary | runs on | stay-resident behaviour |
 |---|---|---|
-| a provisioned `ControllerNode` / `TemperatureNode` | true (has a `NodeId`) | run the RS485 OTA slave loop (§6), addressed at `ConfigStore::NodeId()` |
-| `MainController` | false — the master has no node identity, so no `ConfigRecord` is written for it | passive wait; it updates itself app-assisted over NINA (§7.1), recovery is SWD |
-| an unprovisioned node | false | passive wait; needs the bench (can't do addressed OTA without an address) |
+| `Software/Modules/Bootloader` | a provisioned `ControllerNode` / `TemperatureNode` / `Thermostat` (`ConfigStore::Valid()` true) | run the RS485 OTA slave loop (§6), addressed at `ConfigStore::NodeId()` (or the Thermostat link, see the table below) |
+| `Software/Modules/Bootloader` | an unprovisioned node | passive wait; needs the bench (can't do addressed OTA without an address) |
+| `Software/Modules/MainBootloader` | `MainController` only | bring up the NINA uplink and drive `Firmware`'s erase/write/verify/activate state machine from the server's `OtaControl`/`OtaData` messages (§7.1) |
 
-The same check that decides *"can I be a bus node"* decides *"can I receive OTA over the bus"* — no board-specific code, no compile switch. `main.cpp` is identical on every unit; only the factory `ConfigRecord` (or its absence, on the master) differs.
+`Software/Modules/Bootloader`'s `main.cpp` is identical on every one of those three board types, branching only on `ConfigStore::Valid()`; only the factory `ConfigRecord` (or its absence, on an unprovisioned node) differs. `MainBootloader` is a separate CMake target/image (`Software/Modules/MainBootloader/CMakeLists.txt`) with its own `main.cpp`, `mainBootloader.ld`, and flash-writer (`Firmware.cpp`, the same erase/program/verify state machine as `Bootloader/FirmwareSlave.cpp`, re-plumbed onto the NINA point-to-point transport instead of the RS485 bus's Poll-gated one — see `MainController-Server-Link-Spec.md` §5/§8 step 7 for the wire protocol). Both binaries are flashed to the same 10 KB region (§3); a given unit carries whichever one matches the board it's built for.
 
 | Board | OTA path |
 |---|---|
 | `ControllerNode`, `TemperatureNode` | Main bus, exactly as §6. |
-| `Thermostat` | **Not on the main bus** (`ControllerNode-Thermostat-Link-Spec.md`). This same bootloader binary serves the image over the point-to-point link — `OtaUart` selects USART2 when `ConfigStore::GetModule() == Thermostat`, everything else is unchanged. The paired `ControllerNode` **application** (not its bootloader) is the OTA master on the link, delegated from the main bus via the `ThermostatFirmware` endpoint. Full design: `ControllerNode-Thermostat-Link-Spec.md` §5. |
-| `MainController` | It is the bus master — nothing pushes to it over the bus. Same flash map, same board-agnostic bootloader binary. Normal update path is app-assisted over NINA/Wi-Fi (§7.1); recovery from a failed one is SWD/J-Link on site — acceptable because the MainController is the one physically-accessible unit (screw terminals, enclosure), not a duct-buried node. |
+| `Thermostat` | **Not on the main bus** (`ControllerNode-Thermostat-Link-Spec.md`). `Bootloader`'s binary serves the image over the point-to-point link — `OtaUart` selects USART2 when `ConfigStore::GetModule() == Thermostat`, everything else is unchanged. The paired `ControllerNode` **application** (not its bootloader) is the OTA master on the link, delegated from the main bus via the `ThermostatFirmware` endpoint. Full design: `ControllerNode-Thermostat-Link-Spec.md` §5. |
+| `MainController` | It is the bus master — nothing pushes to it over the bus, and it never relays to itself. `MainBootloader` dials the server directly (§7.1); recovery from a failed one is SWD/J-Link on site — acceptable because the MainController is the one physically-accessible unit (screw terminals, enclosure), not a duct-buried node. |
 
-### 7.1 MainController self-update over NINA (app-assisted)
+### 7.1 MainController self-update over NINA (bootloader-resident)
 
-The bootloader stays dumb and board-agnostic — it does not grow a NINA/AT transport (that would blow the 10 KB budget and the "one binary everywhere" property). Instead the running app, which already carries the full u-connectXpress driver, does the update:
+`Software/Modules/MainBootloader` owns the on-board NINA-W152 directly (`Firmware.h`/`.cpp`, `UplinkHandler.h`/`.cpp`, `NinaAt.h`/`.cpp`, `NinaUart.h`/`.cpp`, `NinaLineParser.h`/`.cpp`) and dials the same server uplink the app uses:
 
-1. App receives the image over the existing uplink `Firmware` (`0x20`) path, addressed to node 0 (`MainController-Server-Link-Spec.md` §8 step 7) — the same relayed-endpoint mechanism used for every other node's OTA, just naming MainController itself.
-2. App stops polling the bus (slaves ride out the gap on their heartbeat/resync), disables interrupts, and runs a **RAM-resident** erase+program routine (`__attribute__((section(".RamFunc")))`) — required because erasing the flash bank stalls instruction fetch for the whole ~40 ms/page, and on the G031 there is only one bank. It programs the 50 KB app slot block-by-block as blocks arrive (no staging area — there is no room for one).
-3. `NVIC_SystemReset()`. On reboot the bootloader CRC-checks the new image (§4) and jumps to it.
-4. **If interrupted:** the half-written app fails its CRC32 check, the bootloader stays resident — but it has no Wi-Fi, so recovery is a J-Link visit. This is the accepted trade for keeping the bootloader small and uniform.
+1. `SystemControl[reset->bootloader]` (or the boot-health "too many failed boots" path) parks the app into the bootloader as usual (§5). `MainBootloader`'s `UplinkHandler` brings NINA up (Wi-Fi join, TCP peer connect, data mode — blocking/sequential is fine here, there is nothing else to attend to without a connection) and sends a fresh `UplinkHello`.
+2. Server → MC (`NODE=0`): `OtaControl[Begin] {imageSize, imageCrc32, fwVersion}` (`MainController-Server-Link-Spec.md` §5). `Firmware::HandleBegin()` erases the 50 KB app slot and replies `Ack`/`Nack` on `OtaControl`.
+3. Server streams `OtaData {byteOffset(2 LE), bytes≤32}` chunks; each is programmed to flash immediately (no RAM staging, mirroring §6.2.1's bus design) and replied to individually on `OtaData` with `Ack`/`Nack {byteOffset, chunkCrc16, programFailed}` — same offset-resume/duplicate-write handling as the bus `Firmware[Write]` protocol.
+4. At `imageSize`: `OtaControl[End]` — whole-image CRC-32 check (§4) against the flashed bytes, replies `Ack`/`Nack`. `OtaControl[Activate]` on success clears the stay-resident magic and resets; the app boots on the new image and reconnects, giving the server a fresh `UplinkHello` with the new `fwVersion`.
+5. **If interrupted** (uplink drop, power loss, NAK'd chunk): the half-written app fails its CRC-32 check on the next boot, the bootloader stays resident and simply reconnects over NINA to retry `Begin` on its own — a J-Link visit is only needed if NINA itself is unreachable (no Wi-Fi credentials, hardware fault), not for the routine "OTA got interrupted" case.
 
-The RAM-resident flash helper lives in `Lib/HAL/Flash` as a `.RamFunc` variant alongside the normal (flash-resident) one the bootloader uses. `UplinkHandler` recognizing `targetNodeId == 0` and writing its own application slot is implementation work, not yet built.
+Flash cost: **~81% of the 10 KB budget in both Release and Debug** (`Lib/HAL/CMakeLists.txt`'s `HalCoreOs`/`Lib/Tools/CMakeLists.txt`'s `ToolsOs` keep the HAL/Tools code MainBootloader links at the same size-optimised level regardless of build type). Kept small mainly by *not* linking `Lib/HAL/Uart` (`NinaUart.h`/`.cpp` is a from-scratch ~100-line ISR-driven driver instead, ~17 KB smaller) and by hand-rolled `AppendStr`/`AppendUInt` AT-command building in place of `snprintf` (pulls in nano's general formatting engine otherwise).
 
 ---
 
@@ -272,3 +273,4 @@ The RAM-resident flash helper lives in `Lib/HAL/Flash` as a `.RamFunc` variant a
 1. **`ConfigRecord.settings[16]`** — is 16 bytes of per-node factory config enough (servo end-stop trim, room id, sensor offset…), or should the record grow to 48/64 bytes? Cheap to size generously now.
 2. **Flash RDP level 1** in production (blocks SWD image readout; reversible only via full mass-erase)? Default: no — revisit only if the image is considered sensitive.
 3. **Ack-timeout and retry-count constants** (§6.2) — the existing timeout logic mostly carries over from before the `Ack`/`Nack` change; revisit its exact value only if real-world use reveals the current budget is miscalibrated.
+4. **`MainBootloader` (§7.1) is not yet bench-verified** — builds and links clean, host-tested (`Firmware`'s erase/write/verify/abort/status logic), but not yet flashed and exercised end-to-end against a real NINA module and server. The server side (`Webserver/`) doesn't speak `OtaControl`/`OtaData` at all yet — see `MainController-Server-Link-Spec.md` §11 item 6.
