@@ -243,4 +243,3 @@ Firmware pushes cost the MC nothing beyond the generic relay it already has — 
 
 1. **`readings` retention** — when and how to downsample stored history.
 2. **Map polygon editor** — whether v1 ships the room-polygon drawing tool or point placement only.
-3. **`CheckNodePresence()` / `SendRoster()` have no firmware-level test coverage** — `UplinkHandler`'s `NodeMaster`-derived roster/presence logic is only checked indirectly, via `NodeMasterTests.cpp`'s coverage of the `NodeActive`/`NodeInBootloader`/`NodeLastContactMs` getters it reads, plus a successful ARM build. `UplinkHandlerTests.cpp` has no fake at the NINA AT/data-mode level yet (its own standing scope note), so nothing exercises the actual diff-and-push behavior or the exact bytes `SendRoster()`/`CheckNodePresence()` put on the wire.

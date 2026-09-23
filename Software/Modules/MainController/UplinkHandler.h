@@ -49,6 +49,11 @@ class UplinkHandler : public NodeLib::INodeHandler
     void ConnectionLost() override;
 
   private:
+    // Host tests reach the roster/presence/frame-handling logic and the
+    // outbound queue directly instead of faking the NINA AT bring-up
+    // (test/UplinkHandlerTests.cpp).
+    friend struct UplinkHandlerTestAccess;
+
     enum class State
     {
         Booting, // just (re)reset -- give the module a moment before probing

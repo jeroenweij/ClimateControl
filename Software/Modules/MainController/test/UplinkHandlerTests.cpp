@@ -22,14 +22,55 @@ using NodeLib::Message;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
-// Deliberately narrow scope: UplinkHandler::Init()/Loop() drive a multi-state
-// NINA AT bring-up (probe / Wi-Fi join / peer connect / data mode) that has
-// no fake at the AT-protocol level yet -- simulating it is a separate,
-// larger undertaking than this feature. What's exercised here is the one
-// piece of new, this-feature-relevant logic: ReceivedMessage() must feed
-// BudgetAllocator::Observe() unconditionally, even with the uplink down
-// (UplinkHandler.cpp's class comment / Damper-Budget-Spec.md §5.4) --
-// regression coverage for that specific ordering, not full uplink coverage.
+// UplinkHandler::Init()/Loop() drive a multi-state NINA AT bring-up (probe /
+// Wi-Fi join / peer connect / data mode) that has no fake at the AT-protocol
+// level, so that state machine itself is not exercised. Everything after it
+// is: UplinkHandlerTestAccess (a friend) calls the private frame handling,
+// SendRoster() and CheckNodePresence() directly and reads back the outbound
+// queue -- the exact Messages that would be framed onto the socket -- against
+// a real NodeMaster driven over the fake bus. Also covered: ReceivedMessage()
+// must feed BudgetAllocator::Observe() unconditionally, even with the uplink
+// down (UplinkHandler.cpp's class comment / Damper-Budget-Spec.md §5.4).
+
+// Friend of UplinkHandler (declared there).
+struct UplinkHandlerTestAccess
+{
+    static void HandleUplinkFrame(UplinkHandler& u, const Message& m)
+    {
+        u.HandleUplinkFrame(m);
+    }
+    static void SendRoster(UplinkHandler& u)
+    {
+        u.SendRoster();
+    }
+    static void CheckNodePresence(UplinkHandler& u)
+    {
+        u.CheckNodePresence();
+    }
+    static uint8_t Queued(const UplinkHandler& u)
+    {
+        return u.outboundQueued;
+    }
+    static const Message& Queue(const UplinkHandler& u, const uint8_t i)
+    {
+        return u.outboundQueue[i];
+    }
+    static void ClearQueue(UplinkHandler& u)
+    {
+        u.outboundQueued = 0;
+    }
+    static bool ResetPending(const UplinkHandler& u)
+    {
+        return u.resetPending;
+    }
+    static bool ResetToBootloader(const UplinkHandler& u)
+    {
+        return u.resetToBootloader;
+    }
+};
+
+using Access = UplinkHandlerTestAccess;
+
 namespace
 {
     const uint32_t discoveryWindowMs = 250;
@@ -136,4 +177,332 @@ CC_TEST(UplinkHandler, ObservesBusTrafficThroughReceivedMessageEvenWithTheUplink
     CC_CHECK(FindBudget(tx, n, 3, p3));
     CC_CHECK_EQ(p2, 100);
     CC_CHECK_EQ(p3, 0);
+}
+
+// --- roster / presence / uplink frame handling -----------------------------
+
+namespace
+{
+    // Node 2 = ControllerNode running its app, node 5 = TemperatureNode
+    // resident in its bootloader; the master is left polling node 2.
+    void TwoNodesUp(NodeMaster& master)
+    {
+        InitAndClearDiscover(master);
+        Announce(2, ConfigStore::Module::ControllerNode);
+        Message b(5, Operation::Announce);
+        b.data[0] = static_cast<uint8_t>(ConfigStore::Module::TemperatureNode);
+        b.data[1] = 1; // bl-idle
+        b.len     = 2;
+        bus::InjectFrame(b);
+        StartPolling(master);
+        // The master's own Discover/Poll frames are not under test.
+        FakeBus::Reset();
+    }
+
+    uint32_t ReadU32(const uint8_t* const p)
+    {
+        return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+    }
+
+    bool IsRosterEntry(
+        const Message& m,
+        const uint8_t  nodeId,
+        const uint8_t  module,
+        const uint8_t  bootloader,
+        const uint32_t lastMs)
+    {
+        return m.id.node == 0 && m.id.endpoint == Endpoint::Roster && m.id.operation == Operation::Report &&
+            m.len == 7 && m.data[0] == nodeId && m.data[1] == module && m.data[2] == bootloader &&
+            ReadU32(&m.data[3]) == lastMs;
+    }
+
+    bool IsRosterEnd(const Message& m)
+    {
+        return m.id.endpoint == Endpoint::Roster && m.id.operation == Operation::Report && m.len == 1 &&
+            m.data[0] == 0xFF;
+    }
+
+    bool IsPresence(
+        const Message& m,
+        const uint8_t  nodeId,
+        const uint8_t  module,
+        const uint8_t  up,
+        const uint8_t  bootloader)
+    {
+        return m.id.node == 0 && m.id.endpoint == Endpoint::NodePresence && m.id.operation == Operation::Report &&
+            m.len == 4 && m.data[0] == nodeId && m.data[1] == module && m.data[2] == up && m.data[3] == bootloader;
+    }
+
+    // Pending-poll node's Done flushes whatever the uplink queued for the bus;
+    // returns how many frames of 'endpoint' went out.
+    int BusFramesFor(NodeMaster& master, const Endpoint endpoint)
+    {
+        FlushQueuedBudgets(master, 2);
+        Message   tx[16];
+        const int n     = bus::DecodeTx(tx, 16);
+        int       count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (tx[i].id.endpoint == endpoint)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+} // namespace
+
+CC_TEST(UplinkHandler, SendRosterListsActiveNodesThenTerminates)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Access::SendRoster(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 3);
+    CC_CHECK(IsRosterEntry(Access::Queue(uplink, 0), 2, 1, 0, master.NodeLastContactMs(2)));
+    CC_CHECK(IsRosterEntry(Access::Queue(uplink, 1), 5, 2, 1, master.NodeLastContactMs(5))); // bootloader bit set
+    CC_CHECK(IsRosterEnd(Access::Queue(uplink, 2)));
+}
+
+CC_TEST(UplinkHandler, SendRosterWithNoNodesIsJustTheTerminator)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+
+    Access::SendRoster(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(IsRosterEnd(Access::Queue(uplink, 0)));
+}
+
+CC_TEST(UplinkHandler, SendRosterSkipsNodesThatDroppedOut)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    master.Loop(); // Flush -> sends the first Poll (to node 2)
+    FakeClock::Advance(200); // pollTimeoutMs -- polled node 2 never answered
+    master.Loop();
+    CC_CHECK(!master.NodeActive(2));
+
+    Access::SendRoster(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 2); // node 5 + terminator
+    CC_CHECK_EQ(Access::Queue(uplink, 0).data[0], 5);
+    CC_CHECK(IsRosterEnd(Access::Queue(uplink, 1)));
+}
+
+CC_TEST(UplinkHandler, PresenceIsQuietRightAfterARosterDump)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Access::SendRoster(uplink); // seeds the snapshot with what it just reported
+    Access::ClearQueue(uplink);
+    Access::CheckNodePresence(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 0);
+}
+
+CC_TEST(UplinkHandler, PresenceReportsANodeDroppingOutOnce)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+    Access::SendRoster(uplink);
+    Access::ClearQueue(uplink);
+
+    master.Loop(); // Flush -> sends the first Poll (to node 2)
+    FakeClock::Advance(200);
+    master.Loop(); // node 2 misses its poll
+    Access::CheckNodePresence(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(IsPresence(Access::Queue(uplink, 0), 2, 1, 0, 0)); // up = 0
+
+    Access::CheckNodePresence(uplink); // nothing further changed
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+}
+
+CC_TEST(UplinkHandler, PresenceReportsANodeJoiningAndABootloaderTransition)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+    Access::SendRoster(uplink);
+    Access::ClearQueue(uplink);
+
+    // Node 5 comes back up in its app, and a brand-new node 7 appears.
+    Announce(5, ConfigStore::Module::TemperatureNode);
+    Announce(7, ConfigStore::Module::ControllerNode);
+    master.Loop();
+    Access::CheckNodePresence(uplink);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK(IsPresence(Access::Queue(uplink, 0), 5, 2, 1, 0)); // still up, bootloader bit cleared
+    CC_CHECK(IsPresence(Access::Queue(uplink, 1), 7, 1, 1, 0)); // joined
+}
+
+CC_TEST(UplinkHandler, RosterGetSendsTheDumpAgainAndReseedsPresence)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::Roster, Operation::Get)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 3);
+    CC_CHECK(IsRosterEntry(Access::Queue(uplink, 0), 2, 1, 0, master.NodeLastContactMs(2)));
+    CC_CHECK(IsRosterEntry(Access::Queue(uplink, 1), 5, 2, 1, master.NodeLastContactMs(5)));
+    CC_CHECK(IsRosterEnd(Access::Queue(uplink, 2)));
+
+    Access::ClearQueue(uplink);
+    Access::CheckNodePresence(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 0); // the dump was the current truth
+}
+
+CC_TEST(UplinkHandler, KeepaliveGetIsAnswered)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::Keepalive, Operation::Get)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(Access::Queue(uplink, 0).id.endpoint == Endpoint::Keepalive);
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Report);
+}
+
+CC_TEST(UplinkHandler, RelayedEndpointsForABusNodeGoOntoTheBus)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Message set(Id(2, Endpoint::DamperTarget, Operation::Set));
+    set.data[0] = 50;
+    set.len     = 1;
+    Access::HandleUplinkFrame(uplink, set);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 0); // nothing answered on the uplink
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::DamperTarget), 1);
+}
+
+CC_TEST(UplinkHandler, SystemControlForTheMainControllerIsHandledHereNotRelayed)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Message toBootloader(Id(0, Endpoint::SystemControl, Operation::Set));
+    toBootloader.data[0] = 2;
+    toBootloader.len     = 1;
+    Access::HandleUplinkFrame(uplink, toBootloader);
+
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(Access::Queue(uplink, 0).id.endpoint == Endpoint::SystemControl);
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Ack);
+    CC_CHECK(Access::ResetPending(uplink));
+    CC_CHECK(Access::ResetToBootloader(uplink));
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemControl), 0); // never reached the bus
+}
+
+CC_TEST(UplinkHandler, SystemControlResetToAppDoesNotSetTheBootloaderMagic)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+
+    Message toApp(Id(0, Endpoint::SystemControl, Operation::Set));
+    toApp.data[0] = 1;
+    toApp.len     = 1;
+    Access::HandleUplinkFrame(uplink, toApp);
+
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Ack);
+    CC_CHECK(Access::ResetPending(uplink));
+    CC_CHECK(!Access::ResetToBootloader(uplink));
+}
+
+CC_TEST(UplinkHandler, SystemControlWithAnUnknownValueOrVerbIsNackedWithoutResetting)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+
+    Message identify(Id(0, Endpoint::SystemControl, Operation::Set));
+    identify.data[0] = 3; // a bus-node command the MainController does not implement
+    identify.len     = 1;
+    Access::HandleUplinkFrame(uplink, identify);
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::SystemControl, Operation::Get)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Nack);
+    CC_CHECK(Access::Queue(uplink, 1).id.operation == Operation::Nack);
+    CC_CHECK(!Access::ResetPending(uplink));
+}
+
+CC_TEST(UplinkHandler, SystemControlForABusNodeIsStillRelayed)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    Message reset(Id(2, Endpoint::SystemControl, Operation::Set));
+    reset.data[0] = 2;
+    reset.len     = 1;
+    Access::HandleUplinkFrame(uplink, reset);
+
+    CC_CHECK(!Access::ResetPending(uplink)); // the MainController itself is untouched
+    CC_CHECK_EQ(Access::Queued(uplink), 0);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemControl), 1);
+}
+
+CC_TEST(UplinkHandler, OtaFramesAreIgnoredByTheRunningApp)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+
+    Message begin(Id(0, Endpoint::OtaControl, Operation::Set));
+    begin.data[0] = 1;
+    begin.len     = 1;
+    Access::HandleUplinkFrame(uplink, begin);
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::OtaData, Operation::Set)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 0);
 }
