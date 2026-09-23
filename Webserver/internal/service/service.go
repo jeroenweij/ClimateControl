@@ -127,7 +127,9 @@ func (s *Service) warnIfUnexpected(id int, module nodelib.Module) {
 
 // --- uplink.Handler --------------------------------------------------------
 
-// OnConnect asks for a fresh roster and re-asserts stored overrides.
+// OnConnect notes what is attached and re-asserts stored overrides. The
+// MainController application pushes its roster unsolicited right after the
+// hello, so none is requested here.
 func (s *Service) OnConnect(h nodelib.UplinkHello) {
 	s.mu.Lock()
 	s.mcFW = int(h.FWVersion)
@@ -136,7 +138,6 @@ func (s *Service) OnConnect(h nodelib.UplinkHello) {
 	s.mu.Unlock()
 	// After the state above, so a browser that refetches on this event sees it.
 	s.hb.SetUplink(true, boot)
-	s.send.Send(nodelib.Frame{Node: nodelib.NodeMaster, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpGet})
 	s.reassertOverrides(0)
 	s.kickOta() // resume any push that was waiting for the downlink
 }

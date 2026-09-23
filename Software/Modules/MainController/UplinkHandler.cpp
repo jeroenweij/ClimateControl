@@ -461,12 +461,16 @@ void UplinkHandler::HandleUplinkFrame(const Message& message)
         return;
     }
 
-    // Uplink-block frame from the server. Only Keepalive is answered here --
-    // OtaControl/OtaData belong to MainBootloader, never the running app;
-    // Roster Get is an Open item (MainController-Server-Link-Spec.md §11).
+    // Uplink-block frame from the server: Keepalive and an on-demand Roster
+    // refresh are answered here. OtaControl/OtaData belong to MainBootloader,
+    // never the running app.
     if (message.id.endpoint == Endpoint::Keepalive && message.id.operation == Operation::Get)
     {
         EnqueueUplink(Message(Id(0, Endpoint::Keepalive, Operation::Report)));
+    }
+    else if (message.id.endpoint == Endpoint::Roster && message.id.operation == Operation::Get)
+    {
+        SendRoster();
     }
 }
 
