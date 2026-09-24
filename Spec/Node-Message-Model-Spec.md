@@ -69,7 +69,7 @@ enum class Endpoint : uint8_t
     DiagRxCounters = 0x50,  // RO  rxFrames(4) crcErrors(4) resyncs(4) interByteTimeouts(4)   -- from Frame
     DiagTxCounters = 0x51,  // RO  txFrames(4) queueDrops(4)                                    -- from Node
     DiagLastError  = 0x52,  // RO  code(1) uptimeAtFault(4) context(2)                           -- from ErrorHandler
-    DiagLog        = 0x53,  // RO  Get -> Report the oldest buffered log line ("<level>: <message>", ≤ 32 chars, one bus message); empty when drained; a leading "~ <n> lost" line means the ring overflowed
+    DiagLog        = 0x53,  // RO  Get -> Report the oldest buffered log line: uptimeSec(3 LE) + "<level>: <message>" (≤ 32 chars, so 35 B = MAX_DATA); no text = drained, uptime is "now"; a leading "~ <n> lost" line means the ring overflowed
     DiagReset      = 0x54,  // WO  Set -> clear the counters
 };
 ```
@@ -142,7 +142,7 @@ One handler per node. `NodeLib` intercepts and fully handles three endpoint bloc
 | `Transport` | the master/slave state machine |
 | `System*` | `ConfigStore` (module, uid), the app image descriptor (fwVersion), a `Node` uptime/error tally; `SystemControl` reset via the backup-register handoff in `Node-Flash-Layout-and-Bootloader-Spec.md` §5 |
 | `Firmware` (`0x20` only) | the OTA path — app running: persist the enter-bootloader flag + reset; bootloader: the transfer. `ThermostatFirmware` (`0x22`) is **not** intercepted — it reaches the ControllerNode's handler, which relays it over the link (`ControllerNode-Thermostat-Link-Spec.md` §5.4). |
-| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains `Tools::LogRing` — 10 lines × 32 characters (320 B) that every `LOG_*` macro feeds, oldest overwritten first, one line per `Get` |
+| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains `Tools::LogRing` — 10 lines × 32 characters (320 B) that every `LOG_*` macro feeds, oldest overwritten first, one line per `Get`, each stamped with the node uptime it was logged at |
 
 The module's handler only ever receives its own application / `Room` endpoints (plus `ThermostatFirmware` on the ControllerNode):
 

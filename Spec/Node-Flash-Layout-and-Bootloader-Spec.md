@@ -256,7 +256,7 @@ class ConfigStore
 
 ### 7.1 MainController self-update over NINA (bootloader-resident)
 
-`Software/Modules/MainBootloader` owns the on-board NINA-W152 directly (`Firmware.h`/`.cpp`, `UplinkHandler.h`/`.cpp`, `NinaAt.h`/`.cpp`, `NinaUart.h`/`.cpp`, `NinaLineParser.h`/`.cpp`) and dials the same server uplink the app uses:
+`Software/Modules/MainBootloader` owns the on-board NINA-W152 directly (`Firmware.h`/`.cpp`, `UplinkHandler.h`/`.cpp`, `NinaUart.h`/`.cpp`) and dials the same server uplink the app uses. The connection itself is `Lib/Nina`'s `NinaLink` (`NinaAt`, `NinaLineParser`, `NinaLink`) — the very driver the application runs, over a `NinaPort` (here `NinaUart`, in the app `HalNinaPort`) — so bring-up, reconnect, keepalive and watchdog behave identically in both images:
 
 1. `SystemControl[reset->bootloader]` (or the boot-health "too many failed boots" path) parks the app into the bootloader as usual (§5). `MainBootloader`'s `UplinkHandler` brings NINA up (Wi-Fi join, TCP peer connect, data mode — blocking/sequential is fine here, there is nothing else to attend to without a connection) and sends a fresh `UplinkHello`.
 2. Server → MC (`NODE=0`): `OtaControl[Begin] {imageSize, imageCrc32, fwVersion}` (`MainController-Server-Link-Spec.md` §5). `Firmware::HandleBegin()` erases the 50 KB app slot and replies `Ack`/`Nack` on `OtaControl`.
@@ -264,7 +264,7 @@ class ConfigStore
 4. At `imageSize`: `OtaControl[End]` — whole-image CRC-32 check (§4) against the flashed bytes, replies `Ack`/`Nack`. `OtaControl[Activate]` on success clears the stay-resident magic and resets; the app boots on the new image and reconnects, giving the server a fresh `UplinkHello` with the new `fwVersion`.
 5. **If interrupted** (uplink drop, power loss, NAK'd chunk): the half-written app fails its CRC-32 check on the next boot, the bootloader stays resident and simply reconnects over NINA to retry `Begin` on its own — a J-Link visit is only needed if NINA itself is unreachable (no Wi-Fi credentials, hardware fault), not for the routine "OTA got interrupted" case.
 
-Flash cost: **~81% of the 10 KB budget in both Release and Debug** (`Lib/HAL/CMakeLists.txt`'s `HalCoreOs`/`Lib/Tools/CMakeLists.txt`'s `ToolsOs` keep the HAL/Tools code MainBootloader links at the same size-optimised level regardless of build type). Kept small mainly by *not* linking `Lib/HAL/Uart` (`NinaUart.h`/`.cpp` is a from-scratch ~100-line ISR-driven driver instead, ~17 KB smaller) and by hand-rolled `AppendStr`/`AppendUInt` AT-command building in place of `snprintf` (pulls in nano's general formatting engine otherwise).
+Flash cost: **~89% of the 10 KB budget in both Release and Debug** (`Lib/HAL/CMakeLists.txt`'s `HalCoreOs`/`Lib/Tools/CMakeLists.txt`'s `ToolsOs` keep the HAL/Tools code MainBootloader links at the same size-optimised level regardless of build type). Kept small mainly by *not* linking `Lib/HAL/Uart` (`NinaUart.h`/`.cpp` is a from-scratch ~100-line ISR-driven driver instead, ~17 KB smaller) and by hand-rolled `AppendStr`/`AppendUInt` AT-command building in place of `snprintf` (pulls in nano's general formatting engine otherwise).
 
 ---
 

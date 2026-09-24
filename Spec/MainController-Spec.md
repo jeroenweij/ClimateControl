@@ -65,7 +65,7 @@ u-blox **NINA-W152** (Wi-Fi b/g/n + BT, integrated PIFA antenna) on **USART2**, 
 | UART_TXD/RXD | header H1 (shared with USART2) | firmware update via AT or bootloader; hold the STM32 in reset (NRST on the Tag-Connect) to drive H1 from a PC adapter |
 | ANT (13) | leave open (or to GND) | W152 = internal antenna. Module in a board corner, antenna edge to the board edge, no copper on any layer under the antenna keep-out, ≥10 mm from P1 / RJ45 / electrolytics / the buck node, plastic enclosure only |
 
-**Consequence:** both USARTs are committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). Bit-bang `Tools::Logger` on PA4/PA5/PC15 or accept no console.
+**Consequence:** both USARTs are committed (USART1 = bus, USART2 = NINA) → no hardware debug console on this board (LPUART1 also lands on PA2/PA3 on TSSOP20). The log is pushed to the server over the uplink instead (`MainController-Server-Link-Spec.md` §5.1), with an optional SEGGER RTT sink for the bench.
 
 Firmware baseline is u-connectXpress **6.4.1-001**; factory/sample units may ship on much older firmware and should be updated via s-center before deployment. Wi-Fi station join and a TCP connection to the server's uplink port have both been verified end-to-end against real hardware — command sequence in `MainController-Server-Link-Spec.md` §3.
 

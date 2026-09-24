@@ -22,6 +22,7 @@ ClimateControl/
     │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL (Uart/Gpio/Crc/Flash/Backup/Tick/System/OneWire) — the only place ST driver headers get included
     │   ├── Board/           # BoardPins.h (pin map) + MemoryMap.h / ImageDescriptor.h (flash layout) — header-only
     │   ├── Tools/           # DelayTimer + Logger — shared helpers
+    │   ├── Nina/            # NINA-W152 driver shared by MainController and MainBootloader (NinaAt/NinaLineParser/NinaLink over a NinaPort)
     │   ├── Startup/         # shared startup_stm32g031xx.s + syscalls.c
     │   └── NodeLib/          # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore
     └── Modules/
