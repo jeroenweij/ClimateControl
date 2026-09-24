@@ -273,9 +273,9 @@ func TestMainControllerPushRetriesALostChunk(t *testing.T) {
 // one-second tick.
 func fastOtaTimers(t *testing.T) {
 	t.Helper()
-	w, r := otaWriteWait, otaMainResumeWait
-	otaWriteWait, otaMainResumeWait = 30*time.Millisecond, 8*time.Second
-	t.Cleanup(func() { otaWriteWait, otaMainResumeWait = w, r })
+	w, r := otaWriteWait, otaResumeWait
+	otaWriteWait, otaResumeWait = 30*time.Millisecond, 8*time.Second
+	t.Cleanup(func() { otaWriteWait, otaResumeWait = w, r })
 }
 
 func TestMainControllerPushResumesAfterALinkStall(t *testing.T) {
@@ -335,7 +335,7 @@ func TestMainControllerPushStartsOverWhenTheBootloaderLostItsState(t *testing.T)
 
 func TestMainControllerPushFailsWhenTheLinkNeverComesBack(t *testing.T) {
 	fastOtaTimers(t)
-	otaMainResumeWait = 1500 * time.Millisecond
+	otaResumeWait = 1500 * time.Millisecond
 	mc := &mcBootloader{silentAt: 2}
 	svc, _ := newTestService(t)
 	mc.svc = svc

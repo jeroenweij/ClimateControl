@@ -46,6 +46,20 @@ const (
 // otaWriteWait is a var only so tests can shrink it.
 var otaWriteWait = 3 * time.Second
 
+// How long a transfer waits for the uplink to come back after it goes quiet
+// mid-write: the MainController notices within ~20 s (an unanswered keepalive),
+// resets the NINA and reconnects in ~10 s. A var only so tests can shrink it.
+var otaResumeWait = 120 * time.Second
+
+// After this many status probes that actually went out, unanswered, a bus
+// node is presumed to have restarted into its application (which never sends
+// a bootloader status) and is sent back into the bootloader. Generous on
+// purpose: probes are counted while the server still thinks the uplink is up,
+// which covers the ~20 s the MainController needs to notice a stalled module
+// plus a reconnect that can take 25 s -- a node whose bootloader is merely
+// waiting behind that must not be restarted from zero.
+var otaNodeReenterAfter = 90
+
 // StartOTA validates the uploaded image and records a job. Only one push runs
 // at a time; every other job waits in the queue (state "queued") and the driver
 // picks the next one up as soon as the current push finishes. Both a single
@@ -397,6 +411,7 @@ func (d *otaDriver) run() {
 	}
 	d.progress("writing", 0)
 
+	d.resume = d.resumeNode
 	offset, ok := d.writeImage(d.endpoint(), nodelib.EncodeFirmwareWrite)
 	if !ok {
 		return
@@ -554,6 +569,89 @@ func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, c
 		d.progress("writing", offset)
 	}
 	return offset, true
+}
+
+// resumeNode is writeImage's answer, for a bus node (or the Thermostat behind
+// a ControllerNode), to a chunk that went unanswered through every retry. The
+// usual cause is the uplink going quiet: the MainController resets its NINA
+// and reconnects, while the node -- on the bus, untouched -- keeps everything
+// it has received. So wait for the link, ask the node's bootloader where it is
+// and carry on from the offset it names. A bootloader with no transfer (it
+// restarted) is sent Begin again and the image starts over; a node that never
+// answers is presumed to have booted its application and is sent back into
+// the bootloader first. Returns the offset to continue from; when it returns
+// false the job has already been ended.
+func (d *otaDriver) resumeNode(offset int) (int, bool) {
+	d.progress("reconnecting", offset)
+	d.drainReplies()
+
+	deadline := time.After(otaResumeWait)
+	ticker := time.NewTicker(otaBootPoll)
+	defer ticker.Stop()
+	probes := 0
+	for {
+		select {
+		case r := <-d.reports:
+			probes = 0
+			switch r.State {
+			case nodelib.BlReceiving:
+				next := int(r.ExpectedOffset)
+				if next > len(d.image) {
+					d.done("error", "node reports an impossible resume offset", offset)
+					return 0, false
+				}
+				d.drainReplies()
+				d.progress("writing", next)
+				return next, true
+			case nodelib.BlError:
+				d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), offset)
+				return 0, false
+			default:
+				return d.restartNodePush()
+			}
+		case <-ticker.C:
+			if !d.svc.send.SendGet(d.nodeID, d.endpoint()) {
+				continue // link down: nothing went out, so nothing to wait for
+			}
+			probes++
+			if probes >= otaNodeReenterAfter && d.target != "thermostat" {
+				probes = 0
+				d.progress("entering bootloader", 0)
+				if !d.enterBootloader() {
+					d.done("error", "node did not answer after the link was lost", offset)
+					return 0, false
+				}
+				return d.restartNodePush()
+			}
+		case <-deadline:
+			d.done("error", "node did not answer after the link was lost", offset)
+			return 0, false
+		}
+	}
+}
+
+// restartNodePush sends Begin again to a bootloader that holds no transfer
+// and waits for it to start receiving; the image then goes from offset 0.
+func (d *otaDriver) restartNodePush() (int, bool) {
+	d.progress("erasing", 0)
+	if d.target == "thermostat" {
+		// Force: the ControllerNode must not skip this as an already-current no-op.
+		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, true))
+	} else {
+		d.sendSet(nodelib.EncodeFirmwareBegin(d.module, uint32(len(d.image)), d.crc32, d.fw))
+	}
+	r, ok := d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlReceiving)
+	if !ok {
+		d.done("error", "node did not enter bootloader / begin", 0)
+		return 0, false
+	}
+	if r.State == nodelib.BlError {
+		d.done("error", "node reported error: "+nodelib.FirmwareErrorName(r.LastError), 0)
+		return 0, false
+	}
+	d.drainReplies()
+	d.progress("writing", 0)
+	return 0, true
 }
 
 // writeImageWindowed is writeImage with several chunks in flight (go-back-N):

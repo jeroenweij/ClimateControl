@@ -16,11 +16,6 @@ const otaMainBootWait = 120 * time.Second
 // window's worth of resends.
 const otaMainWindow = 4
 
-// How long a transfer waits for the uplink to come back after it goes quiet
-// mid-write: the MainController notices within ~20 s (an unanswered keepalive),
-// resets the NINA and reconnects in ~10 s. A var only so tests can shrink it.
-var otaMainResumeWait = 120 * time.Second
-
 // runMainController drives a MainController self-update. MainController is
 // the bus master with no relay target for itself, so instead of the bus
 // Firmware sequence it is parked in its own bootloader (SystemControl to
@@ -74,7 +69,7 @@ func (d *otaDriver) resumeMainController(offset int) (int, bool) {
 	d.progress("reconnecting", offset)
 	d.drainReplies()
 
-	deadline := time.After(otaMainResumeWait)
+	deadline := time.After(otaResumeWait)
 	ticker := time.NewTicker(otaBootPoll)
 	defer ticker.Stop()
 	for {
