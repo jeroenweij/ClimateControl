@@ -131,6 +131,10 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn) {
 	s.h.OnConnect(hello)
 
 	go c.writeLoop()
+	for _, f := range c.pending {
+		c.dispatch(f, s.h)
+	}
+	c.pending = nil
 	c.readLoop(s.h)
 
 	s.mu.Lock()
@@ -165,6 +169,12 @@ type conn struct {
 	out  chan []byte
 	done chan struct{}
 	once sync.Once
+
+	// Frames that arrived in the same read as the UplinkHello (the MainController
+	// sends its roster right behind it and the module usually delivers both as
+	// one segment). The deframer has already consumed them, so they are held
+	// here and dispatched once the connection is live.
+	pending []nodelib.Frame
 }
 
 func newConn(nc net.Conn, log *slog.Logger) *conn {
@@ -192,20 +202,24 @@ func (c *conn) readHello(token [16]byte) (nodelib.UplinkHello, error) {
 		if err != nil {
 			return nodelib.UplinkHello{}, err
 		}
-		for _, f := range c.df.Push(buf[:n]) {
-			if f.Endpoint != nodelib.EndpointUplinkHello || f.Operation != nodelib.OpReport {
-				return nodelib.UplinkHello{}, errors.New("first frame is not UplinkHello Report")
-			}
-			hello, ok := nodelib.ParseUplinkHello(f.Data)
-			if !ok {
-				return nodelib.UplinkHello{}, errors.New("short UplinkHello")
-			}
-			if hello.AuthToken != token {
-				return nodelib.UplinkHello{}, errors.New("auth token mismatch")
-			}
-			_ = c.nc.SetReadDeadline(time.Time{})
-			return hello, nil
+		frames := c.df.Push(buf[:n])
+		if len(frames) == 0 {
+			continue
 		}
+		f := frames[0]
+		if f.Endpoint != nodelib.EndpointUplinkHello || f.Operation != nodelib.OpReport {
+			return nodelib.UplinkHello{}, errors.New("first frame is not UplinkHello Report")
+		}
+		hello, ok := nodelib.ParseUplinkHello(f.Data)
+		if !ok {
+			return nodelib.UplinkHello{}, errors.New("short UplinkHello")
+		}
+		if hello.AuthToken != token {
+			return nodelib.UplinkHello{}, errors.New("auth token mismatch")
+		}
+		_ = c.nc.SetReadDeadline(time.Time{})
+		c.pending = frames[1:]
+		return hello, nil
 	}
 }
 
