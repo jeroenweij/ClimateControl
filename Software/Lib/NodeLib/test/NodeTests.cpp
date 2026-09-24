@@ -355,10 +355,15 @@ CC_TEST(Node, DiagLogDrainsBufferedLogLinesOnePerGetThenReportsEmpty)
     Node node;
     node.Init();
     Tools::LogRing::Clear(); // drop whatever Init() logged
+    FakeClock::Set(7000);
     Tools::LogRing::Push("I", "first line");
+    FakeClock::Set(9000);
     Tools::LogRing::Push("W", "second line");
+    FakeClock::Set(21000);
 
-    const char* const expected[] = {"I: first line", "W: second line"};
+    // Report = uptimeSec(3 LE) + text; text-less means drained, uptime = now.
+    const char* const expected[]       = {"I: first line", "W: second line"};
+    const uint8_t     expectedUptime[] = {7, 9, 21};
     for (int i = 0; i < 3; i++)
     {
         FakeBus::Reset();
@@ -369,14 +374,17 @@ CC_TEST(Node, DiagLogDrainsBufferedLogLinesOnePerGetThenReportsEmpty)
         const int n = bus::DecodeTx(tx, 8);
         int       idx;
         CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Report, &idx));
+        CC_CHECK_EQ(tx[idx].data[0], expectedUptime[i]);
+        CC_CHECK_EQ(tx[idx].data[1], 0);
+        CC_CHECK_EQ(tx[idx].data[2], 0);
         if (i < 2)
         {
-            CC_CHECK_EQ(tx[idx].len, strlen(expected[i]));
-            CC_CHECK(memcmp(tx[idx].data, expected[i], tx[idx].len) == 0);
+            CC_CHECK_EQ(tx[idx].len, 3 + strlen(expected[i]));
+            CC_CHECK(memcmp(&tx[idx].data[3], expected[i], tx[idx].len - 3) == 0);
         }
         else
         {
-            CC_CHECK_EQ(tx[idx].len, 0); // drained
+            CC_CHECK_EQ(tx[idx].len, 3); // drained
         }
     }
 }
@@ -396,7 +404,8 @@ CC_TEST(Node, DiagLogFitsOneBusMessageEvenForAnOverlongLogLine)
     const int n = bus::DecodeTx(tx, 8);
     int       idx;
     CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Report, &idx));
-    CC_CHECK_EQ(tx[idx].len, Tools::LogRing::LineSize);
+    CC_CHECK_EQ(tx[idx].len, 3 + Tools::LogRing::LineSize);
+    CC_CHECK(tx[idx].len <= NodeLib::MAX_DATA);
 }
 
 CC_TEST(Node, DiagLogNacksAnythingButGet)
@@ -411,4 +420,37 @@ CC_TEST(Node, DiagLogNacksAnythingButGet)
     Message   tx[8];
     const int n = bus::DecodeTx(tx, 8);
     CC_CHECK(FindMessage(tx, n, Endpoint::DiagLog, Operation::Nack, nullptr));
+}
+
+CC_TEST(Node, AnsweringDiscoveryLogsIntoTheDiagLogRingOncePerSweep)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+    Tools::LogRing::Clear();
+
+    for (int i = 0; i < 3; i++) // three discovery sweeps
+    {
+        bus::InjectFrame(Message(NodeLib::BROADCAST_NODE, Operation::Discover));
+        node.Loop();
+    }
+
+    // The Announce went out ...
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    int       idx;
+    CC_CHECK(FindMessage(tx, n, Endpoint::Transport, Operation::Announce, &idx));
+
+    // ... and each sweep left "Handle discover" then "Return Announce" in the
+    // ring, oldest first, each short enough for one DiagLog message.
+    CC_CHECK_EQ(Tools::LogRing::Buffered(), 6);
+    const char* const expected[] = {"I: Handle discover", "I: Return Announce"};
+    for (int i = 0; i < 6; i++)
+    {
+        uint8_t      line[Tools::LogRing::LineSize];
+        uint32_t     at;
+        const size_t len = Tools::LogRing::Pop(line, sizeof(line), at);
+        CC_CHECK_EQ(len, strlen(expected[i % 2]));
+        CC_CHECK(memcmp(line, expected[i % 2], len) == 0);
+    }
 }

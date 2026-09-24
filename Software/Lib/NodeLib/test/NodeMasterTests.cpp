@@ -39,7 +39,7 @@ namespace
     }
 
     // Announce from a slave currently resident in the bootloader: data[1] is
-    // its (always-nonzero) bootloader state, per Node.cpp's HandlePollRequest
+    // its (always-nonzero) bootloader state, per Node.cpp's HandleDiscoverRequest
     // / Boot::FirmwareSlave::SendAnnounce shape.
     void AnnounceFromBootloader(const uint8_t nodeId, const uint8_t module)
     {

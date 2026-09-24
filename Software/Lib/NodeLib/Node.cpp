@@ -169,7 +169,7 @@ void Node::HandleMessage(const Message& m)
     // operation, before the address match.
     if (m.id.operation == Operation::Discover)
     {
-        HandlePollRequest();
+        HandleDiscoverRequest();
         return;
     }
 
@@ -404,10 +404,17 @@ void Node::HandleDiagnosticsMessage(const Message& m)
                 break;
             }
             // The oldest buffered log line (Tools::LogRing, fed by every
-            // LOG_* macro), one per Get; an empty Report means drained.
-            uint8_t      line[Tools::LogRing::LineSize];
-            const size_t length = Tools::LogRing::Pop(line, sizeof(line));
-            SendReport(Endpoint::DiagLog, line, static_cast<uint8_t>(length));
+            // LOG_* macro), one per Get: uptimeSec(3 LE) then the text. A
+            // Report with no text means drained, and its uptime is "now" on
+            // the node's clock -- so the reader can turn each line's uptime
+            // into how long ago it was logged.
+            uint8_t      payload[3 + Tools::LogRing::LineSize];
+            uint32_t     uptimeSec = 0;
+            const size_t length    = Tools::LogRing::Pop(&payload[3], Tools::LogRing::LineSize, uptimeSec);
+            payload[0]             = static_cast<uint8_t>(uptimeSec);
+            payload[1]             = static_cast<uint8_t>(uptimeSec >> 8);
+            payload[2]             = static_cast<uint8_t>(uptimeSec >> 16);
+            SendReport(Endpoint::DiagLog, payload, static_cast<uint8_t>(3 + length));
             break;
         }
 
@@ -553,9 +560,9 @@ void Node::flushQueue()
     }
 }
 
-void Node::HandlePollRequest()
+void Node::HandleDiscoverRequest()
 {
-    LOG_INFO("Handle poll request");
+    LOG_INFO("Handle discover");
     if (nodeId != masterNodeId)
     {
         // Announce carries the module type (data[0]) so one discovery sweep

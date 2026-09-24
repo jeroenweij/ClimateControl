@@ -2,6 +2,8 @@
  * Created by J. Weij
  *************************************************************/
 
+#include <string.h>
+
 #include "Crc.h"
 #include "Frame.h"
 #include "Uart.h"
@@ -12,6 +14,7 @@
 
 using NodeLib::Endpoint;
 using NodeLib::Frame;
+using NodeLib::Id;
 using NodeLib::MAX_DATA;
 using NodeLib::Message;
 using NodeLib::Operation;
@@ -169,4 +172,60 @@ CC_TEST(Frame, InterByteTimeoutResyncsAWedgedParser)
     frame.Write(uart, Message(6, Operation::Done));
     CC_CHECK(FeedAll(frame, FakeBus::Tx(), FakeBus::TxLen(), rx));
     CC_CHECK_EQ(rx.id.node, 6);
+}
+
+CC_TEST(Frame, EncodeProducesTheBytesWriteQueuesAndTheDecoderAcceptsThem)
+{
+    FakeBus::Reset();
+    FakeClock::Reset();
+    Hal::Crc  crc;
+    Frame     frame(crc);
+    Hal::Uart uart;
+
+    Message m(Id(3, Endpoint::DamperTarget, Operation::Set));
+    m.data[0] = 0x2A;
+    m.data[1] = 0x07;
+    m.len     = 2;
+
+    uint8_t      encoded[Frame::MaxFrameBytes];
+    const size_t n = frame.Encode(m, encoded);
+    CC_CHECK_EQ(n, 2 + 1 + 3 + 2 + 2);
+    CC_CHECK_EQ(encoded[0], 0xEE);
+    CC_CHECK_EQ(encoded[1], 0x42);
+    CC_CHECK_EQ(encoded[2], 2); // LEN counts DATA only
+
+    frame.Write(uart, m);
+    CC_CHECK_EQ(FakeBus::TxLen(), n);
+    CC_CHECK(memcmp(FakeBus::Tx(), encoded, n) == 0);
+
+    Frame   rx(crc);
+    Message decoded;
+    bool    got = false;
+    for (size_t i = 0; i < n; i++)
+    {
+        got = rx.FeedByte(encoded[i], decoded);
+    }
+    CC_CHECK(got);
+    CC_CHECK(decoded.id == m.id);
+    CC_CHECK_EQ(decoded.len, 2);
+    CC_CHECK_EQ(decoded.data[0], 0x2A);
+}
+
+CC_TEST(Frame, EncodeHandlesTheLongestPayload)
+{
+    FakeBus::Reset();
+    FakeClock::Reset();
+    Hal::Crc crc;
+    Frame    frame(crc);
+
+    Message m(Id(1, Endpoint::Firmware, Operation::Set));
+    for (uint8_t i = 0; i < NodeLib::MAX_DATA; i++)
+    {
+        m.data[i] = i;
+    }
+    m.len = NodeLib::MAX_DATA;
+
+    uint8_t      encoded[Frame::MaxFrameBytes];
+    const size_t n = frame.Encode(m, encoded);
+    CC_CHECK_EQ(n, Frame::MaxFrameBytes);
 }

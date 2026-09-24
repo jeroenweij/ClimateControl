@@ -149,36 +149,36 @@ bool Frame::FeedByte(const uint8_t byte, Message& message)
     return false;
 }
 
-bool Frame::Write(Hal::Uart& uart, const Message& message) const
+size_t Frame::Encode(const Message& message, uint8_t* const out) const
 {
-    uint8_t headerAndDataBuffer[3 + MAX_DATA];
-    headerAndDataBuffer[0] = message.id.node;
-    headerAndDataBuffer[1] = static_cast<uint8_t>(message.id.endpoint);
-    headerAndDataBuffer[2] = static_cast<uint8_t>(message.id.operation);
+    out[0] = frameStart[0];
+    out[1] = frameStart[1];
+    out[2] = message.len;
+    out[3] = message.id.node;
+    out[4] = static_cast<uint8_t>(message.id.endpoint);
+    out[5] = static_cast<uint8_t>(message.id.operation);
     for (uint8_t i = 0; i < message.len; i++)
     {
-        headerAndDataBuffer[3 + i] = message.data[i];
+        out[6 + i] = message.data[i];
     }
 
     const uint8_t  headerAndDataLen = static_cast<uint8_t>(3 + message.len);
-    const uint16_t computedCrc      = crc.Compute(headerAndDataBuffer, headerAndDataLen);
+    const uint16_t computedCrc      = crc.Compute(&out[3], headerAndDataLen);
 
+    size_t index = static_cast<size_t>(3 + headerAndDataLen);
+    out[index++] = static_cast<uint8_t>(computedCrc & 0xFF);
+    out[index++] = static_cast<uint8_t>(computedCrc >> 8);
+    return index;
+}
+
+bool Frame::Write(Hal::Uart& uart, const Message& message) const
+{
     // Built into one buffer and queued with a single WriteBytes() call so the
     // whole frame is enqueued atomically -- Hal::Uart::WriteBytes() rejects
-    // (queues nothing) rather than partially accept, so four separate calls
-    // here could leave a truncated, unparseable frame sitting in the ring
-    // buffer if a later call didn't fit.
-    uint8_t wireBytes[sizeof(frameStart) + 1 + 3 + MAX_DATA + 2];
-    size_t  index      = 0;
-    wireBytes[index++] = frameStart[0];
-    wireBytes[index++] = frameStart[1];
-    wireBytes[index++] = message.len;
-    for (uint8_t i = 0; i < headerAndDataLen; i++)
-    {
-        wireBytes[index++] = headerAndDataBuffer[i];
-    }
-    wireBytes[index++] = static_cast<uint8_t>(computedCrc & 0xFF);
-    wireBytes[index++] = static_cast<uint8_t>(computedCrc >> 8);
-
-    return uart.WriteBytes(wireBytes, index);
+    // (queues nothing) rather than partially accept, so several separate calls
+    // could leave a truncated, unparseable frame sitting in the ring buffer if
+    // a later call didn't fit.
+    uint8_t      wireBytes[MaxFrameBytes];
+    const size_t length = Encode(message, wireBytes);
+    return uart.WriteBytes(wireBytes, length);
 }

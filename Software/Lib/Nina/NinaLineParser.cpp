@@ -33,8 +33,10 @@ namespace
     };
 
     // Table-driven so ClassifyLine emits one compare loop instead of one
-    // inlined StartsWith() per event code.
+    // inlined StartsWith() per event code -- this file is also compiled into
+    // the 10 KB MainBootloader.
     const EventPrefix eventPrefixes[] = {
+        {"+UUWLE", NinaLineParser::Event::LinkUp},
         {"+UUWLD", NinaLineParser::Event::LinkDown},
         {"+UUNU", NinaLineParser::Event::NetworkUp},
         {"+UUND", NinaLineParser::Event::NetworkDown},
@@ -57,6 +59,12 @@ NinaLineParser::NinaLineParser() :
 void NinaLineParser::Reset()
 {
     lineLength = 0;
+    eventHead  = 0;
+    eventCount = 0;
+}
+
+void NinaLineParser::ClearEvents()
+{
     eventHead  = 0;
     eventCount = 0;
 }

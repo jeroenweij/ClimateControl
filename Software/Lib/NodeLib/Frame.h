@@ -30,6 +30,9 @@ namespace NodeLib
     class Frame
     {
       public:
+        // SYNC(2) LEN(1) NODE ENDPOINT OPERATION(3) DATA(MAX_DATA) CRC16(2)
+        static const size_t MaxFrameBytes = 2 + 1 + 3 + MAX_DATA + 2;
+
         Frame(Hal::Crc& crc);
 
         // Feed one received byte into the parser. Returns true once a complete,
@@ -41,6 +44,13 @@ namespace NodeLib
         // when no byte has arrived, so the inter-byte timeout (spec §5) can fire
         // and resync a wedged parser.
         void Update();
+
+        // Serialises 'message' into 'out' -- SYNC LEN NODE ENDPOINT OPERATION
+        // DATA CRC16, the v2 wire format -- and returns the byte count (at most
+        // MaxFrameBytes). No hardware involved besides the CRC unit, so
+        // anything that can push bytes (a Hal::Uart, the bootloader's own
+        // NinaUart, a test fake) can transmit a frame with it.
+        size_t Encode(const Message& message, uint8_t* const out) const;
 
         // Returns false if the underlying Hal::Uart::WriteBytes() rejected the
         // frame (its TX ring buffer didn't have room) -- queues nothing on

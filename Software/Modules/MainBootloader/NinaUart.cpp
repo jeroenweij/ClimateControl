@@ -27,8 +27,9 @@ namespace
 
     // RX ring buffer, ISR-fed -- see NinaUart.h's class comment for why a
     // poll-only receiver isn't enough. Sized comfortably over one NodeLib
-    // frame (2 sync + 1 len + 3 header + 32 data + 2 crc = 40 bytes).
-    constexpr size_t rxBufferSize = 64;
+    // frame (2 sync + 1 len + 3 header + 32 data + 2 crc = 40 bytes): room for
+    // a few of them, since the server sends OTA chunks several at a time.
+    constexpr size_t rxBufferSize = 128;
     struct RxRing
     {
         uint8_t         buffer[rxBufferSize];

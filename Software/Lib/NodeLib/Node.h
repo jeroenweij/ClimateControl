@@ -87,7 +87,7 @@ namespace NodeLib
         int           messagesQueued;
 
       private:
-        void HandlePollRequest();
+        void HandleDiscoverRequest();
         void HandleMessage(const Message& m);
         void HandleInternalMessage(const Message& m);
 

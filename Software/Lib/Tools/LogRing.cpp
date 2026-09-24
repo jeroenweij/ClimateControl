@@ -3,14 +3,16 @@
  *************************************************************/
 
 #include "LogRing.h"
+#include "Tick.h"
 
 namespace
 {
-    char    lines[Tools::LogRing::Lines][Tools::LogRing::LineSize];
-    uint8_t lengths[Tools::LogRing::Lines];
-    uint8_t head; // oldest unread line
-    uint8_t count; // buffered lines
-    uint8_t lost; // lines overwritten since the marker was last returned (saturates)
+    char     lines[Tools::LogRing::Lines][Tools::LogRing::LineSize];
+    uint8_t  lengths[Tools::LogRing::Lines];
+    uint32_t stamps[Tools::LogRing::Lines]; // uptime seconds when logged
+    uint8_t  head; // oldest unread line
+    uint8_t  count; // buffered lines
+    uint8_t  lost; // lines overwritten since the marker was last returned (saturates)
 
     // "~ <n> lost" into out; returns the length.
     size_t FormatLost(uint8_t* const out, const uint8_t n)
@@ -64,11 +66,14 @@ void Tools::LogRing::Push(const char* const level, const char* const msg)
         lines[slot][n++] = *p;
     }
     lengths[slot] = static_cast<uint8_t>(n);
+    stamps[slot]  = Hal::Tick::Millis() / 1000u;
     count++;
 }
 
-size_t Tools::LogRing::Pop(uint8_t* const out, const size_t cap)
+size_t Tools::LogRing::Pop(uint8_t* const out, const size_t cap, uint32_t& uptimeSec)
 {
+    uptimeSec = Hal::Tick::Millis() / 1000u;
+
     if (lost > 0 && cap >= 12) // "~ 255 lost" is 10 bytes
     {
         const size_t n = FormatLost(out, lost);
@@ -81,6 +86,7 @@ size_t Tools::LogRing::Pop(uint8_t* const out, const size_t cap)
         return 0;
     }
 
+    uptimeSec      = stamps[head];
     const size_t n = lengths[head] < cap ? lengths[head] : cap;
     for (size_t i = 0; i < n; i++)
     {

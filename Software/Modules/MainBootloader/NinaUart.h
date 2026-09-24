@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "NinaPort.h"
+
 namespace Boot
 {
     // Minimal USART2 driver for the on-board NINA-W152 link only -- plain
@@ -22,14 +24,17 @@ namespace Boot
     // lands while the caller is off doing something else for a stretch (a
     // multi-page flash erase/program run being the main one here too), with
     // nothing deeper than the single-byte hardware RDR to hold it.
-    class NinaUart
+    class NinaUart : public NinaPort
     {
       public:
-        void Init(const uint32_t baudRate);
+        void Init(const uint32_t baudRate) override;
 
-        bool    Available() const;
-        uint8_t ReadByte();
+        bool    Available() const override;
+        uint8_t ReadByte() override;
 
-        void WriteBytes(const uint8_t* const data, const size_t len);
+        void WriteBytes(const uint8_t* const data, const size_t len) override;
+
+        // WriteBytes() already waits for the last byte to leave the shifter.
+        void Flush() override {}
     };
 } // namespace Boot

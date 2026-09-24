@@ -4,6 +4,7 @@
 
 #include <string.h>
 
+#include "FakeClock.h"
 #include "LogRing.h"
 #include "Logger.h"
 #include "Test.h"
@@ -17,7 +18,8 @@ namespace
     bool NextLine(char* const out)
     {
         uint8_t      buf[LineSize + 8];
-        const size_t n = Tools::LogRing::Pop(buf, sizeof(buf));
+        uint32_t     at;
+        const size_t n = Tools::LogRing::Pop(buf, sizeof(buf), at);
         memcpy(out, buf, n);
         out[n] = '\0';
         return n != 0;
@@ -43,8 +45,9 @@ CC_TEST(LogRing, ReadsBackWhatWasPushedOldestFirst)
 CC_TEST(LogRing, EmptyRingReturnsNothing)
 {
     Tools::LogRing::Clear();
-    uint8_t buf[LineSize];
-    CC_CHECK_EQ(Tools::LogRing::Pop(buf, sizeof(buf)), 0);
+    uint8_t  buf[LineSize];
+    uint32_t at;
+    CC_CHECK_EQ(Tools::LogRing::Pop(buf, sizeof(buf), at), 0);
 }
 
 CC_TEST(LogRing, LinesAreTruncatedToOneBusMessage)
@@ -65,7 +68,8 @@ CC_TEST(LogRing, PopRespectsTheCallersBuffer)
     Tools::LogRing::Clear();
     Tools::LogRing::Push("I", "hello world");
     uint8_t      buf[4];
-    const size_t n = Tools::LogRing::Pop(buf, sizeof(buf));
+    uint32_t     at;
+    const size_t n = Tools::LogRing::Pop(buf, sizeof(buf), at);
     CC_CHECK_EQ(n, 4);
     CC_CHECK(memcmp(buf, "I: h", 4) == 0);
 }
@@ -125,4 +129,38 @@ CC_TEST(LogRing, LogMacrosFeedTheRing)
     CC_CHECK(strcmp(line, "W: careful") == 0);
     CC_CHECK(NextLine(line));
     CC_CHECK(strcmp(line, "E: bad") == 0);
+}
+
+CC_TEST(LogRing, LinesCarryTheUptimeTheyWereLoggedAtAndAnEmptyPopReportsNow)
+{
+    FakeClock::Reset();
+    Tools::LogRing::Clear();
+
+    FakeClock::Advance(3000);
+    Tools::LogRing::Push("I", "early"); // 3 s
+    FakeClock::Advance(12000);
+    Tools::LogRing::Push("I", "later"); // 15 s
+    FakeClock::Advance(20500); // now 35.5 s
+
+    uint8_t  buf[LineSize];
+    uint32_t at = 99;
+    CC_CHECK_EQ(Tools::LogRing::Pop(buf, sizeof(buf), at), 8); // "I: early"
+    CC_CHECK_EQ(at, 3);
+    CC_CHECK_EQ(Tools::LogRing::Pop(buf, sizeof(buf), at), 8); // "I: later"
+    CC_CHECK_EQ(at, 15);
+    CC_CHECK_EQ(Tools::LogRing::Pop(buf, sizeof(buf), at), 0); // drained: 'at' is now
+    CC_CHECK_EQ(at, 35);
+}
+
+CC_TEST(LogRing, LogDebugReachesTheRingOnlyInDebugBuilds)
+{
+    Tools::LogRing::Clear();
+    LOG_DEBUG("dbg " << 1);
+#ifdef DEBUG
+    char line[LineSize + 8];
+    CC_CHECK(NextLine(line));
+    CC_CHECK(strcmp(line, "D: dbg 1") == 0);
+#else
+    CC_CHECK_EQ(Tools::LogRing::Buffered(), 0); // compiled out entirely
+#endif
 }

@@ -36,6 +36,9 @@ class NinaLineParser
     LineResult FeedByte(const uint8_t byte);
 
     void Reset();
+    // Drops queued events (and only those): what a module said before a
+    // restart must not be mistaken for what it says after.
+    void ClearEvents();
 
     // Value from the most recently seen "+UDCP:<n>" line (AT+UDCP's peer
     // handle). -1 if none seen yet.

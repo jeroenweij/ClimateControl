@@ -14,8 +14,9 @@ namespace Tools
     // Endpoint::DiagLog (Node-Message-Model-Spec.md §3) -- so a node's log can
     // be read remotely, not only from its debug UART.
     //
-    // Each line is truncated to LineSize characters so it always fits one bus
-    // message. Fixed storage, no heap. Single-context: Push() and Pop() are
+    // Each line is truncated to LineSize characters and stamped with the node's
+    // uptime in seconds when it was logged, so the reader can place a backlog
+    // in time. Fixed storage, no heap. Single-context: Push() and Pop() are
     // both called from the super-loop, never from an interrupt.
     namespace LogRing
     {
@@ -27,10 +28,11 @@ namespace Tools
         void Push(const char* const level, const char* const msg);
 
         // Copies the oldest unread line into 'out' (at most 'cap' bytes, no
-        // terminator) and returns its length; 0 when there is nothing to read.
+        // terminator), sets 'uptimeSec' to when it was logged, and returns its
+        // length; 0 when there is nothing to read (then 'uptimeSec' is now).
         // If lines were overwritten since the last read, a single
         // "~ <n> lost" line is returned first.
-        size_t Pop(uint8_t* const out, const size_t cap);
+        size_t Pop(uint8_t* const out, const size_t cap, uint32_t& uptimeSec);
 
         // Lines currently buffered (a pending "lost" marker is not counted).
         uint8_t Buffered();

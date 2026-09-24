@@ -106,7 +106,7 @@ namespace NodeLib
         int                   pendingPollNode;
 
         // A node only ever announces in reply to a Discover broadcast (see
-        // Node::HandlePollRequest()) -- it never self-announces on power-up --
+        // Node::HandleDiscoverRequest()) -- it never self-announces on power-up --
         // so a node plugged in after the initial DetectNodes() in Init() would
         // otherwise stay invisible forever. Re-run DetectNodes() on this
         // cadence to pick up newly plugged nodes.

@@ -8,16 +8,14 @@
 
 #include "NinaAt.h"
 
-using Hal::UartPin;
-
 namespace
 {
     const uint32_t NinaBaud = 115200;
 }
 
-NinaAt::NinaAt() :
+NinaAt::NinaAt(NinaPort& port) :
+    port(port),
     ninaReset(Board::NinaReset, Hal::Gpio::Mode::OpenDrain),
-    uart(),
     parser(),
     dataMode(false),
     commandPending(false),
@@ -30,22 +28,16 @@ NinaAt::NinaAt() :
 
 void NinaAt::Init()
 {
-    // NinaRts (PA1) is USART2's own hardware RTS alternate function --
-    // NinaUart::Init() configures and drives it, nothing to do here (this used to bit-bang NinaRts as a plain GPIO output, which
-    // fought NinaUart::Init()'s AF1 pin config for the same physical pin --
-    // see NinaUart.cpp's Init() comment).
-    uart.Init(NinaBaud);
-
+    port.Init(NinaBaud);
     PulseReset();
 }
 
 void NinaAt::PulseReset()
 {
     // Active-low, open-drain; >=50 us low per the module's datasheet
-    // (MainController-Spec.md §5). Async -- see the resetPending/resetTimer
-    // comment in NinaAt.h -- Loop() releases it once resetPulseMs elapses.
-    // The 100 ms margin is generous but no longer costs anything: nothing
-    // else here blocks waiting for it.
+    // (MainController-Spec.md §5). Async -- Loop() releases it once
+    // resetPulseMs elapses. The 100 ms margin is generous but costs nothing:
+    // nothing else here blocks waiting for it.
     const uint32_t resetPulseMs = 100;
 
     ninaReset.Write(false);
@@ -71,9 +63,9 @@ void NinaAt::Loop()
         return; // caller drains raw bytes itself
     }
 
-    while (uart.Available())
+    while (port.Available())
     {
-        const NinaLineParser::LineResult lineResult = parser.FeedByte(uart.ReadByte());
+        const NinaLineParser::LineResult lineResult = parser.FeedByte(port.ReadByte());
         if (commandPending && lineResult != NinaLineParser::LineResult::None)
         {
             pendingResult  = (lineResult == NinaLineParser::LineResult::Ok) ? Result::Ok : Result::Error;
@@ -95,8 +87,8 @@ bool NinaAt::SendCommand(const char* const command, const uint32_t timeoutMs)
         return false;
     }
 
-    uart.WriteBytes(reinterpret_cast<const uint8_t*>(command), strlen(command));
-    uart.WriteBytes(reinterpret_cast<const uint8_t*>("\r\n"), 2);
+    port.WriteBytes(reinterpret_cast<const uint8_t*>(command), strlen(command));
+    port.WriteBytes(reinterpret_cast<const uint8_t*>("\r\n"), 2);
 
     commandPending = true;
     pendingResult  = Result::Pending;
@@ -119,6 +111,11 @@ bool NinaAt::NextEvent(Event& event)
     return parser.NextEvent(event);
 }
 
+void NinaAt::DiscardEvents()
+{
+    parser.ClearEvents();
+}
+
 void NinaAt::EnterDataMode()
 {
     dataMode = true;
@@ -131,15 +128,20 @@ bool NinaAt::InDataMode() const
 
 bool NinaAt::Available() const
 {
-    return uart.Available();
+    return port.Available();
 }
 
 uint8_t NinaAt::ReadByte()
 {
-    return uart.ReadByte();
+    return port.ReadByte();
 }
 
 void NinaAt::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    uart.WriteBytes(data, len);
+    port.WriteBytes(data, len);
+}
+
+void NinaAt::Flush()
+{
+    port.Flush();
 }

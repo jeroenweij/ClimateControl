@@ -4,20 +4,19 @@
 
 #pragma once
 
-#include "Crc.h"
-#include "DelayTimer.h"
-
-#include "Frame.h"
 #include "INodeHandler.h"
 #include "NodeMaster.h"
 
+#include "NinaLink.h"
+
 #include "BudgetAllocator.h"
-#include "NinaAt.h"
+#include "HalNinaPort.h"
 
 // MainController's bridge to the server over the on-board NINA-W152
-// (MainController-Server-Link-Spec.md). Owns the NINA AT engine, brings the
-// module up through Wi-Fi join and the uplink TCP peer, then relays NodeLib
-// frames verbatim in both directions once in data mode:
+// (MainController-Server-Link-Spec.md). The connection itself -- Wi-Fi join,
+// the TCP peer, keepalive and watchdog -- is a NinaLink (Lib/Nina); this class
+// is the application's side of it, relaying NodeLib frames verbatim in both
+// directions once the uplink is up:
 //   - bus -> uplink: registered as the NodeMaster's INodeHandler, so every
 //     frame NodeMaster sees reaches ReceivedMessage() (NodeMaster.cpp already
 //     forwards there for anything past its own Transport bookkeeping).
@@ -37,7 +36,7 @@
 // Entirely non-blocking -- Loop() does at most one AT command's worth of
 // progress per call, ticked from the same super-loop as NodeMaster::Loop()
 // (MainController-Server-Link-Spec.md §3).
-class UplinkHandler : public NodeLib::INodeHandler
+class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
 {
   public:
     UplinkHandler(NodeLib::NodeMaster& master, BudgetAllocator& budgetAllocator);
@@ -45,80 +44,48 @@ class UplinkHandler : public NodeLib::INodeHandler
     void Init();
     void Loop();
 
+    // NodeLib::INodeHandler
     void ReceivedMessage(const NodeLib::Message& message) override;
     void ConnectionLost() override;
 
+    // NinaLinkHandler
+    void BuildHello(NodeLib::Message& hello) override;
+    void OnFrame(const NodeLib::Message& message) override;
+    void OnConnected() override;
+    void BeforeFrames() override;
+    void AfterFrames() override;
+
   private:
     // Host tests reach the roster/presence/frame-handling logic and the
-    // outbound queue directly instead of faking the NINA AT bring-up
-    // (test/UplinkHandlerTests.cpp).
+    // outbound queue directly (test/UplinkHandlerTests.cpp).
     friend struct UplinkHandlerTestAccess;
 
-    enum class State
-    {
-        Booting, // just (re)reset -- give the module a moment before probing
-        ProbingAt,
-        ConfiguringSsid,
-        ConfiguringAuth,
-        ConfiguringPsk,
-        ActivatingWifi,
-        WaitingNetworkUp,
-        NetworkUpSettle, // +UUNU fires before the module can reliably open a peer -- AT+UDCP right after it errors (see UplinkHandler.cpp's NetworkUpSettleMs comment)
-        ConnectingPeer,
-        WaitingPeerConnected,
-        EnteringDataMode,
-        DataModeSettle, // u-connectXpress needs >=50 ms after ATO's OK before the first data-mode byte
-        DataMode,
-        Backoff,
-    };
-
-    void TransitionTo(const State next);
-    void Fail(); // retries exhausted -> backoff and retry the whole bring-up from Booting
-
-    // Issues 'command' the first time this is called after a state change,
-    // then polls it to completion. Ok/Error/Timeout once resolved (and ready
-    // for the next state's command), Pending while still in flight.
-    NinaAt::Result RunCommand(const char* const command, const uint32_t timeoutMs);
-
-    // A real serial link occasionally drops or delays one response -- a
-    // single Timeout/Error shouldn't nuke the whole bring-up. Retries the
-    // current state's command (commandSent is already false by the time this
-    // is called, so the next Loop() just resends it) up to maxAttemptsPerState
-    // times before giving up via Fail().
-    void HandleCommandFailure();
-
-    void DrainDataMode();
-    void DrainOutboundQueue(); // writes everything ReceivedMessage() has queued to NINA
     void HandleUplinkFrame(const NodeLib::Message& message);
     // SystemControl addressed to the MainController itself (NODE = 0, never
     // relayed onto the bus): 1 = reset -> app, 2 = reset -> bootloader.
     // Acks, then arms resetPending -- the reset itself runs from
-    // DrainDataMode() once the Ack has been written out.
+    // AfterFrames() once the Ack has been written out.
     void              HandleSelfControl(const NodeLib::Message& message);
     [[noreturn]] void PerformPendingReset();
-    void              SendUplinkHello();
     void              SendRoster();
-    void              SendKeepalive();
     // Diffs every node's current active/bootloader state against the
     // snapshot SendRoster() last took and emits a NodePresence Report for
     // anything that changed -- a live update in between Roster's periodic
     // full-snapshot dumps. Idempotent to call when nothing changed.
     void CheckNodePresence();
-    void EnqueueUplink(const NodeLib::Message& message); // used by Send* above too, for the same reason
+    void EnqueueUplink(const NodeLib::Message& message);
 
     NodeLib::NodeMaster& master;
     BudgetAllocator&     budgetAllocator;
 
-    // Bus-side relayed messages, staged here by ReceivedMessage() (called
-    // synchronously from the bus receive path -- see the class comment) and
-    // written out to NINA from DrainDataMode() instead. Sized well above what
+    // Frames for the server, staged here by ReceivedMessage() (called
+    // synchronously from the bus receive path -- it must only enqueue, never
+    // block) and written out by NinaLink from Loop(). Sized well above what
     // one flushQueue() burst from a single node realistically queues
     // (NodeLib::Node::queueSize is 25); a still-full queue just drops the
-    // newest message, same backstop policy as MainController-Server-Link-
-    // Spec.md §7.2's bus-bound queue.
+    // newest message (MainController-Server-Link-Spec.md §7.2).
     static const uint8_t outboundQueueSize = 32;
     NodeLib::Message     outboundQueue[outboundQueueSize];
-    uint8_t              outboundQueued;
 
     // Last active/bootloader state CheckNodePresence() has told the server
     // about, indexed nodeId-1. Seeded by SendRoster() itself (so the roster
@@ -128,26 +95,9 @@ class UplinkHandler : public NodeLib::INodeHandler
     bool nodePresenceActive[NodeLib::MAX_NODES];
     bool nodePresenceBootloader[NodeLib::MAX_NODES];
 
-    NinaAt nina;
-
-    // Second Frame/Crc pair for the uplink socket -- byte-for-byte the same
-    // wire format as the bus (MainController-Server-Link-Spec.md §4), sharing
-    // the one physical CRC peripheral safely: Hal::Crc::Compute() resets and
-    // computes over a whole buffer per call, never holding state across
-    // calls, so this and the bus Frame never collide.
-    Hal::Crc       uplinkCrc;
-    NodeLib::Frame uplinkFrame;
-
-    State             state;
-    bool              commandSent;
-    uint8_t           attemptsInState;
-    Tools::DelayTimer stateTimeout;
-    Tools::DelayTimer backoffTimer;
-    uint32_t          backoffMs;
-
-    bool              helloSent;
-    Tools::DelayTimer keepaliveTimer;
-    Tools::DelayTimer linkWatchdog;
+    HalNinaPort    port;
+    NinaLinkConfig config;
+    NinaLink       link;
 
     bool resetPending;
     bool resetToBootloader;

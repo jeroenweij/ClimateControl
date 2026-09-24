@@ -49,15 +49,15 @@ struct UplinkHandlerTestAccess
     }
     static uint8_t Queued(const UplinkHandler& u)
     {
-        return u.outboundQueued;
+        return u.link.Queued();
     }
     static const Message& Queue(const UplinkHandler& u, const uint8_t i)
     {
-        return u.outboundQueue[i];
+        return u.link.QueuedAt(i);
     }
     static void ClearQueue(UplinkHandler& u)
     {
-        u.outboundQueued = 0;
+        u.link.ClearQueue();
     }
     static bool ResetPending(const UplinkHandler& u)
     {

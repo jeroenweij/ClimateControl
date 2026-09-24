@@ -5,16 +5,17 @@ add_stm32_executable(mainBootloader
         main.cpp
         AppImage.cpp
         AppImage.h
-        NinaLineParser.cpp
-        NinaAt.cpp
-        NinaLineParser.h
-        NinaAt.h
         UplinkHandler.h
         UplinkHandler.cpp
         NinaUart.h
         NinaUart.cpp
         Firmware.h
         Firmware.cpp
+        # The NINA URC/line classifier, shared with the application's driver
+        # (compiled in here, -Os, like the NodeLib files below).
+        ${CMAKE_SOURCE_DIR}/Lib/Nina/NinaLineParser.cpp
+        ${CMAKE_SOURCE_DIR}/Lib/Nina/NinaAt.cpp
+        ${CMAKE_SOURCE_DIR}/Lib/Nina/NinaLink.cpp
         # The NodeLib framing layer (Frame/Id/Message) is compiled straight
         # into mainBootloader -- built -Os here rather than linked from
         # libNodeLib.a (-O0), and ConfigStore/Node/NodeMaster/Logger left out
@@ -33,7 +34,7 @@ add_stm32_executable(mainBootloader
         ToolsOs
 )
 
-target_include_directories(mainBootloader PRIVATE ${NODELIB_DIR})
+target_include_directories(mainBootloader PRIVATE ${NODELIB_DIR} ${CMAKE_SOURCE_DIR}/Lib/Nina)
 
 # CC_BOARD_MainController, same define add_stm32_executable's MODULE arg
 # would set (Lib/Board/BoardPins.h's NinaCts/NinaRts/NinaReset/LogTx are
