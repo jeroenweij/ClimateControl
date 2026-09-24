@@ -14,6 +14,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
@@ -78,6 +79,44 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 		}
 		_, err = conn.Write(raw)
 		return err
+	}
+
+	// Each node's DiagLog ring (Tools::LogRing): the last 10 lines of at most
+	// 32 characters, each stamped with the node's uptime in seconds, drained
+	// oldest-first one line per Get. A Report with no text means drained and
+	// carries "now".
+	type simLine struct {
+		at   uint32
+		text string
+	}
+	started := time.Now()
+	uptime3 := func(sec uint32) []byte { return []byte{byte(sec), byte(sec >> 8), byte(sec >> 16)} }
+	var logMu sync.Mutex
+	rings := map[int][]simLine{}
+	pushLog := func(node int, line string) {
+		if len(line) > 32 {
+			line = line[:32]
+		}
+		logMu.Lock()
+		r := append(rings[node], simLine{uint32(time.Since(started).Seconds()), line})
+		if len(r) > 10 {
+			r = r[len(r)-10:]
+		}
+		rings[node] = r
+		logMu.Unlock()
+	}
+	popLog := func(node int) []byte {
+		logMu.Lock()
+		defer logMu.Unlock()
+		r := rings[node]
+		if len(r) == 0 {
+			return uptime3(uint32(time.Since(started).Seconds()))
+		}
+		rings[node] = r[1:]
+		return append(uptime3(r[0].at), r[0].text...)
+	}
+	for _, n := range nodes {
+		pushLog(n.id, "I: Node identity from flash: "+strconv.Itoa(n.id))
 	}
 
 	// UplinkHello.
@@ -146,6 +185,13 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 				return
 			}
 			for _, f := range df.Push(buf[:k]) {
+				if f.Operation == nodelib.OpGet && f.Endpoint == nodelib.EndpointDiagLog && f.Node != 0 {
+					_ = write(nodelib.Frame{Node: f.Node, Endpoint: nodelib.EndpointDiagLog, Operation: nodelib.OpReport, Data: popLog(int(f.Node))})
+				}
+				if f.Operation == nodelib.OpSet && f.Endpoint == nodelib.EndpointSystemControl && f.Node != 0 &&
+					len(f.Data) > 0 && f.Data[0] == 3 {
+					pushLog(int(f.Node), "I: Identify for 5s")
+				}
 				if f.Operation == nodelib.OpSet && f.Node != 0 {
 					for i := range nodes {
 						if nodes[i].id == int(f.Node) && f.Endpoint == nodelib.EndpointRoomSetpoint && len(f.Data) >= 2 {
@@ -188,6 +234,9 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 			for _, n := range nodes {
 				sysInfo(n)
 				thermStatus(n)
+				// Every discovery sweep a real node logs these two lines.
+				pushLog(n.id, "I: Handle discover")
+				pushLog(n.id, "I: Return Announce")
 			}
 			uptime += 10
 			ms := make([]byte, 0, 23)

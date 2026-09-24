@@ -17,11 +17,24 @@ var diagLogWait = 3 * time.Second
 // the loop going.
 const maxLogReads = 32
 
+// LogLine is one line from a node's log ring.
+type LogLine struct {
+	Text string `json:"text"`
+	// AgeSec is how long before the read the node logged the line. The lines
+	// carry the node's uptime, not wall-clock time, so a backlog read in one
+	// go still shows when each line really happened.
+	AgeSec int `json:"ageSec"`
+}
+
+// uptimeMask is the 24-bit uptime counter DiagLog reports carry.
+const uptimeMask = 0xFFFFFF
+
 // ReadNodeLog drains a node's DiagLog ring (Node-Message-Model-Spec.md §3):
-// one Get per line, oldest first, until the node answers with an empty
-// Report. Lines are at most 32 characters, one bus message each; a
-// "~ <n> lost" line first means the ring overflowed since it was last read.
-func (s *Service) ReadNodeLog(ctx context.Context, node int) ([]string, error) {
+// one Get per line, oldest first, until the node answers with a text-less
+// Report, whose uptime is the node's "now". Lines are at most 32 characters,
+// one bus message each; a "~ <n> lost" line first means the ring overflowed
+// since it was last read.
+func (s *Service) ReadNodeLog(ctx context.Context, node int) ([]LogLine, error) {
 	if !s.MasterOnline() {
 		return nil, ErrDownlinkUnavailable
 	}
@@ -40,24 +53,46 @@ func (s *Service) ReadNodeLog(ctx context.Context, node int) ([]string, error) {
 		s.mu.Unlock()
 	}()
 
-	lines := []string{}
+	type stamped struct {
+		at   uint32
+		text string
+	}
+	var got []stamped
+	var now uint32
+	haveNow := false
+
+	finish := func() []LogLine {
+		if !haveNow && len(got) > 0 {
+			// Never saw the drained report (timeout / read limit): take the
+			// newest line as "now" -- ages are then relative to it.
+			now = got[len(got)-1].at
+		}
+		lines := make([]LogLine, len(got))
+		for i, g := range got {
+			lines[i] = LogLine{Text: g.text, AgeSec: int((now - g.at) & uptimeMask)}
+		}
+		return lines
+	}
+
 	for i := 0; i < maxLogReads; i++ {
 		if !s.send.SendGet(node, nodelib.EndpointDiagLog) {
-			return lines, ErrDownlinkUnavailable
+			return finish(), ErrDownlinkUnavailable
 		}
 		select {
 		case f := <-ch:
-			if len(f.Data) == 0 {
-				return lines, nil // drained
+			at, text, ok := nodelib.ParseDiagLog(f.Data)
+			if !ok || text == "" {
+				now, haveNow = at, ok // drained (or a node without a ring: empty report)
+				return finish(), nil
 			}
-			lines = append(lines, string(f.Data))
+			got = append(got, stamped{at, text})
 		case <-time.After(diagLogWait):
-			return lines, ErrNodeNoReply
+			return finish(), ErrNodeNoReply
 		case <-ctx.Done():
-			return lines, ctx.Err()
+			return finish(), ctx.Err()
 		}
 	}
-	return lines, nil
+	return finish(), nil
 }
 
 // onDiagLog hands a DiagLog Report to the ReadNodeLog waiting on that node.

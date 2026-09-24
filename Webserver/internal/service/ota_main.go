@@ -10,6 +10,17 @@ import (
 // the uplink back up: reset, NINA boot, Wi-Fi join, TCP connect, UplinkHello.
 const otaMainBootWait = 120 * time.Second
 
+// otaMainWindow is how many chunks a MainController push keeps in flight. The
+// bootloader takes chunks in order and answers each one, so a small window is
+// enough to keep the link continuously busy; a lost chunk costs at most the
+// window's worth of resends.
+const otaMainWindow = 4
+
+// How long a transfer waits for the uplink to come back after it goes quiet
+// mid-write: the MainController notices within ~20 s (an unanswered keepalive),
+// resets the NINA and reconnects in ~10 s. A var only so tests can shrink it.
+var otaMainResumeWait = 120 * time.Second
+
 // runMainController drives a MainController self-update. MainController is
 // the bus master with no relay target for itself, so instead of the bus
 // Firmware sequence it is parked in its own bootloader (SystemControl to
@@ -31,6 +42,8 @@ func (d *otaDriver) runMainController() {
 	}
 
 	d.progress("writing", 0)
+	d.resume = d.resumeMainController
+	d.window = otaMainWindow
 	offset, ok := d.writeImage(nodelib.EndpointOtaData, nodelib.EncodeOtaData)
 	if !ok {
 		return
@@ -47,6 +60,55 @@ func (d *otaDriver) runMainController() {
 	// No reply: Activate resets straight into the new application.
 	d.sendFrame(nodelib.EndpointOtaControl, nodelib.OpSet, nodelib.EncodeOtaActivate())
 	d.done("done", "", len(d.image))
+}
+
+// resumeMainController is writeImage's answer to a chunk that went unanswered
+// through every retry. The NINA can stop forwarding the MainController's bytes
+// for tens of seconds; the MainController then resets it and dials back in,
+// and its bootloader (which the NINA reset does not touch) still holds
+// everything received so far. So: wait for a status Report and carry on from
+// the offset it names. A bootloader that has lost its state (the MCU itself
+// restarted) is sent Begin again and the image starts over. Returns the offset
+// to continue from; when it returns false the job has already been ended.
+func (d *otaDriver) resumeMainController(offset int) (int, bool) {
+	d.progress("reconnecting", offset)
+	d.drainReplies()
+
+	deadline := time.After(otaMainResumeWait)
+	ticker := time.NewTicker(otaBootPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case r := <-d.reports:
+			switch r.State {
+			case nodelib.BlReceiving:
+				next := int(r.ExpectedOffset)
+				if next > len(d.image) {
+					d.done("error", "MainController reports an impossible resume offset", offset)
+					return 0, false
+				}
+				d.drainReplies()
+				d.progress("writing", next)
+				return next, true
+			case nodelib.BlError:
+				d.failMain("resume", r.LastError)
+				return 0, false
+			default:
+				// Idle: the bootloader restarted and has nothing. Start over.
+				d.progress("erasing", 0)
+				if !d.mainControl(nodelib.EncodeOtaBegin(uint32(len(d.image)), d.crc32, d.fw), nodelib.BlReceiving, "begin") {
+					return 0, false
+				}
+				d.progress("writing", 0)
+				return 0, true
+			}
+		case <-ticker.C:
+			d.svc.send.SendGet(0, nodelib.EndpointOtaControl) // dropped while the link is down
+		case <-deadline:
+			d.done("error", "MainController did not come back after the link was lost", offset)
+			return 0, false
+		}
+	}
 }
 
 // drainReplies discards anything queued from an earlier phase, so a stale

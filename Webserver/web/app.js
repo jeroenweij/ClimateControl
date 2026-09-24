@@ -720,10 +720,107 @@ function renderNodeTable() {
         <td class="${STATUS_CLASS[n.status] || "off"}">${esc(n.status)}</td>
         <td>${esc(roomOrDuct(n.id))}</td>
         <td>${n.lastSeen ? new Date(n.lastSeen * 1000).toLocaleTimeString() : "—"}</td>
+        <td><button data-node-log="${n.id}" ${canReadLog(n) ? "" : "disabled"}>Log</button></td>
       </tr>`
     )
     .join("");
+  updateNodeLogSelect();
 }
+
+// ---- node log (DiagLog) -------------------------------------------------
+
+const nodeLog = { lines: new Map(), busy: false, timer: null }; // node id -> lines read so far
+const NODE_LOG_KEEP = 500;
+
+// Any node answering on the bus has a log ring, expected or not; one sitting in
+// its bootloader has none.
+function canReadLog(n) {
+  return n.online && n.status !== "bootloader";
+}
+
+function updateNodeLogSelect() {
+  const sel = $("#node-log-select");
+  const keep = sel.value;
+  const online = state.nodes.filter(canReadLog);
+  sel.innerHTML = online.map((n) => `<option value="${n.id}">${n.id}${n.name ? " · " + esc(n.name) : ""}</option>`).join("");
+  if (online.some((n) => String(n.id) === keep)) sel.value = keep;
+  renderNodeLog();
+}
+
+function renderNodeLog() {
+  const pre = $("#node-log-text");
+  const lines = nodeLog.lines.get($("#node-log-select").value) || [];
+  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
+  pre.textContent = lines.join("\n");
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+
+async function readNodeLog() {
+  const node = $("#node-log-select").value;
+  const msg = $("#node-log-msg");
+  if (!node || nodeLog.busy) return;
+  nodeLog.busy = true;
+  $("#node-log-read").disabled = true;
+  msg.className = "msg";
+  msg.textContent = "reading…";
+  try {
+    const r = await fetch(`/api/nodes/${node}/log`);
+    const body = await r.json().catch(() => ({}));
+    // A timed-out read still returns whatever the node sent before it stopped
+    // answering -- those lines are already gone from the node, so keep them.
+    const got = Array.isArray(body.lines) ? body.lines : [];
+    // Each line carries how long before this read the node logged it (from
+    // the node's own uptime), so a backlog read in one go still shows when
+    // each line really happened.
+    const now = Date.now();
+    const all = (nodeLog.lines.get(node) || []).concat(
+      got.map((l) => `${new Date(now - l.ageSec * 1000).toLocaleTimeString()}  ${l.text}`)
+    );
+    nodeLog.lines.set(node, all.slice(-NODE_LOG_KEEP));
+    renderNodeLog();
+    if (!r.ok) {
+      msg.className = "msg err";
+      msg.textContent = body.error || r.statusText;
+    } else {
+      msg.className = "msg ok";
+      msg.textContent = got.length ? `${got.length} new line${got.length === 1 ? "" : "s"}` : "no new lines";
+    }
+  } catch (err) {
+    msg.className = "msg err";
+    msg.textContent = err.message;
+  } finally {
+    nodeLog.busy = false;
+    $("#node-log-read").disabled = false;
+  }
+}
+
+function setNodeLogFollow(on) {
+  clearInterval(nodeLog.timer);
+  nodeLog.timer = null;
+  $("#node-log-follow").checked = on;
+  if (!on) return;
+  readNodeLog();
+  nodeLog.timer = setInterval(() => {
+    if (currentView() !== "status") return setNodeLogFollow(false); // stop polling the bus once you leave the page
+    readNodeLog();
+  }, 3000);
+}
+
+$("#node-log-read").addEventListener("click", readNodeLog);
+$("#node-log-follow").addEventListener("change", (e) => setNodeLogFollow(e.target.checked));
+$("#node-log-select").addEventListener("change", renderNodeLog);
+$("#node-log-clear").addEventListener("click", () => {
+  nodeLog.lines.set($("#node-log-select").value, []);
+  renderNodeLog();
+});
+$("#node-table").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-node-log]");
+  if (!b) return;
+  $("#node-log-select").value = b.dataset.nodeLog;
+  renderNodeLog();
+  $("#node-log-text").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  readNodeLog();
+});
 
 function renderMainStatus() {
   const s = state.main && state.main.status;

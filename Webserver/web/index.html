@@ -52,11 +52,27 @@
   <section id="view-status" class="view" hidden>
     <h2>Nodes</h2>
     <table id="node-table"><thead><tr>
-      <th>ID</th><th>Name</th><th>Module</th><th>Status</th><th>Room / duct</th><th>Last seen</th>
+      <th>ID</th><th>Name</th><th>Module</th><th>Status</th><th>Room / duct</th><th>Last seen</th><th></th>
     </tr></thead><tbody></tbody></table>
 
     <h2>MainController &amp; bus</h2>
     <div id="main-status" class="card kv"></div>
+
+    <h2>Node log</h2>
+    <div class="card log-panel">
+      <div class="toolbar">
+        <label>Node <select id="node-log-select"></select></label>
+        <button id="node-log-read" type="button">Read log</button>
+        <label class="check"><input id="node-log-follow" type="checkbox"> Follow</label>
+        <button id="node-log-clear" type="button">Clear</button>
+        <span id="node-log-msg" class="msg"></span>
+      </div>
+      <pre id="node-log-text" class="log"></pre>
+      <p class="hint">Each node keeps its last 10 log lines (32 characters each) in RAM, stamped with the node's
+        own uptime so the times shown are when each line was logged. Reading takes them off
+        the node, so this page keeps what it has read; lines the node overwrote before you read show as
+        <code>~ N lost</code>. A reboot clears the node's log. The MainController and Thermostat have none.</p>
+    </div>
   </section>
 
   <section id="view-firmware" class="view" hidden>

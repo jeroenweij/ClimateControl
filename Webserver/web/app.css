@@ -125,6 +125,20 @@ button {
   color: #fff;
   cursor: pointer;
 }
+/* the card's flex row would squeeze the log next to the toolbar */
+.card.log-panel { display: block; }
+pre.log {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.6rem;
+  min-height: 6rem;
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font: 0.8rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
 button.danger { background: var(--err); }
 button:disabled { opacity: 0.5; cursor: default; }
 .msg { font-size: 0.85rem; color: var(--muted); }

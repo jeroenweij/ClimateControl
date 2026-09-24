@@ -28,8 +28,11 @@ const (
 	// re-programming it (STM32G0 PROGERR on a second write to an
 	// already-programmed double-word), so this is safe even if the
 	// original write landed and only its ack was lost.
-	otaWriteWait    = 3 * time.Second
 	otaWriteRetries = 3
+
+	// How many times one push may lose the link mid-transfer and carry on
+	// once it is back (runMainController's resume hook) before giving up.
+	otaMaxResumes = 20
 
 	// Found live via the Write/Ack passthrough trace on MainController
 	// (OTA-Debugging-TODO.md): a Send() failure (uplink down / outbound
@@ -39,6 +42,9 @@ const (
 	// there's nothing to wait out, just a moment for the condition to clear.
 	otaSendRetryDelay = 200 * time.Millisecond
 )
+
+// otaWriteWait is a var only so tests can shrink it.
+var otaWriteWait = 3 * time.Second
 
 // StartOTA validates the uploaded image and records a job. Only one push runs
 // at a time; every other job waits in the queue (state "queued") and the driver
@@ -162,7 +168,7 @@ func (s *Service) kickOta() {
 			module:         nodelib.Module(job.Module),
 			mainController: job.NodeID == 0 && job.Target == "node",
 			reports:        make(chan nodelib.FirmwareStatusReport, 8),
-			writeReplies:   make(chan nodelib.FirmwareWriteReply, 8),
+			writeReplies:   make(chan nodelib.FirmwareWriteReply, 32),
 			opReplies:      make(chan nodelib.FirmwareOpReply, 8),
 			doneCh:         make(chan struct{}),
 		}
@@ -192,6 +198,15 @@ type otaDriver struct {
 	// mainController: this push targets the MainController itself (node 0),
 	// driven over OtaControl/OtaData by runMainController.
 	mainController bool
+
+	// resume, when set, is called if a chunk goes unanswered through every retry:
+	// it waits for the link to come back and returns the offset to carry on
+	// from. Nil means such a stall fails the push.
+	resume func(offset int) (int, bool)
+
+	// window is how many chunks may be in flight at once; 0 or 1 is plain
+	// stop-and-wait. Only the MainController push sets it (see runMainController).
+	window int
 
 	reports      chan nodelib.FirmwareStatusReport
 	writeReplies chan nodelib.FirmwareWriteReply
@@ -428,6 +443,9 @@ func (d *otaDriver) run() {
 // than a separately-tracked loop variable that could drift out of sync with
 // it).
 func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, chunk []byte) []byte) (int, bool) {
+	if d.window > 1 {
+		return d.writeImageWindowed(ep, encode)
+	}
 	offset := 0
 
 	// Per-chunk round-trip timing (send -> Ack), logged once at the end: the
@@ -449,6 +467,7 @@ func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, c
 	}
 	defer logSummary()
 
+	resumes := 0
 	for offset < len(d.image) {
 		end := offset + otaChunk
 		if end > len(d.image) {
@@ -477,7 +496,7 @@ func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, c
 				continue
 			}
 			sentAt = time.Now()
-			reply, ok = d.awaitWriteReply(otaWriteWait)
+			reply, ok = d.awaitWriteReply(wireOffset, otaWriteWait)
 			if ok {
 				break
 			}
@@ -487,6 +506,20 @@ func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, c
 		if !ok {
 			d.svc.log.Warn("ota: write ack timed out after all retries", "job", d.jobID, "offset", offset,
 				"attempts", otaWriteRetries+1)
+			if d.resume != nil && resumes < otaMaxResumes {
+				// The link went quiet (the module can stall for tens of
+				// seconds; the MainController then resets it and reconnects).
+				// The bootloader keeps what it has received, so wait for it
+				// and carry on from wherever it says it is.
+				resumes++
+				next, resumed := d.resume(offset)
+				if !resumed {
+					return offset, false // resume() has already ended the job
+				}
+				d.svc.log.Info("ota: resumed after link loss", "job", d.jobID, "from", offset, "to", next, "resumes", resumes)
+				offset = next
+				continue
+			}
 			d.done("error", "timeout waiting for write ack", offset)
 			return offset, false
 		}
@@ -521,6 +554,154 @@ func (d *otaDriver) writeImage(ep nodelib.Endpoint, encode func(offset uint16, c
 		d.progress("writing", offset)
 	}
 	return offset, true
+}
+
+// writeImageWindowed is writeImage with several chunks in flight (go-back-N):
+// requests go out back to back and each ack slides the window, so the link
+// carries a steady stream instead of one request per round trip. That is
+// faster, and it matters for the NINA module too: it can stop forwarding the
+// MainController's bytes when traffic across it goes quiet for ~120 ms, which
+// is exactly what one-chunk-per-round-trip does.
+//
+// The receiver (Boot::Firmware) takes chunks strictly in order: a chunk past
+// its expected offset is Nacked with that offset, a chunk it already has is
+// acked again from flash. So:
+//   - an ack for offset X means every chunk up to and including X landed,
+//     even if the acks before it were lost;
+//   - a Nack names where to restart, and one loss produces a Nack per chunk
+//     sent behind it, so repeats of the same Nack are ignored for a moment;
+//   - no progress for otaWriteWait means resend from the oldest unacked chunk.
+func (d *otaDriver) writeImageWindowed(ep nodelib.Endpoint, encode func(offset uint16, chunk []byte) []byte) (int, bool) {
+	chunkEnd := func(off int) int {
+		if end := off + otaChunk; end < len(d.image) {
+			return end
+		}
+		return len(d.image)
+	}
+
+	began := time.Now()
+	var acked, retries int
+	var rttSum, rttMax time.Duration
+	base, next := 0, 0 // base: first unacked byte; next: next byte to send
+	sentAt := map[int]time.Time{}
+	lastProgress := time.Now()
+	timeouts, resumes := 0, 0
+	var nackHoldUntil time.Time
+
+	defer func() {
+		if acked == 0 {
+			return
+		}
+		elapsed := time.Since(began)
+		d.svc.log.Info("ota: image write finished", "job", d.jobID, "bytes", base, "chunks", acked,
+			"window", d.window, "retries", retries, "elapsed", elapsed.Round(time.Millisecond),
+			"avgRTT", (rttSum / time.Duration(acked)).Round(100*time.Microsecond),
+			"maxRTT", rttMax.Round(100*time.Microsecond),
+			"bytesPerSec", int(float64(base)/elapsed.Seconds()))
+	}()
+
+	restart := func(at int) {
+		base, next = at, at
+		for k := range sentAt {
+			delete(sentAt, k)
+		}
+		lastProgress = time.Now()
+		timeouts = 0
+	}
+
+	for base < len(d.image) {
+		for next < len(d.image) && next-base < d.window*otaChunk {
+			if !d.sendFrame(ep, nodelib.OpSet, encode(uint16(next), d.image[next:chunkEnd(next)])) {
+				// Never left the server (uplink down / queue full): nothing can
+				// come back for it; the stall deadline below bounds the wait.
+				time.Sleep(otaSendRetryDelay)
+				break
+			}
+			sentAt[next] = time.Now()
+			next = chunkEnd(next)
+		}
+
+		wait := time.Until(lastProgress.Add(otaWriteWait))
+		if wait > 0 {
+			select {
+			case r := <-d.writeReplies:
+				if r.ProgramFailed {
+					d.done("error", "node reported a flash program failure", base)
+					return base, false
+				}
+				if r.Nack {
+					at := int(r.Offset)
+					if at > len(d.image) || (at == base && time.Now().Before(nackHoldUntil)) {
+						continue // malformed, or a repeat of the Nack already acted on
+					}
+					nackHoldUntil = time.Now().Add(otaWriteWait / 2)
+					next = at
+					base = at
+					for k := range sentAt {
+						delete(sentAt, k)
+					}
+					d.progress("writing", base)
+					continue
+				}
+				off := int(r.Offset)
+				if off < base || off >= next {
+					continue // late ack for something already settled, or never sent
+				}
+				end := chunkEnd(off)
+				if r.ChunkCRC16 != nodelib.CRC16(d.image[off:end]) {
+					// The receiver applied different bytes than we sent for this
+					// offset -- a receive/logic bug, independent of flash.
+					d.done("error", "chunk CRC mismatch -- node staged different bytes than sent", off)
+					return base, false
+				}
+				if t, ok := sentAt[off]; ok {
+					rtt := time.Since(t)
+					rttSum += rtt
+					if rtt > rttMax {
+						rttMax = rtt
+					}
+				}
+				acked += (end - base + otaChunk - 1) / otaChunk
+				for k := range sentAt {
+					if k < end {
+						delete(sentAt, k)
+					}
+				}
+				base = end
+				lastProgress = time.Now()
+				timeouts = 0
+				d.progress("writing", base)
+			case <-time.After(wait):
+			}
+			continue
+		}
+
+		// No progress for a full otaWriteWait: resend from the oldest unacked chunk.
+		timeouts++
+		retries++
+		d.svc.log.Warn("ota: no ack progress within otaWriteWait", "job", d.jobID, "offset", base,
+			"attempt", timeouts-1, "waitedMs", otaWriteWait.Milliseconds())
+		if timeouts > otaWriteRetries {
+			d.svc.log.Warn("ota: write ack timed out after all retries", "job", d.jobID, "offset", base,
+				"attempts", otaWriteRetries+1)
+			if d.resume != nil && resumes < otaMaxResumes {
+				resumes++
+				to, resumed := d.resume(base)
+				if !resumed {
+					return base, false // resume() has already ended the job
+				}
+				d.svc.log.Info("ota: resumed after link loss", "job", d.jobID, "from", base, "to", to, "resumes", resumes)
+				restart(to)
+				continue
+			}
+			d.done("error", "timeout waiting for write ack", base)
+			return base, false
+		}
+		keep := timeouts
+		restart(base)
+		timeouts = keep
+	}
+	return base, true
 }
 
 // enterBootloader sends Firmware[EnterBootloader] then polls Firmware Get
@@ -595,11 +776,21 @@ func (d *otaDriver) awaitReport(timeout time.Duration) (nodelib.FirmwareStatusRe
 	}
 }
 
-func (d *otaDriver) awaitWriteReply(timeout time.Duration) (nodelib.FirmwareWriteReply, bool) {
-	select {
-	case r := <-d.writeReplies:
-		return r, true
-	case <-time.After(timeout):
-		return nodelib.FirmwareWriteReply{}, false
+func (d *otaDriver) awaitWriteReply(offset uint16, timeout time.Duration) (nodelib.FirmwareWriteReply, bool) {
+	deadline := time.After(timeout)
+	for {
+		select {
+		case r := <-d.writeReplies:
+			// A late ack (a resend was answered too, or the link delivered a
+			// burst after a stall) belongs to an earlier chunk: taking it for
+			// this one would read as a chunk CRC mismatch. A Nack names the
+			// offset to resync to, so it is always for the current write.
+			if !r.Nack && r.Offset != offset {
+				continue
+			}
+			return r, true
+		case <-deadline:
+			return nodelib.FirmwareWriteReply{}, false
+		}
 	}
 }
