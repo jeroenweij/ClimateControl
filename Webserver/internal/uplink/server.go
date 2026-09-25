@@ -29,6 +29,9 @@ type Handler interface {
 	OnPresence(p nodelib.NodePresence)
 	OnMainStatus(s nodelib.MainStatus)
 	OnThermostatStatus(t nodelib.ThermostatStatus)
+	// OnMainLog is one line of MainController's own log (0x68), stamped with
+	// its uptime in seconds (24-bit) when it was logged.
+	OnMainLog(uptimeSec uint32, text string)
 
 	// OnOtaFrame is an OtaControl / OtaData frame (0x65/0x66) -- MainController's
 	// own bootloader answering a self-update push.
@@ -257,6 +260,10 @@ func (c *conn) dispatch(f nodelib.Frame, h Handler) {
 	case f.Endpoint == nodelib.EndpointThermostatStatus && f.Operation == nodelib.OpReport:
 		if t, ok := nodelib.ParseThermostatStatus(f.Data); ok {
 			h.OnThermostatStatus(t)
+		}
+	case f.Endpoint == nodelib.EndpointMainLog && f.Operation == nodelib.OpReport:
+		if at, text, ok := nodelib.ParseDiagLog(f.Data); ok && text != "" {
+			h.OnMainLog(at, text)
 		}
 	case f.Endpoint == nodelib.EndpointOtaControl || f.Endpoint == nodelib.EndpointOtaData:
 		h.OnOtaFrame(f)

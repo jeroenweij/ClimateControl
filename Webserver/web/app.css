@@ -131,7 +131,7 @@ pre.log {
   margin: 0.4rem 0;
   padding: 0.5rem 0.6rem;
   min-height: 6rem;
-  max-height: 22rem;
+  max-height: 65vh;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 6px;

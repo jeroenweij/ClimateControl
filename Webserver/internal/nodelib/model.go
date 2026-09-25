@@ -61,6 +61,7 @@ const (
 	EndpointOtaControl       Endpoint = 0x65
 	EndpointOtaData          Endpoint = 0x66
 	EndpointMainStatus       Endpoint = 0x67
+	EndpointMainLog          Endpoint = 0x68
 )
 
 var endpointNames = map[Endpoint]string{
@@ -94,6 +95,7 @@ var endpointNames = map[Endpoint]string{
 	EndpointOtaControl:         "OtaControl",
 	EndpointOtaData:            "OtaData",
 	EndpointMainStatus:         "MainStatus",
+	EndpointMainLog:            "MainLog",
 }
 
 var endpointByName = func() map[string]Endpoint {

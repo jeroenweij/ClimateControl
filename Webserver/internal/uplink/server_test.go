@@ -18,6 +18,7 @@ type recorder struct {
 	roster   []nodelib.RosterEntry
 	presence []nodelib.NodePresence
 	connects int
+	mainLog  []string
 }
 
 func (r *recorder) OnConnect(nodelib.UplinkHello) { r.mu.Lock(); r.connects++; r.mu.Unlock() }
@@ -36,6 +37,11 @@ func (r *recorder) OnPresence(p nodelib.NodePresence) {
 func (r *recorder) OnMainStatus(nodelib.MainStatus)             {}
 func (r *recorder) OnThermostatStatus(nodelib.ThermostatStatus) {}
 func (r *recorder) OnOtaFrame(nodelib.Frame)                    {}
+func (r *recorder) OnMainLog(uptimeSec uint32, text string) {
+	r.mu.Lock()
+	r.mainLog = append(r.mainLog, text)
+	r.mu.Unlock()
+}
 
 func (r *recorder) rosterLen() int {
 	r.mu.Lock()
@@ -120,5 +126,41 @@ func TestFramesSentWithTheHelloAreNotLost(t *testing.T) {
 	}
 	if rec.roster[0].NodeID != 1 || rec.roster[0].State != 1 || rec.roster[1].NodeID != 2 || rec.roster[1].State != 1 {
 		t.Errorf("roster = %+v, want nodes 1 and 2 both in the bootloader", rec.roster)
+	}
+}
+
+func TestMainLogReportsReachTheHandler(t *testing.T) {
+	token := [16]byte{4, 5, 6}
+	rec := &recorder{}
+	addr := startServer(t, rec, token)
+
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	var burst []byte
+	burst = append(burst, encode(t, hello(token))...)
+	burst = append(burst, encode(t, nodelib.Frame{Node: 0, Endpoint: nodelib.EndpointMainLog, Operation: nodelib.OpReport,
+		Data: append([]byte{7, 0, 0}, "I: Uplink: data mode"...)})...)
+	if _, err := c.Write(burst); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		rec.mu.Lock()
+		n := len(rec.mainLog)
+		rec.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.mainLog) != 1 || rec.mainLog[0] != "I: Uplink: data mode" {
+		t.Fatalf("main log = %q, want the one line", rec.mainLog)
 	}
 }

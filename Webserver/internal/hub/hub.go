@@ -164,6 +164,18 @@ func (h *Hub) SetUplink(up, bootloader bool) {
 	}
 }
 
+// MainLogEvent is one line of MainController's log, pushed as it arrives.
+type MainLogEvent struct {
+	Type string `json:"type"` // "mainlog"
+	TS   int64  `json:"ts"`   // unix millis when the MainController logged it
+	Text string `json:"text"`
+}
+
+// PublishMainLog broadcasts one MainController log line.
+func (h *Hub) PublishMainLog(ts int64, text string) {
+	h.broadcast(MainLogEvent{Type: "mainlog", TS: ts, Text: text})
+}
+
 // PublishOta broadcasts firmware-push progress.
 func (h *Hub) PublishOta(ev OtaEvent) {
 	ev.Type = "ota"

@@ -31,7 +31,7 @@ ClimateControl/
     ├── Lib/
     │   ├── HAL/                # thin wrapper around STM32Cube HAL/LL — the only place that touches ST's driver headers directly
     │   ├── Board/              # BoardPins.h + MemoryMap.h — single source of truth for the STM32G031F8P6 pin map (all board types, Node-Bus-Hardware-Design-Spec.md §6.2) and flash partition map (Node-Flash-Layout-and-Bootloader-Spec.md §3). Header-only INTERFACE lib, depends on HAL for Hal::Pin
-    │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger (UART + Diagnostics log-ring sink) — shared helpers, MCU-agnostic
+    │   ├── Tools/              # DelayTimer (on HAL_GetTick) + Logger (per-module console sink + LogRing, read as DiagLog / pushed as MainLog) — shared helpers, MCU-agnostic
     │   ├── Startup/            # shared startup_stm32g031xx.s + syscalls.c (OBJECT lib "Startup", linked into every image)
     │   └── NodeLib/            # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore (factory node identity) — depends on Lib/HAL + Lib/Board (Node/NodeMaster take their pins from BoardPins.h, not constructor args). Message model: Node-Message-Model-Spec.md
     └── Modules/
@@ -44,7 +44,7 @@ ClimateControl/
 
 Each `Modules/*` directory builds its own `.elf` via `add_stm32_executable()` (`cmake/stm32.cmake`) — linked against a per-module `.ld`, the shared `Startup` object, and whichever `Lib/*` static libs it needs — with post-build `.bin`/`.hex`/size and a `flash-<name>` J-Link target.
 
-`Software/Lib/Tools/` provides `DelayTimer` (on `HAL_GetTick()`) and a `Logger` for a debug UART, using real `<sstream>`/`std::string` (`arm-none-eabi-gcc` ships a real C++ standard library) — worth watching against the STM32G031's 8 KB SRAM budget, since `std::stringstream` is not free.
+`Software/Lib/Tools/` provides `DelayTimer` (on `HAL_GetTick()`) and a `Logger`: every `LOG_*` line goes into `LogRing` (10 × 32 characters — read over the bus as `DiagLog`, pushed by the MainController as `MainLog`) and then to a weak `Logger::Write` console sink a module may override (the MainController's optional RTT sink), using real `<sstream>`/`std::string` (`arm-none-eabi-gcc` ships a real C++ standard library) — worth watching against the STM32G031's 8 KB SRAM budget, since `std::stringstream` is not free.
 
 ---
 

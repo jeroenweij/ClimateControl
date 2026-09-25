@@ -35,6 +35,13 @@ type Service struct {
 	ota  *otaDriver
 	mcFW int // MainController running firmware (major<<8|minor), from UplinkHello; 0 = unknown
 
+	// Where the current connection's UplinkHello puts the MainController's
+	// clock: its uptime then, and our wall time then. MainLog lines are
+	// placed against it (mainlog.go).
+	helloUptime uint32
+	helloWall   time.Time
+	mainLog     []MainLogLine // most recent mainLogKeep lines, oldest first
+
 	// A node's DiagLog is being drained (ReadNodeLog): its Reports go here
 	// instead of the readings store.
 	diagLog map[int]chan nodelib.Frame
@@ -138,6 +145,8 @@ func (s *Service) OnConnect(h nodelib.UplinkHello) {
 	s.mu.Lock()
 	s.mcFW = int(h.FWVersion)
 	s.mcBootloader = h.FWVersion == 0
+	s.helloUptime = h.UptimeSec
+	s.helloWall = time.Now()
 	boot := s.mcBootloader
 	s.mu.Unlock()
 	// After the state above, so a browser that refetches on this event sees it.

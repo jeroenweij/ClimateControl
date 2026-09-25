@@ -64,6 +64,7 @@ namespace NodeLib
         OtaControl       = 0x65, // S<->MC Set/Report  image push start/abort/progress
         OtaData          = 0x66, // S->MC  Set  offset(4) bytes(<=27)
         MainStatus       = 0x67, // MC->S  Report  rxFrames(4) crcErrors(4) resyncs(4) txDrops(4) downlinkDrops(4) wifiRssi(1) freeHeap(2)
+        MainLog          = 0x68, // MC->S  Report  uptimeSec(3 LE) text(<=32) -- one Tools::LogRing line, pushed unsolicited
     };
 
     inline std::stringstream& operator<<(std::stringstream& oStrStream, const Endpoint endpoint)
@@ -162,6 +163,9 @@ namespace NodeLib
                 break;
             case Endpoint::MainStatus:
                 oStrStream << "MainStatus";
+                break;
+            case Endpoint::MainLog:
+                oStrStream << "MainLog";
                 break;
         }
 

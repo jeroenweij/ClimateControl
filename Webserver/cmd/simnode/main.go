@@ -141,6 +141,17 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 	_ = write(nodelib.Frame{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport,
 		Data: append([]byte{0xFF, 0, 0}, 0, 0, 0, 0)})
 
+	// MainController's own log (MainLog, 0x68): pushed unsolicited, one line
+	// per frame, stamped with its uptime (the hello above said 0 = now).
+	mainLog := func(line string) error {
+		if len(line) > 32 {
+			line = line[:32]
+		}
+		return write(nodelib.Frame{Node: 0, Endpoint: nodelib.EndpointMainLog, Operation: nodelib.OpReport,
+			Data: append(uptime3(uint32(time.Since(started).Seconds())), line...)})
+	}
+	_ = mainLog("I: Uplink: data mode")
+
 	// SystemInfo per node so the server learns the running firmware version:
 	// module(1) hwRev(1) fwMajor(2 LE) fwMinor(2 LE).
 	sysInfo := func(n simNode) {
@@ -245,6 +256,9 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 			ms = appendU32(ms, 0)
 			ms = appendU32(ms, 0)
 			ms = appendU32(ms, 0)
+			if err := mainLog("I: Bus: " + strconv.Itoa(len(nodes)) + " nodes active"); err != nil {
+				return err
+			}
 			rssi := int8(-52)
 			ms = append(ms, byte(rssi)) // wifiRssi as int8
 			ms = appendU16(ms, 3200)

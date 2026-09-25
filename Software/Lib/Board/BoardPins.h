@@ -125,14 +125,6 @@ namespace Board
     // Same physical pin as the Node board's ServoPwm.
     inline const Hal::Pin NinaReset{GPIOA, GPIO_PIN_6}; // pin 13  net "RESET_NINA"
 
-    // Note: with USART1 = main bus and USART2 = NINA, the Main board has no
-    // spare hardware UART for a debug console -- Tools::Logger bit-bangs on
-    // this pin instead (Hal::BitBangSerial). Same physical pin/net as the
-    // TemperatureNode variant's OneWire1 below (unpopulated with a probe on
-    // this variant): 100R series + 4.7k pull-up already on the board, driven
-    // push-pull here rather than open-drain since nothing else shares the net.
-    inline const Hal::Pin LogTx{GPIOA, GPIO_PIN_5}; // pin 12  net "ONEWIRE"
-
 #endif // CC_BOARD_MainController
 
     // --- Main board -- TemperatureNode variant -------------------------

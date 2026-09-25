@@ -8,6 +8,7 @@ const state = {
   main: null,
   uplinkUp: false,
   bootloader: false, // the far end of the uplink is MainController's bootloader
+  mainLog: [],         // MainController log lines {ts, text}, from /api/main/log + "mainlog" events
   floors: [],
   placements: [],
 };
@@ -62,7 +63,13 @@ function handleEvent(msg) {
       state.uplinkUp = msg.uplinkUp;
       state.bootloader = !!msg.bootloader;
       setLinkState(msg.uplinkUp, state.bootloader);
+      loadMainLog().catch(() => {}); // (re)connected: catch up on lines pushed meanwhile
       refreshCurrentView();
+      break;
+    case "mainlog":
+      state.mainLog.push({ ts: msg.ts, text: msg.text });
+      if (state.mainLog.length > NODE_LOG_KEEP) state.mainLog.splice(0, state.mainLog.length - NODE_LOG_KEEP);
+      if (currentView() === "logs" && logNode() === MAIN_LOG_NODE) renderNodeLog();
       break;
     case "value":
       state.values.set(key(msg.node, msg.endpoint), msg);
@@ -103,6 +110,7 @@ const views = {
   map: { render: renderMap },
   overrides: { render: renderOverrides },
   status: { render: renderStatus },
+  logs: { render: renderLogs },
   firmware: { render: renderFirmware },
   setup: { render: renderSetup },
 };
@@ -129,6 +137,11 @@ async function loadNodes() {
 }
 async function loadFloors() {
   state.floors = (await api("/api/floors")) || [];
+}
+async function loadMainLog() {
+  const body = await api("/api/main/log");
+  state.mainLog = (body && body.lines) || [];
+  if (currentView() === "logs" && logNode() === MAIN_LOG_NODE) renderNodeLog();
 }
 async function loadPlacements() {
   state.placements = (await api("/api/placements")) || [];
@@ -724,13 +737,41 @@ function renderNodeTable() {
       </tr>`
     )
     .join("");
-  updateNodeLogSelect();
 }
 
-// ---- node log (DiagLog) -------------------------------------------------
+$("#node-table").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-node-log]");
+  if (b) location.hash = `#/logs/${b.dataset.nodeLog}`;
+});
+
+// ---- logs view ------------------------------------------------------------
+//
+// The MainController's log is pushed (MainLog): the server holds it and new
+// lines arrive over the websocket. A bus node's is read on demand (DiagLog):
+// each read drains the node's ring, so the page keeps what it has read.
 
 const nodeLog = { lines: new Map(), busy: false, timer: null }; // node id -> lines read so far
 const NODE_LOG_KEEP = 500;
+const MAIN_LOG_NODE = "0";
+
+function logNode() {
+  return $("#node-log-select").value;
+}
+
+// #/logs/<id> opens that node's log (the Status page's Log buttons).
+async function renderLogs() {
+  await loadNodes().catch(() => {});
+  updateNodeLogSelect();
+  const want = location.hash.split("/")[2];
+  if (want !== undefined && [...$("#node-log-select").options].some((o) => o.value === want)) {
+    $("#node-log-select").value = want;
+    history.replaceState(null, "", "#/logs");
+    onLogNodeChange();
+    if (want !== MAIN_LOG_NODE) readNodeLog();
+  } else {
+    onLogNodeChange();
+  }
+}
 
 // Any node answering on the bus has a log ring, expected or not; one sitting in
 // its bootloader has none.
@@ -742,23 +783,37 @@ function updateNodeLogSelect() {
   const sel = $("#node-log-select");
   const keep = sel.value;
   const online = state.nodes.filter(canReadLog);
-  sel.innerHTML = online.map((n) => `<option value="${n.id}">${n.id}${n.name ? " · " + esc(n.name) : ""}</option>`).join("");
-  if (online.some((n) => String(n.id) === keep)) sel.value = keep;
+  sel.innerHTML =
+    `<option value="${MAIN_LOG_NODE}">0 · MainController (live)</option>` +
+    online.map((n) => `<option value="${n.id}">${n.id}${n.name ? " · " + esc(n.name) : ""}</option>`).join("");
+  if (keep === MAIN_LOG_NODE || online.some((n) => String(n.id) === keep)) sel.value = keep;
+  renderNodeLog();
+}
+
+// The MainController's log needs no reading or following -- it is live.
+function onLogNodeChange() {
+  const main = logNode() === MAIN_LOG_NODE;
+  if (main) setNodeLogFollow(false);
+  $("#node-log-read").hidden = main;
+  $("#node-log-follow").parentElement.style.display = main ? "none" : ""; // label.check's display beats [hidden]
   renderNodeLog();
 }
 
 function renderNodeLog() {
   const pre = $("#node-log-text");
-  const lines = nodeLog.lines.get($("#node-log-select").value) || [];
+  const lines =
+    logNode() === MAIN_LOG_NODE
+      ? state.mainLog.map((l) => `${new Date(l.ts).toLocaleTimeString()}  ${l.text}`)
+      : nodeLog.lines.get(logNode()) || [];
   const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
   pre.textContent = lines.join("\n");
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
 async function readNodeLog() {
-  const node = $("#node-log-select").value;
+  const node = logNode();
   const msg = $("#node-log-msg");
-  if (!node || nodeLog.busy) return;
+  if (!node || node === MAIN_LOG_NODE || nodeLog.busy) return;
   nodeLog.busy = true;
   $("#node-log-read").disabled = true;
   msg.className = "msg";
@@ -801,25 +856,22 @@ function setNodeLogFollow(on) {
   if (!on) return;
   readNodeLog();
   nodeLog.timer = setInterval(() => {
-    if (currentView() !== "status") return setNodeLogFollow(false); // stop polling the bus once you leave the page
+    if (currentView() !== "logs" || logNode() === MAIN_LOG_NODE) return setNodeLogFollow(false); // stop polling the bus once you leave the page
     readNodeLog();
   }, 3000);
 }
 
 $("#node-log-read").addEventListener("click", readNodeLog);
 $("#node-log-follow").addEventListener("change", (e) => setNodeLogFollow(e.target.checked));
-$("#node-log-select").addEventListener("change", renderNodeLog);
-$("#node-log-clear").addEventListener("click", () => {
-  nodeLog.lines.set($("#node-log-select").value, []);
-  renderNodeLog();
+$("#node-log-select").addEventListener("change", () => {
+  $("#node-log-msg").textContent = "";
+  onLogNodeChange();
 });
-$("#node-table").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-node-log]");
-  if (!b) return;
-  $("#node-log-select").value = b.dataset.nodeLog;
+// Clears this page's copy only; the MainController's comes back on a reload.
+$("#node-log-clear").addEventListener("click", () => {
+  if (logNode() === MAIN_LOG_NODE) state.mainLog = [];
+  else nodeLog.lines.set(logNode(), []);
   renderNodeLog();
-  $("#node-log-text").scrollIntoView({ behavior: "smooth", block: "nearest" });
-  readNodeLog();
 });
 
 function renderMainStatus() {

@@ -37,7 +37,7 @@ add_stm32_executable(mainBootloader
 target_include_directories(mainBootloader PRIVATE ${NODELIB_DIR} ${CMAKE_SOURCE_DIR}/Lib/Nina)
 
 # CC_BOARD_MainController, same define add_stm32_executable's MODULE arg
-# would set (Lib/Board/BoardPins.h's NinaCts/NinaRts/NinaReset/LogTx are
+# would set (Lib/Board/BoardPins.h's NinaCts/NinaRts/NinaReset are
 # gated behind it) -- but MODULE itself is not used here: it also finalizes
 # an OTA image descriptor and copies a <Module>_<version>.bin for the
 # server's firmware repository, neither of which applies to a bootloader

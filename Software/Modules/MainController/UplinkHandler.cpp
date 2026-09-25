@@ -6,6 +6,7 @@
 
 #include "Backup.h"
 #include "ImageDescriptor.h"
+#include "LogRing.h"
 #include "Logger.h"
 #include "MemoryMap.h"
 #include "System.h"
@@ -91,6 +92,9 @@ void UplinkHandler::BeforeFrames()
     // Only after the roster dump has seeded the snapshot -- on the very pass
     // that sent it this would compare against last session's stale one.
     CheckNodePresence();
+    // Likewise after the hello, so lines logged while the link was down
+    // (bring-up, boot) flush right behind it.
+    PushLog();
 }
 
 void UplinkHandler::AfterFrames()
@@ -250,6 +254,32 @@ void UplinkHandler::CheckNodePresence()
             m.data[i] = payload[i];
         }
         EnqueueUplink(m);
+    }
+}
+
+void UplinkHandler::PushLog()
+{
+    for (uint8_t i = 0; i < maxLogLinesPerPass; i++)
+    {
+        if (link.Queued() >= outboundQueueSize / 2)
+        {
+            return; // bus frames first -- the ring keeps the lines until there's room
+        }
+
+        // uptimeSec(3 LE) then the text, the same layout as a bus node's
+        // DiagLog Report.
+        Message      line(Id(0, Endpoint::MainLog, Operation::Report));
+        uint32_t     uptimeSec = 0;
+        const size_t length    = Tools::LogRing::Pop(&line.data[3], Tools::LogRing::LineSize, uptimeSec);
+        if (length == 0)
+        {
+            return; // drained
+        }
+        line.data[0] = static_cast<uint8_t>(uptimeSec);
+        line.data[1] = static_cast<uint8_t>(uptimeSec >> 8);
+        line.data[2] = static_cast<uint8_t>(uptimeSec >> 16);
+        line.len     = static_cast<uint8_t>(3 + length);
+        EnqueueUplink(line);
     }
 }
 

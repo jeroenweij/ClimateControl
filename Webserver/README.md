@@ -189,6 +189,7 @@ cycle.
 | Map | live floor-plan heatmap of room temperatures |
 | Overrides | change a setpoint / damper mode; the value is held and re-applied if the node reboots |
 | Status | per-node status (online / offline / unexpected) and bus counters |
+| Logs | the MainController's log, live; a bus node's log, read over the bus on demand or followed |
 | Firmware | installed firmware per node, upload new images, push updates |
 | Map setup | upload a floor-plan image, click to place each ControllerNode |
 
@@ -318,6 +319,7 @@ the wire protocol changes.
 | `GET /api/nodes` | roster |
 | `GET /api/readings?node=&endpoint=&from=&to=&limit=` | history series |
 | `GET /api/nodes/{id}/log` | drain a node's `DiagLog` ring over the bus — its last few log lines, oldest first, each as `{text, ageSec}` (how long before the read the node logged it, from the node's uptime); reading empties the ring on the node |
+| `GET /api/main/log` | the MainController log lines the server holds (last 500, in memory), oldest first, each as `{ts, text}` (`ts` = unix ms when it was logged) |
 | `POST /api/commands` `{node,endpoint,value}` | queue a `Set`; held as an override |
 | `GET/DELETE /api/overrides[/{node}/{endpoint}]` | held values |
 | `GET/POST/DELETE /api/floors[/{id}]`, `GET /api/floors/{id}/image` | floor plans |
@@ -328,4 +330,4 @@ the wire protocol changes.
 | `DELETE /api/firmware/{module}` | drop the held image for a module |
 | `POST /api/firmware/update` `{node,target}` | queue one update from the held image |
 | `POST /api/firmware/update-all` `{module}` | queue an update for every eligible node of that type |
-| `GET /ws` | live channel: `snapshot` then `value` / `presence` / `main` / `ota` / `thermostat` events |
+| `GET /ws` | live channel: `snapshot` then `value` / `presence` / `main` / `mainlog` / `ota` / `thermostat` events |

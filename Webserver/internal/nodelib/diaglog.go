@@ -1,6 +1,7 @@
 package nodelib
 
-// ParseDiagLog decodes a DiagLog Report (Node-Message-Model-Spec.md §3):
+// ParseDiagLog decodes a DiagLog Report -- and a MainLog Report (0x68), which
+// carries the same payload pushed by the MainController -- (Node-Message-Model-Spec.md §3):
 // uptimeSec(3 LE) then the text (≤ 32 characters). A report with no text means
 // the node's ring is drained, and its uptime is "now" on the node's clock.
 // The uptime is the node's seconds since boot when the line was logged (a

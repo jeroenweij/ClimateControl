@@ -2,6 +2,8 @@
  * Created by J. Weij
  *************************************************************/
 
+#include <string.h>
+
 #include "EEndpoint.h"
 #include "EOperation.h"
 #include "NodeMaster.h"
@@ -11,6 +13,8 @@
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
 #include "Test.h"
+
+#include "LogRing.h"
 
 #include "BudgetAllocator.h"
 #include "UplinkHandler.h"
@@ -46,6 +50,14 @@ struct UplinkHandlerTestAccess
     static void CheckNodePresence(UplinkHandler& u)
     {
         u.CheckNodePresence();
+    }
+    static void PushLog(UplinkHandler& u)
+    {
+        u.PushLog();
+    }
+    static bool Send(UplinkHandler& u, const Message& m)
+    {
+        return u.link.Send(m);
     }
     static uint8_t Queued(const UplinkHandler& u)
     {
@@ -505,4 +517,92 @@ CC_TEST(UplinkHandler, OtaFramesAreIgnoredByTheRunningApp)
     Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::OtaData, Operation::Set)));
 
     CC_CHECK_EQ(Access::Queued(uplink), 0);
+}
+
+namespace
+{
+    bool IsMainLog(const Message& m, const uint32_t uptimeSec, const char* const text)
+    {
+        const size_t textLen = strlen(text);
+        if (m.id.node != 0 || m.id.endpoint != Endpoint::MainLog || m.id.operation != Operation::Report ||
+            m.len != 3 + textLen)
+        {
+            return false;
+        }
+        const uint32_t at = m.data[0] | (m.data[1] << 8) | (static_cast<uint32_t>(m.data[2]) << 16);
+        return at == uptimeSec && memcmp(&m.data[3], text, textLen) == 0;
+    }
+} // namespace
+
+CC_TEST(UplinkHandler, PushLogSendsAtMostTwoRingLinesPerPassOldestFirst)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+    Tools::LogRing::Clear();
+
+    FakeClock::Set(5000);
+    Tools::LogRing::Push("I", "one");
+    Tools::LogRing::Push("W", "two");
+    FakeClock::Set(7000);
+    Tools::LogRing::Push("E", "three");
+
+    Access::PushLog(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 5, "I: one"));
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 1), 5, "W: two"));
+
+    Access::PushLog(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 3);
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 2), 7, "E: three"));
+
+    Access::PushLog(uplink); // drained -- nothing more
+    CC_CHECK_EQ(Access::Queued(uplink), 3);
+}
+
+CC_TEST(UplinkHandler, PushLogWaitsWhileTheOutboundQueueIsHalfFull)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+    Tools::LogRing::Clear();
+    FakeClock::Set(9000);
+    Tools::LogRing::Push("I", "held back");
+
+    for (uint8_t i = 0; i < 16; i++) // outboundQueueSize / 2
+    {
+        Access::Send(uplink, Message(Id(3, Endpoint::RoomTemp, Operation::Report)));
+    }
+    Access::PushLog(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 16);
+    CC_CHECK_EQ(Tools::LogRing::Buffered(), 1); // still in the ring
+
+    Access::ClearQueue(uplink);
+    Access::PushLog(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 9, "I: held back"));
+}
+
+CC_TEST(UplinkHandler, PushLogReportsLinesLostToAnOverflowFirst)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    InitAndClearDiscover(master);
+    Tools::LogRing::Clear();
+    FakeClock::Set(9000);
+    for (uint8_t i = 0; i < Tools::LogRing::Lines + 3; i++)
+    {
+        Tools::LogRing::Push("I", "x");
+    }
+
+    Access::PushLog(uplink);
+    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 9, "~ 3 lost"));
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 1), 9, "I: x"));
 }

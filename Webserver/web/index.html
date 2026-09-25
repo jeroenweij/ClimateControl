@@ -15,6 +15,7 @@
       <a href="#/map" data-view="map">Map</a>
       <a href="#/overrides" data-view="overrides">Overrides</a>
       <a href="#/status" data-view="status">Status</a>
+      <a href="#/logs" data-view="logs">Logs</a>
       <a href="#/firmware" data-view="firmware">Firmware</a>
       <a href="#/setup" data-view="setup">Map setup</a>
     </nav>
@@ -58,7 +59,10 @@
     <h2>MainController &amp; bus</h2>
     <div id="main-status" class="card kv"></div>
 
-    <h2>Node log</h2>
+  </section>
+
+  <section id="view-logs" class="view" hidden>
+    <h2>Logs</h2>
     <div class="card log-panel">
       <div class="toolbar">
         <label>Node <select id="node-log-select"></select></label>
@@ -68,10 +72,12 @@
         <span id="node-log-msg" class="msg"></span>
       </div>
       <pre id="node-log-text" class="log"></pre>
-      <p class="hint">Each node keeps its last 10 log lines (32 characters each) in RAM, stamped with the node's
-        own uptime so the times shown are when each line was logged. Reading takes them off
-        the node, so this page keeps what it has read; lines the node overwrote before you read show as
-        <code>~ N lost</code>. A reboot clears the node's log. The MainController and Thermostat have none.</p>
+      <p class="hint">Every node, the MainController included, keeps its last 10 log lines (32 characters each) in
+        RAM, stamped with its own uptime so the times shown are when each line was logged; lines overwritten
+        before they were read show as <code>~ N lost</code>, and a reboot clears them.
+        The <b>MainController</b> pushes its lines to the server as it logs them — they show here live, and the
+        server keeps the last 500. A <b>bus node</b>'s lines are read over the bus: reading takes them off the node,
+        so this page keeps what it has read, and <i>Follow</i> reads again every 3 s. The Thermostat has no log.</p>
     </div>
   </section>
 

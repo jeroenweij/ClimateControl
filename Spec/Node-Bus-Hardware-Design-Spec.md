@@ -159,7 +159,7 @@ Pins 1, 15 and 20 each bond several GPIO pads to one physical pin — configure 
 | 12 PA5  | — | **servo enable** (GPIO out, off by default — `Node-Bus-Power-Path-Spec.md` §3.1) | 1-Wire #1 | — |
 | 13 PA6  | NINA RESET_N (open-drain out) | servo PWM (TIM3_CH1, AF1) | — | — |
 
-MainController + TemperatureNode are two populate variants of one PCB (the 48V injection front-end and NINA are DNP on the TemperatureNode build, the 1-Wire front-end DNP on the MainController build). MainController has no spare hardware UART for a debug console (USART1 = bus, USART2 = NINA). The G031's `LPUART1` does not help: on TSSOP20 its TX/RX only reach PA2/PA3 (the PB10/PB11 and PC0/PC1 options are not bonded), i.e. the same pins as USART2. Bit-bang `Tools::Logger` on a free pin (PC15, PA4, PA5) or drop the console.
+MainController + TemperatureNode are two populate variants of one PCB (the 48V injection front-end and NINA are DNP on the TemperatureNode build, the 1-Wire front-end DNP on the MainController build). MainController has no spare hardware UART for a debug console (USART1 = bus, USART2 = NINA). The G031's `LPUART1` does not help: on TSSOP20 its TX/RX only reach PA2/PA3 (the PB10/PB11 and PC0/PC1 options are not bonded), i.e. the same pins as USART2. Its log goes to the server over the uplink instead (`MainLog`, `MainController-Server-Link-Spec.md` §5.1), with SEGGER RTT over the SWD header as a bench option — no pin needed.
 
 > **Firmware:** the pin map lives in `Software/Lib/Board/BoardPins.h` (single source of truth). `Hal::UartPins` carries a per-pin AF (`Board::BusUart` = PB6/PB7 at AF0, PA12 at AF1). Pin 15's error-LED pad is picked as **PB0** — configure only that one.
 
@@ -216,7 +216,7 @@ Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader
 
 ### 6.5 Easy-to-forget checklist
 
-1. **Debug output needs a UART pin** — Cortex-M0+ has no SWO; `Tools::Logger` is a weak no-op meant to be routed to a UART. Bring USART2 (PA2/PA3) to a 3-pin header on `TemperatureNode`/`MainController`. On `ControllerNode` both USARTs are used (bus + thermostat link) — plan for sharing.
+1. **Debug output needs a UART pin** — Cortex-M0+ has no SWO; `Tools::Logger` is a weak no-op meant to be routed to a UART. Bring USART2 (PA2/PA3) to a 3-pin header on `TemperatureNode` (the `MainController` needs none: its log goes over the uplink, `MainController-Server-Link-Spec.md` §5.1). On `ControllerNode` both USARTs are used (bus + thermostat link) — plan for sharing.
 2. **RJ45 straight-through nets** — 48V (orange 1/2), GND (brown 7/8), A/B (blue 4/5), ENABLE (green 3/6) all pass in-jack → out-jack unbuffered. ENABLE also gets the per-node 1MΩ pull-up to local 48V (§3) and feeds the buck EN pin.
 3. **Input protection + regulators** per `Node-Bus-Power-Path-Spec.md` (PTC fuse, 48V TVS, reverse diode, 47µF/100V bulk, LMR16030 buck, LDO, all caps).
 4. **100 nF at every VCC pin** — MCU, transceiver, LDO.

@@ -12,8 +12,6 @@ set(HAL_CORE_SOURCES
     OneWire.cpp
     I2c.h
     I2c.cpp
-    BitBangSerial.h
-    BitBangSerial.cpp
     Flash.h
     Flash.cpp
     Crc.h

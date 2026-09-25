@@ -73,6 +73,12 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     // anything that changed -- a live update in between Roster's periodic
     // full-snapshot dumps. Idempotent to call when nothing changed.
     void CheckNodePresence();
+    // Moves up to maxLogLinesPerPass lines from Tools::LogRing into the
+    // outbound queue as MainLog Reports, only while the queue is under half
+    // full so log traffic never displaces relayed bus frames
+    // (MainController-Server-Link-Spec.md §5.1). Never logs itself -- that
+    // would feed the ring it is draining.
+    void PushLog();
     void EnqueueUplink(const NodeLib::Message& message);
 
     NodeLib::NodeMaster& master;
@@ -86,6 +92,8 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     // newest message (MainController-Server-Link-Spec.md §7.2).
     static const uint8_t outboundQueueSize = 32;
     NodeLib::Message     outboundQueue[outboundQueueSize];
+
+    static const uint8_t maxLogLinesPerPass = 2;
 
     // Last active/bootloader state CheckNodePresence() has told the server
     // about, indexed nodeId-1. Seeded by SendRoster() itself (so the roster

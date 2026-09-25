@@ -195,6 +195,12 @@ func (s *Server) handleNodeLog(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleMainLog returns the MainController log lines the server holds (the
+// most recent 500, oldest first). New ones arrive over /ws as "mainlog".
+func (s *Server) handleMainLog(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"lines": s.svc.MainLog()})
+}
+
 func (s *Server) handleListOverrides(w http.ResponseWriter, r *http.Request) {
 	node, _ := strconv.Atoi(r.URL.Query().Get("node"))
 	ovs, err := s.svc.Store().Overrides(r.Context(), node)
