@@ -25,7 +25,7 @@
 |---|---|---|
 | MCU | STM32G031F8P6 | Cortex-M0+, 64 MHz max, 64 KB flash, 8 KB SRAM, TSSOP20. |
 | UART | USART1 | Hardware Driver-Enable (DE) output — no manual GPIO toggle + delay needed. |
-| Transceiver | MAX3485CSA-JSM (JSMSEMI), LCSC `C6395158` | 3.3V half-duplex RS-485, SOP-8 (second source: HTCSEMI `HT83485ARZ`, `C2960978`). DE/RE tied together, driven by USART1's DE pin. |
+| Transceiver | THVD2410DR (TI), LCSC `C1849398` | ±70V fault-protected 3.3V half-duplex RS-485, 500 kbps, SOIC-8 (`Node-Bus-Hardware-Design-Spec.md` §6.3). DE/RE tied together, driven by USART1's DE pin. |
 | Baud rate | **115 200** | Not an exact integer USART divisor (≈0.08% generator error at 16 MHz HCLK) — negligible next to the crystal-less HSI16 clock's own spread. `1.15×10⁷ bit·m/s` for the ~100 m / 20-node terminated bus sits deep inside the safe region. 250 000 / 500 000 (both exact) are bench-validated fallbacks; 1 Mbit is not used. |
 | CRC engine | Hardware CRC peripheral | Offloads CRC calc from the CPU. |
 

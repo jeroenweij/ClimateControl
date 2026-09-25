@@ -165,7 +165,9 @@ MainController + TemperatureNode are two populate variants of one PCB (the 48V i
 
 ### 6.3 RS-485 transceiver
 
-**Part: MAX3485CSA-JSM (JSMSEMI)** — LCSC `C6395158`, SOP-8. 3.3V half-duplex RS-485, −40…+85°C, 12 Mbps, ±8 kV HBM / ±15 kV IEC-air ESD. A 3.3V part is required: at a 3.3V rail, a 5V transceiver would drive its RO output at 5V into the MCU RX pin. Standard MAX485/MAX3485 SO-8 pinout (`1 RO · 2 /RE · 3 DE · 4 DI · 5 GND · 6 A · 7 B · 8 VCC`). Second source: HTCSEMI `HT83485ARZ`, LCSC `C2960978`.
+**Part: THVD2410DR (TI)** — LCSC `C1849398`, SOIC-8. ±70 V fault-protected half-duplex RS-485, 3.0–5.5 V supply (run at 3.3V), 500 kbps, −40…+125°C, ±25 V receiver common-mode range, ±16 kV HBM / ±12 kV IEC 61000-4-2 contact and air ESD on the bus pins, 1/8 unit load, receiver fail-safe (logic high with the inputs open or shorted). A 3.3V supply is required: the RO output swings to the transceiver's VCC and drives the MCU RX pin directly. Standard MAX485/MAX3485 SO-8 pinout (`1 RO · 2 /RE · 3 DE · 4 DI · 5 GND · 6 A · 7 B · 8 VCC`). 500 kbps covers the 115 200 bus baud and both fallbacks (250 000, and 500 000 at the part's limit).
+
+**Why fault-protected:** an RJ45 plug gives no mating order, and the bus puts +48V (pins 1/2) and GND (pins 7/8) on opposite edges of the connector. A plug inserted slightly tilted can mate +48V and A/B before GND. For that moment the node's input stage (SS26A, bulk cap, buck) is powered with no ground return except out through its own A/B pins, so its local GND floats toward +48V and the charging current returns through every other node's transceiver. A standard −7…+12V transceiver (abs. max ≈ −7.5…+12.5V) is destroyed by this, typically failing as a VCC–GND short, and takes neighbouring nodes' transceivers with it. The THVD2410's bus pins withstand ±70V whether powered or not, so with no low-voltage clamp on A/B (see ESD row below) there is no return path: the plugged node's ground simply floats until GND mates, and neither it nor the rest of the bus sees a fault current. The same rating covers a miswired or damaged cable putting +48V on A/B.
 
 **Driver-enable:** use **USART1's hardware DE output** — tie the transceiver's `DE` (3) and `/RE` (2) together and drive from `USART1_DE` (`UART_DE_POLARITY_HIGH`: high = drive, low = listen). The peripheral handles `DEAT`/`DEDT` assertion timing per frame; no `setEnable()`/`delay()` loop needed.
 
@@ -186,13 +188,13 @@ Per-node A/B passives, fit only where noted, DNP elsewhere:
 
 | Part | Value | Populate |
 |---|---|---|
-| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | once on the whole bus (at MainController); MAX3485 is not true-fail-safe |
-| ESD/surge | **SM712 RS-485 TVS** (SOT-23-3): pin 1 → A, pin 2 → B, pin 3 → GND (common). Asymmetric −7V/+12V per line, matching the RS-485 window. LCSC `C5199207` (ElecSuper) or `C404012` (genuine Bourns). | every node, right at the RJ45; short traces, pin-3 ground straight to the connector-side ground/shield stitch |
+| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | once on the whole bus (at MainController). Not needed by THVD2410 receivers (fail-safe on an open or idle bus); required while any board with a non-fail-safe MAX3485 remains on the bus |
+| ESD/surge | **None external** — the THVD2410's integrated IEC ESD protection (±12 kV contact/air) covers the bus pins. Do not fit an SM712 or any other clamp below ~70V on A/B: it would conduct during a ground-last hot-plug and become the fault path the transceiver is there to block. | DNP on every node (the SM712 footprint, U3, stays empty) |
 | Series R | 10 Ω in each of A/B | optional, tames ringing/EMI |
 
 **Termination:** no on-board footprint, no per-node DNP/jumper. 120 Ω A–B termination is provided by a **plug-in RJ45 terminator** (120 Ω across pins 4/5) inserted into the spare "out" jack of whichever node is physically last on the chain. Every node's board is identical here — moving/extending the bus end just means moving the terminator plug, not reworking a board.
 
-**Common-mode range:** MAX3485 has the standard EIA-485 receiver common-mode range −7V…+12V (abs. max −7.5…+12.5). Same shared-GND-return exposure as ENABLE. The both-ends power feed (§4) cuts worst-case IR drop to ~1/4 of a single-end-fed estimate, landing around ~0.86V normal / ~2.9V worst-case stall — comfortably inside the window with >4× margin.
+**Common-mode range:** THVD2410 receivers operate over ±25V common-mode. Same shared-GND-return exposure as ENABLE. The both-ends power feed (§4) cuts worst-case IR drop to ~1/4 of a single-end-fed estimate, landing around ~0.86V normal / ~2.9V worst-case stall — far inside the window.
 
 ### 6.4 Status LEDs & buttons
 

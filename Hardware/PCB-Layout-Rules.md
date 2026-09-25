@@ -58,7 +58,7 @@ Keep the buck in its own corner, away from the MCU, the RS-485 transceiver, and 
 - **Decoupling:** 100 nF at *every* IC VCC pin, same side as the IC, its own via straight to L2. MCU pin 4 also gets the 1 µF + bulk close.
 - **MCU:** NRST cap at the pin. SWD traces short. Away from the SW node.
 - **RS-485 / RJ45:**
-  - SM712 (U3) **right at the RJ45 pins**, A/B stubs as short as possible.
+  - No clamp on A/B: the SM712 footprint (U3) is DNP — the THVD2410's own IEC ESD protection covers the bus pins. Keep A/B stubs as short as possible.
   - Transceiver (U7) close to the RJ45; route A/B as a pair over solid L2.
   - 120 Ω / bias footprints DNP but place them.
 - **Protection TVS (SMAJ58A, SMCJ58A, SM712, ESD arrays):** place at the connector, *before* what they protect; shortest fat path to GND with its own via(s) to L2.
