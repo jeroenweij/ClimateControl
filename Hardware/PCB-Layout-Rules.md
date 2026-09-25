@@ -60,7 +60,7 @@ Keep the buck in its own corner, away from the MCU, the RS-485 transceiver, and 
 - **RS-485 / RJ45:**
   - No clamp on A/B: the SM712 footprint (U3) is DNP — the THVD2410's own IEC ESD protection covers the bus pins. Keep A/B stubs as short as possible.
   - Transceiver (U7) close to the RJ45; route A/B as a pair over solid L2.
-  - 120 Ω / bias footprints DNP but place them.
+  - No 120 Ω termination or fail-safe bias on the main bus: termination is a plug-in RJ45 terminator, and the THVD2410 is fail-safe on its own.
 - **Protection TVS (SMAJ58A, SMCJ58A, SM712, ESD arrays):** place at the connector, *before* what they protect; shortest fat path to GND with its own via(s) to L2.
 - **Main board 48 V input:** P1 → fuse holder → TVS → Schottky-or-link → +48 V rail, in that order, short and fat. Copper pour on any Schottky tab.
 - **Electrolytics (C10, C11):** away from the buck and any hot part; watch height near the enclosure.

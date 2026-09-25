@@ -373,11 +373,11 @@ Capacitance:1uF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature C
 DESIGNATOR
 C10
 FOOTPRINT
-CAP-SMD_BD8.0-L8.3-W8.3-FD
+CAP-SMD_BD6.3-L6.6-W6.6-LS7.2-FD
 PARTTYPE
-VP2A470M0810
+SVZ1VM470E06E00RAXXX
 DESCRIPTION
-Capacitance:47uF Tolerance:±20% Tolerance:±20% Voltage Rating:100V Ripple Current:130mA Equivalent Series Resistance(ESR):- Diameter:8mm Height - Seated (Max):10.2mm Lifetime:- Operating Temperature:-55℃~+105℃ Operating Temperature:-55℃~+105℃ 
+Capacitance:47uF Tolerance:±20% Tolerance:±20% Voltage Rating:35V Ripple Current:- Equivalent Series Resistance(ESR):- Type:- Pin Spacing:- Diameter:6.3mm Height - Seated (Max):6mm Lifetime:2000hrs@125℃ Operating Temperature:-55℃~+105℃ Operating Temperatu
 Component Kind
 Standard
 Add into BOM
@@ -385,385 +385,59 @@ yes
 Convert to PCB
 yes
 Symbol
-VP2A470M0810
+SVZ1VM470E06E00RAXXX
 Designator
 C10
+Device
+SVZ1VM470E06E00RAXXX
 Supplier
 LCSC
 Supplier Part
-C4054390
+C721322
 Manufacturer
-HONOR(荣誉)
+AISHI(艾华集团)
 Manufacturer Part
-VP2A470M0810
+SVZ1VM470E06E00RAXXX
 Value
 47uF
 JLCPCB Part Class
 Extended Part
-Device
-VP2A470M0810
 Unique ID
 gge20
 Name
 47uF
 LCSC Part Name
-47uF ±20% 100V
+47uF ±20% 35V
 Supplier Footprint
-SMD,D8xL10.5mm
+SMD,D6.3xL6mm
 Datasheet
-https://item.szlcsc.com/datasheet/VP2A470M0810/4623622.html
+https://item.szlcsc.com/datasheet/SVZ1VM470E06E00RAXXX/765071.html
 3D Model Title
-CAP-SMD_BD8.0-L8.3-W8.3-FD
+CAP-SMD_BD6.3-L6.6-W6.6-LS7.2-FD
 Tolerance
 ±20%
 Voltage Rating
-100V
+35V
 Ripple Current
-130mA
+-
 Equivalent Series Resistance(ESR)
 -
 Diameter
-8mm
+6.3mm
 Height - Seated (Max)
-10.2mm
+6mm
 Lifetime
--
+2000hrs@125℃
 Operating Temperature
 -55℃~+105℃
 Description
-Capacitance:47uF Tolerance:±20% Tolerance:±20% Voltage Rating:100V Ripple Current:130mA Equivalent Series Resistance(ESR):- Diameter:8mm Height - Seated (Max):10.2mm Lifetime:- Operating Temperature:-55℃~+105℃ Operating Temperature:-55℃~+105℃ 
-Check
-true
-
-*
-]
-[
-DESIGNATOR
-U8
-FOOTPRINT
-SMD_RH-5015
-PARTTYPE
-RH-5015
-DESCRIPTION
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-RH-5015
-Designator
-U8
-Device
-RH-5015
-Unique ID
-gge41
-Description
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Name
-DNP
-LCSC Part Name
-PCB电路板测试点/测试针
-Supplier Part
-
-Manufacturer
-荣和
-Manufacturer Part
-DNP
-Supplier Footprint
+Capacitance:47uF Tolerance:±20% Tolerance:±20% Voltage Rating:35V Ripple Current:- Equivalent Series Resistance(ESR):- Type:- Pin Spacing:- Diameter:6.3mm Height - Seated (Max):6mm Lifetime:2000hrs@125℃ Operating Temperature:-55℃~+105℃ Operating Temperatu
+Type
 -
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/RH-5015/5885634.html
-Supplier
-LCSC
-3D Model Title
-SMD_RH-5015
-Connector Type
-Ferrite Ring (SMD)
-Plastic Color
-Non-Plastic
-Board Space (Diameter φ/ Length x Width)
-2.67mmx1.02mm
-Check
-true
-
-*
-]
-[
-DESIGNATOR
-U10
-FOOTPRINT
-SMD_RH-5015
-PARTTYPE
-RH-5015
-DESCRIPTION
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-RH-5015
-Designator
-U10
-Device
-RH-5015
-Unique ID
-gge43
-Description
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Name
-DNP
-LCSC Part Name
-PCB电路板测试点/测试针
-Supplier Part
-
-Manufacturer
-荣和
-Manufacturer Part
-DNP
-Supplier Footprint
+Pin Spacing
 -
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/RH-5015/5885634.html
-Supplier
-LCSC
-3D Model Title
-SMD_RH-5015
-Connector Type
-Ferrite Ring (SMD)
-Plastic Color
-Non-Plastic
-Board Space (Diameter φ/ Length x Width)
-2.67mmx1.02mm
-Check
-true
-
-*
-]
-[
-DESIGNATOR
-U11
-FOOTPRINT
-SMD_RH-5015
-PARTTYPE
-RH-5015
-DESCRIPTION
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-RH-5015
-Designator
-U11
-Device
-RH-5015
-Unique ID
-gge44
-Description
-Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
-Name
-DNP
-LCSC Part Name
-PCB电路板测试点/测试针
-Supplier Part
-
-Manufacturer
-荣和
-Manufacturer Part
-DNP
-Supplier Footprint
--
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/RH-5015/5885634.html
-Supplier
-LCSC
-3D Model Title
-SMD_RH-5015
-Connector Type
-Ferrite Ring (SMD)
-Plastic Color
-Non-Plastic
-Board Space (Diameter φ/ Length x Width)
-2.67mmx1.02mm
-Check
-true
-
-*
-]
-[
-DESIGNATOR
-U13
-FOOTPRINT
-SMD_BD5.5-D3.9
-PARTTYPE
-PAD_D3.3_M3Screw_1
-DESCRIPTION
-
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-PAD_D3.3_M3SCREW_1
-Designator
-U13
-Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge62
-Name
-PAD_D3.3_M3Screw_1
-Reuse Block
-
-Group ID
-
-Channel ID
-
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
-Manufacturer
-
-Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
-
-Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
-Description
-
-
-*
-]
-[
-DESIGNATOR
-U15
-FOOTPRINT
-SMD_BD5.5-D3.9
-PARTTYPE
-PAD_D3.3_M3Screw_1
-DESCRIPTION
-
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-PAD_D3.3_M3SCREW_1
-Designator
-U15
-Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge64
-Name
-PAD_D3.3_M3Screw_1
-Reuse Block
-
-Group ID
-
-Channel ID
-
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
-Manufacturer
-
-Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
-
-Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
-Description
-
-
-*
-]
-[
-DESIGNATOR
-U16
-FOOTPRINT
-SMD_BD5.5-D3.9
-PARTTYPE
-PAD_D3.3_M3Screw_1
-DESCRIPTION
-
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-PAD_D3.3_M3SCREW_1
-Designator
-U16
-Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge65
-Name
-PAD_D3.3_M3Screw_1
-Reuse Block
-
-Group ID
-
-Channel ID
-
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
-Manufacturer
-
-Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
-
-Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
-Description
-
+Polarity type
+有极性
 
 *
 ]
@@ -849,100 +523,6 @@ Polarity:Bidirectional Reverse Stand-Off Voltage (Vrwm):12V；7V Clamping Voltag
 ]
 [
 DESIGNATOR
-U3
-FOOTPRINT
-CONN-TH_B4B-XH-A-LF-SN
-PARTTYPE
-B4B-XH-A(LF)(SN)
-DESCRIPTION
-Pins Structure:1x4P Pitch:2.5mm Mounting Type:Through Hole Reference Series:XH Number of Pins:4P Number of Rows:1 Number of PINs Per Row:4 Row Spacing:- Current Rating:3A Contact Material:Brass Contact Plating:Tin Operating Temperature:-25℃~+85℃ Operating
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-B4B-XH-A(LF)(SN)
-Designator
-U3
-Device
-B4B-XH-A(LF)(SN)
-Unique ID
-gge81
-Name
-B4B-XH-A(LF)(SN)
-Reuse Block
-
-Group ID
-
-Channel ID
-
-LCSC Part Name
-1x4P 间距:2.5mm 直插 系列:XH
-Supplier Part
-C144395
-Manufacturer
-JST
-Manufacturer Part
-B4B-XH-A(LF)(SN)
-Supplier Footprint
-插件,P=2.5mm
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/B4B-XH-A(LF)(SN)/155727.html
-Supplier
-LCSC
-3D Model Title
-XH2.5-4A
-Pins Structure
-1x4P
-Pitch
-2.5mm
-Mounting Type
-Through Hole
-Reference Series
-XH
-Number of Pins
-4P
-Number of Rows
-1
-Number of PINs Per Row
-4
-Row Spacing
--
-Current Rating
-3A
-Contact Material
-Brass
-Contact Plating
-Tin
-Operating Temperature
--25℃~+85℃
-Voltage Rating
-250V
-Plastic Material
-PA66
-Flame Retardant Rating
-UL94V-0
-Supplementary Features
-K Pin
-Color
-White
-Z-Height of the Board
-7mm
-X-Length of Bottom Edge on Board (Spacing Line)
-12.4mm
-Y-Width of Bottom Edge on Board
-5.75mm
-Description
-Pins Structure:1x4P Pitch:2.5mm Mounting Type:Through Hole Reference Series:XH Number of Pins:4P Number of Rows:1 Number of PINs Per Row:4 Row Spacing:- Current Rating:3A Contact Material:Brass Contact Plating:Tin Operating Temperature:-25℃~+85℃ Operating
-
-*
-]
-[
-DESIGNATOR
 R1
 FOOTPRINT
 R0402
@@ -1013,11 +593,11 @@ Type:Thick Film Resistor Resistance:120Ω Tolerance:±1% Tolerance:±1% Power(Wa
 DESIGNATOR
 U1
 FOOTPRINT
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL
+SOIC-8_L4.9-W3.9-P1.27-LS6.0-TL
 PARTTYPE
-MAX3485CSA-JSM
+THVD2410DR
 DESCRIPTION
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
 Component Kind
 Standard
 Add into BOM
@@ -1025,41 +605,31 @@ yes
 Convert to PCB
 yes
 Symbol
-MAX3485CSA_C6395158
+THVD2410DR
 Designator
 U1
-Device
-MAX3485CSA-JSM
 Unique ID
 gge28_0
 Name
-MAX3485CSA-JSM
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+THVD2410DR
 LCSC Part Name
-3.3V、12Mbps半双工RS-485/RS-422收发器
+THVD2410半双工RS-485收发器
 Supplier Part
-C6395158
+C1849398
 Manufacturer
-JSMSEMI(杰盛微)
+TI(德州仪器)
 Manufacturer Part
-MAX3485CSA-JSM
+THVD2410DR
 Supplier Footprint
-SOP-8
+SOIC-8
 JLCPCB Part Class
 Extended Part
 Datasheet
-https://item.szlcsc.com/datasheet/MAX3485CSA-JSM/7346196.html
+https://www.ti.com/cn/lit/ds/symlink/thvd2450.pdf
 Supplier
 LCSC
 3D Model Title
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL-1
+SOIC-8_L4.9-W3.9-H1.7-LS6.0-P1.27
 Type
 Transceiver
 Number of Drivers
@@ -1067,23 +637,25 @@ Number of Drivers
 Number of Receivers
 1
 Voltage - Supply
-3.3V
+3V~5.5V
 Data Rate
-12Mbps
+500Kbps
 Number of Nodes
-32
+256
 ESD Protect
-±8kV
+±16kV
 Operating Temperature
--40℃~+85℃
+-40℃~+125℃
 Quiescent Supply Current
-500uA
+1uA
 Communication Mode
 Half-Duplex
 Features
-Tx/Rx enable；Thermal shutdown protection；Enable shutdown；Overcurrent Protection
+Tx/Rx enable；Thermal shutdown protection；Fail-safe；Enable shutdown；Overcurrent Protection；Low-power mode
 Description
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
+Device
+THVD2410DR
 
 *
 ]
@@ -1343,11 +915,11 @@ Type:Thick Film Resistor Resistance:10Ω Tolerance:±1% Tolerance:±1% Power(Wat
 ]
 [
 DESIGNATOR
-U5
+H2
 FOOTPRINT
-SMD_BD5.5-D3.9
+HOLEHOLE
 PARTTYPE
-PAD_D3.3_M3Screw_1
+HOLE
 DESCRIPTION
 
 Component Kind
@@ -1356,16 +928,154 @@ Add into BOM
 yes
 Convert to PCB
 yes
+Designator
+H2
 Symbol
-PAD_D3.3_M3SCREW_1
+HOLE
+Device
+HOLE
+Unique ID
+gge107
+Name
+HOLE
+Reuse Block
+
+Group ID
+
+Channel ID
+
+link
+
+Manufacturer
+
+Manufacturer Part
+
+Supplier Part
+
+Supplier
+
+Description
+
+
+*
+]
+[
+DESIGNATOR
+H3
+FOOTPRINT
+HOLEHOLE
+PARTTYPE
+HOLE
+DESCRIPTION
+
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Designator
+H3
+Symbol
+HOLE
+Device
+HOLE
+Unique ID
+gge108
+Name
+HOLE
+Reuse Block
+
+Group ID
+
+Channel ID
+
+link
+
+Manufacturer
+
+Manufacturer Part
+
+Supplier Part
+
+Supplier
+
+Description
+
+
+*
+]
+[
+DESIGNATOR
+H4
+FOOTPRINT
+HOLEHOLE
+PARTTYPE
+HOLE
+DESCRIPTION
+
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Designator
+H4
+Symbol
+HOLE
+Device
+HOLE
+Unique ID
+gge110
+Name
+HOLE
+Reuse Block
+
+Group ID
+
+Channel ID
+
+link
+
+Manufacturer
+
+Manufacturer Part
+
+Supplier Part
+
+Supplier
+
+Description
+
+
+*
+]
+[
+DESIGNATOR
+U5
+FOOTPRINT
+CONN-SMD_S4B-XH-SM4-TB-LF-SN
+PARTTYPE
+S4B-XH-SM4-TB(LF)(SN)
+DESCRIPTION
+Pins Structure:1x4P Pitch:2.5mm Mounting Type:Surface Mount, Right Angle Reference Series:XH Number of Pins:4P Number of Rows:1 Number of PINs Per Row:4 Row Spacing:- Current Rating:3A Contact Material:Copper Alloy Contact Plating:Tin Operating Temperatur
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+S4B-XH-SM4-TB-(LF)(SN)
 Designator
 U5
 Device
-PAD_D3.3_M3Screw_1
+S4B-XH-SM4-TB(LF)(SN)
 Unique ID
-gge62_0
+gge111
 Name
-PAD_D3.3_M3Screw_1
+S4B-XH-SM4-TB(LF)(SN)
 Reuse Block
 
 Group ID
@@ -1373,24 +1083,212 @@ Group ID
 Channel ID
 
 LCSC Part Name
-PAD_D3.3_M3Screw_1
+1x4P 间距:2.5mm 卧贴 系列:XH
 Supplier Part
-C9900016282
+C161861
 Manufacturer
-
+JST
 Manufacturer Part
-PAD_D3.3_M3Screw_1
+S4B-XH-SM4-TB(LF)(SN)
 Supplier Footprint
-SCREW
+SMD,P=2.5mm,卧贴
 JLCPCB Part Class
 Extended Part
 Datasheet
-
+https://item.szlcsc.com/datasheet/S4B-XH-SM4-TB(LF)(SN)/173242.html
 Supplier
 LCSC
 3D Model Title
-SMD_BD5.5-D3.9
+CONN-SMD_XH2.50-WS-4P
+Pins Structure
+1x4P
+Pitch
+2.5mm
+Mounting Type
+Surface Mount, Right Angle
+Reference Series
+XH
+Number of Pins
+4P
+Number of Rows
+1
+Number of PINs Per Row
+4
+Row Spacing
+-
+Current Rating
+3A
+Contact Material
+Copper Alloy
+Contact Plating
+Tin
+Operating Temperature
+-25℃~+85℃
+Voltage Rating
+250V
+Plastic Material
+PA6T
+Flame Retardant Rating
+UL94V-0
+Color
+White
+Z-Height of the Board
+6mm
+X-Length of Bottom Edge on Board (Spacing Line)
+15mm
+Y-Width of Bottom Edge on Board
+10mm
 Description
+Pins Structure:1x4P Pitch:2.5mm Mounting Type:Surface Mount, Right Angle Reference Series:XH Number of Pins:4P Number of Rows:1 Number of PINs Per Row:4 Row Spacing:- Current Rating:3A Contact Material:Copper Alloy Contact Plating:Tin Operating Temperatur
+
+*
+]
+[
+DESIGNATOR
+H1
+FOOTPRINT
+HOLEHOLE
+PARTTYPE
+HOLE
+DESCRIPTION
+
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Designator
+H1
+Symbol
+HOLE
+Device
+HOLE
+Unique ID
+gge110_0
+Name
+HOLE
+Reuse Block
+
+Group ID
+
+Channel ID
+
+link
+
+Manufacturer
+
+Manufacturer Part
+
+Supplier Part
+
+Supplier
+
+Description
+
+
+*
+]
+[
+DESIGNATOR
+B1
+FOOTPRINT
+ms:SLP3_150_100_F
+PARTTYPE
+SLP3_150_100_F
+DESCRIPTION
+
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Designator
+B1
+Symbol
+SLP3_150_100_F
+Device
+SLP3_150_100_F
+Unique ID
+gge113
+Name
+SLP3_150_100_F
+Reuse Block
+
+Group ID
+
+Channel ID
+
+Value
+SLP3-150-100-F
+User doc link
+
+Part
+SLP3-150-100-F
+Supplier
+Bivar
+Comment
+Order but do not assemble
+Board
+Battery
+NoBoM
+1
+Description
+
+3D Model Title
+
+
+*
+]
+[
+DESIGNATOR
+B2
+FOOTPRINT
+ms:SLP3_150_100_F
+PARTTYPE
+SLP3_150_100_F
+DESCRIPTION
+
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Designator
+B2
+Symbol
+SLP3_150_100_F
+Device
+SLP3_150_100_F
+Unique ID
+gge114
+Name
+SLP3_150_100_F
+Reuse Block
+
+Group ID
+
+Channel ID
+
+Value
+SLP3-150-100-F
+User doc link
+
+Part
+SLP3-150-100-F
+Supplier
+Bivar
+Comment
+Order but do not assemble
+Board
+Battery
+NoBoM
+1
+Description
+
+3D Model Title
 
 
 *
@@ -1725,11 +1623,11 @@ Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature
 DESIGNATOR
 LED2
 FOOTPRINT
-LED0603-RD_GREEN
+LED0805-R-RD
 PARTTYPE
-MHT192CGCT
+KT-0805G
 DESCRIPTION
-Lamp Holder Type:- Illumination Color:Yellow Green Voltage - Forward(Vf):1.7V~2.4V Voltage - Forward(Vf):1.7V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:568nm~575nm Wavelength - Dominant:568nm~575nm Peak Wavelength:575nm Diode Confi
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
 Component Kind
 Standard
 Add into BOM
@@ -1737,65 +1635,63 @@ yes
 Convert to PCB
 yes
 Symbol
-MHT192CGCT
+0805G (Green)
 Designator
 LED2
+Device
+KT-0805G
 Supplier
 LCSC
 Supplier Part
-C389518
+C2297
 Manufacturer
-MEIHUA(美华)
+KENTO
 Manufacturer Part
-MHT192CGCT
+KT-0805G
 JLCPCB Part Class
-Extended Part
-Device
-MHT192CGCT
+Basic Part
 Unique ID
 gge33
 LCSC Part Name
-普绿/黄绿
+0805 翠绿 高亮
 Supplier Footprint
-0603
+0805
 Datasheet
-https://item.szlcsc.com/datasheet/MHT192CGCT/364864.html
+https://item.szlcsc.com/datasheet/KT-0805G/2670.html
 3D Model Title
-LED0603-RD_GREEN
+LED0805-RD
 Illumination Color
-Yellow Green
+Emerald Green
 Voltage - Forward(Vf)
-1.7V~2.4V
+2.6V~3.1V
 Power(Watts)
-60mW
+100mW
 Forward Current
-20mA
+5mA
 Wavelength - Dominant
-568nm~575nm
+513nm~528nm
 Peak Wavelength
-575nm
+525nm
 Lens Color
 Water Clear
 Luminous Intensity
-57mcd
+430mcd
 Viewing Angle
 120°
 Operating Temperature
 -40℃~+85℃
 Name
-MHT192CGCT
+KT-0805G
 Description
-Lamp Holder Type:- Illumination Color:Yellow Green Voltage - Forward(Vf):1.7V~2.4V Voltage - Forward(Vf):1.7V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:568nm~575nm Wavelength - Dominant:568nm~575nm Peak Wavelength:575nm Diode Confi
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
 Lamp Holder Type
--
+2mm x 1.25mm square LED
 Diode Configuration
 Discrete Diode
 Color Temperature
 -
 Mounting Style
 -
-Check
-true
 
 *
 ]
@@ -1803,11 +1699,11 @@ true
 DESIGNATOR
 LED3
 FOOTPRINT
-LED-SMD_L1.6-W0.8-R-RD
+LED0805-RD
 PARTTYPE
-KT-0603R
+NCD0805R1_C84256
 DESCRIPTION
-Lamp Holder Type:1.6mm x 0.8mm square LED Illumination Color:Red Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:20mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:645
+Lamp Holder Type:- Illumination Color:Red Voltage - Forward(Vf):1.6V~2.6V Voltage - Forward(Vf):1.6V~2.6V Power(Watts):65mW Test Current:25mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:630nm Peak Wavelength:630nm D
 Component Kind
 Standard
 Add into BOM
@@ -1815,71 +1711,71 @@ yes
 Convert to PCB
 yes
 Symbol
-KT-0603R
+FC-2012HRK-620D
 Designator
 LED3
 Device
-KT-0603R
+NCD0805R1_C84256
 Unique ID
 gge35
 Name
-KT-0603R
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+NCD0805R1
 LCSC Part Name
-0603 红灯 高亮
+片式发光二极管
 Supplier Part
-C2286
+C84256
 Manufacturer
-KENTO
+国星光电
 Manufacturer Part
-KT-0603R
+NCD0805R1
 Supplier Footprint
-0603
+0805
 JLCPCB Part Class
 Basic Part
 Datasheet
-https://item.szlcsc.com/datasheet/KT-0603R/2659.html
+https://item.szlcsc.com/datasheet/NCD0805R1/85425.html
 Supplier
 LCSC
 3D Model Title
-LED0603_L1.6-W0.8-H0.6
+LED0805-RD
 Lamp Holder Type
-1.6mm x 0.8mm square LED
+-
 Illumination Color
 Red
 Voltage - Forward(Vf)
-1.8V~2.4V
+1.6V~2.6V
 Power(Watts)
-40mW
-Forward Current
-20mA
+65mW
 Wavelength - Dominant
 615nm~630nm
 Peak Wavelength
-645nm
+630nm
 Diode Configuration
 Discrete Diode
 Lens Color
-Water Clear
+-
 Color Temperature
 -
 Luminous Intensity
-300mcd
+195mcd
 Viewing Angle
-120°
+130°
 Mounting Style
--
+Top-mount
 Operating Temperature
--40℃~+85℃
+-30℃~+85℃
 Description
-Lamp Holder Type:1.6mm x 0.8mm square LED Illumination Color:Red Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:20mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:645
+Lamp Holder Type:- Illumination Color:Red Voltage - Forward(Vf):1.6V~2.6V Voltage - Forward(Vf):1.6V~2.6V Power(Watts):65mW Test Current:25mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:630nm Peak Wavelength:630nm D
+Test Current
+25mA
+Half wave width
+15nm
+Emitting Material
+-
+Lumens
+-
+ESD Withstand Voltage
+-
 
 *
 ]
@@ -2060,94 +1956,6 @@ Name
 10uF
 Description
 Capacitance:10uF Tolerance:±20% Tolerance:±20% Voltage Rating:25V Temperature Coefficient:X5R 
-
-*
-]
-[
-DESIGNATOR
-H1
-FOOTPRINT
-HDR-SMD_4P-P2.54-V-M-R2-C2-S7.5
-PARTTYPE
-PZ2.54-2x2PLT-L11.0 Pin header
-DESCRIPTION
-Pin Structure:2x2P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Header Mounting Type:Surface Mount,Vertical Number of Rows:2 Number of Pins:4P Current Rating:3A Voltage Rating (Max):1kV Length of Mating Pin:6mm Insulation Height:2.05mm Length 
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Name
-PZ2.54-2x2PLT-L11.0 Pin header
-Designator
-H1
-Symbol
-PZ2.54-2X2PLT-L11.0 PIN HEADER
-Device
-PZ2.54-2x2PLT-L11.0 Pin header
-Unique ID
-gge46
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
-LCSC Part Name
-2x2P 间距:2.54mm 方针 立贴
-Supplier Part
-C55213913
-Manufacturer
-SHOU HAN(首韩)
-Manufacturer Part
-PZ2.54-2x2PLT-L11.0 Pin header
-Supplier Footprint
-SMD,P=2.54mm
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/PZ2.54-2x2PLT-L11.0%2520Pin%2520header/59050537.html
-Supplier
-LCSC
-3D Model Title
-HDR-SMD_4P-P2.54-V-M-R2-C2-S7.5
-Pin Structure
-2x2P
-Pitch
-2.54mm
-Row Spacing
--
-Circluar Pins/Square Pins
-Pin Header
-Mounting Type
-Surface Mount,Vertical
-Number of Rows
-2
-Number of Pins
-4P
-Current Rating
-3A
-Voltage Rating (Max)
-1kV
-Length of Mating Pin
-6mm
-Insulation Height
-2.05mm
-Length of End Connection Pin
--
-Contact Material
-Brass
-Contact Plating
-Gold
-Operating Temperature
--40℃~+105℃
-Color
-Black
-Description
-Pin Structure:2x2P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Header Mounting Type:Surface Mount,Vertical Number of Rows:2 Number of Pins:4P Current Rating:3A Voltage Rating (Max):1kV Length of Mating Pin:6mm Insulation Height:2.05mm Length 
 
 *
 ]
@@ -2372,12 +2180,12 @@ Symbol
 BS212C-1_2
 Designator
 U18
-Name
-BS212C-1
 Device
 BS212C-1
 Unique ID
 gge103
+Name
+BS212C-1
 Reuse Block
 
 Group ID
@@ -2432,8 +2240,6 @@ DESCRIPTION
 Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature Coefficient:X7R 
 Component Kind
 Standard
-Unique ID
-gge104
 Add into BOM
 yes
 Convert to PCB
@@ -2444,6 +2250,8 @@ Designator
 C15
 Device
 CL05B104KO5NNNC
+Unique ID
+gge104
 LCSC Part Name
 100nF ±10% 16V
 Supplier Part
@@ -2494,8 +2302,6 @@ DESCRIPTION
 Capacitance:10pF Tolerance:±5% Tolerance:±5% Voltage Rating:50V Temperature Coefficient:C0G 
 Component Kind
 Standard
-Unique ID
-gge105
 Add into BOM
 yes
 Convert to PCB
@@ -2506,42 +2312,44 @@ Designator
 C18
 Device
 CL10C100JB8NNNC
-LCSC Part Name
-10pF ±5% 50V
-Supplier Part
-
-Manufacturer
-DNP
-Manufacturer Part
-DNP
-Supplier Footprint
-0603
-JLCPCB Part Class
-Basic Part
-Datasheet
-https://item.szlcsc.com/datasheet/CL10C100JB8NNNC/1986.html
-Supplier
-DNP
-3D Model Title
-C0603_L1.6-W0.8-H0.8
-Value
-DNP
-Tolerance
-±5%
-Voltage Rating
-50V
-Temperature Coefficient
-C0G
+Unique ID
+gge105
 Name
 DNP
-Description
-Capacitance:10pF Tolerance:±5% Tolerance:±5% Voltage Rating:50V Temperature Coefficient:C0G 
 Reuse Block
 
 Group ID
 
 Channel ID
 
+Value
+DNP
+Supplier Part
+
+Manufacturer
+DNP
+Supplier
+DNP
+Manufacturer Part
+DNP
+LCSC Part Name
+10pF ±5% 50V
+Supplier Footprint
+0603
+JLCPCB Part Class
+Basic Part
+Datasheet
+https://item.szlcsc.com/datasheet/CL10C100JB8NNNC/1986.html
+3D Model Title
+C0603_L1.6-W0.8-H0.8
+Tolerance
+±5%
+Voltage Rating
+50V
+Temperature Coefficient
+C0G
+Description
+Capacitance:10pF Tolerance:±5% Tolerance:±5% Voltage Rating:50V Temperature Coefficient:C0G 
 
 *
 ]
@@ -2566,36 +2374,18 @@ Designator
 C23
 Device
 CL10C100JB8NNNC
-LCSC Part Name
-10pF ±5% 50V
 Supplier Part
 
 Manufacturer
 DNP
 Manufacturer Part
 DNP
-Supplier Footprint
-0603
-JLCPCB Part Class
-Basic Part
-Datasheet
-https://item.szlcsc.com/datasheet/CL10C100JB8NNNC/1986.html
 Supplier
 DNP
-3D Model Title
-C0603_L1.6-W0.8-H0.8
 Value
 DNP
-Tolerance
-±5%
-Voltage Rating
-50V
-Temperature Coefficient
-C0G
 Name
 DNP
-Description
-Capacitance:10pF Tolerance:±5% Tolerance:±5% Voltage Rating:50V Temperature Coefficient:C0G 
 Unique ID
 gge106
 Reuse Block
@@ -2604,6 +2394,24 @@ Group ID
 
 Channel ID
 
+LCSC Part Name
+10pF ±5% 50V
+Supplier Footprint
+0603
+JLCPCB Part Class
+Basic Part
+Datasheet
+https://item.szlcsc.com/datasheet/CL10C100JB8NNNC/1986.html
+3D Model Title
+C0603_L1.6-W0.8-H0.8
+Tolerance
+±5%
+Voltage Rating
+50V
+Temperature Coefficient
+C0G
+Description
+Capacitance:10pF Tolerance:±5% Tolerance:±5% Voltage Rating:50V Temperature Coefficient:C0G 
 
 *
 ]
@@ -2626,10 +2434,10 @@ Symbol
 CL05B104KO5NNNC
 Designator
 C24
-Unique ID
-gge104_0
 Device
 CL05B104KO5NNNC
+Unique ID
+gge104_0
 LCSC Part Name
 100nF ±10% 16V
 Supplier Part
@@ -2666,6 +2474,194 @@ Group ID
 
 Channel ID
 
+
+*
+]
+[
+DESIGNATOR
+H6
+FOOTPRINT
+HDR-TH_4P-P2.54-V-M-1
+PARTTYPE
+2541WV-04P
+DESCRIPTION
+Pin Structure:1x4P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Header Mounting Type:Through Hole Number of Rows:1 Number of Pins:4P Current Rating:3A Length of Mating Pin:6mm Insulation Height:2.54mm Length of End Connection Pin:3mm Contact M
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+2541WV-04P
+Designator
+H6
+Device
+2541WV-04P
+Unique ID
+gge112
+LCSC Part Name
+1x4P 间距:2.54mm 方针 直插
+Supplier Part
+C5383113
+Manufacturer
+HanElectricity(瀚源)
+Manufacturer Part
+2541WV-04P
+Supplier Footprint
+插件,P=2.54mm
+JLCPCB Part Class
+Extended Part
+Datasheet
+https://item.szlcsc.com/datasheet/2541WV-04P/6258473.html
+Supplier
+LCSC
+3D Model Title
+HDR-TH_4P-P2.54-V-M-1
+Pin Structure
+1x4P
+Pitch
+2.54mm
+Row Spacing
+-
+Circluar Pins/Square Pins
+Pin Header
+Number of Rows
+1
+Number of Pins
+4P
+Current Rating
+3A
+Length of Mating Pin
+6mm
+Insulation Height
+2.54mm
+Length of End Connection Pin
+3mm
+Contact Material
+Brass
+Contact Plating
+Gold
+Operating Temperature
+-55℃~+105℃
+Name
+2541WV-04P
+Description
+Pin Structure:1x4P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Header Mounting Type:Through Hole Number of Rows:1 Number of Pins:4P Current Rating:3A Length of Mating Pin:6mm Insulation Height:2.54mm Length of End Connection Pin:3mm Contact M
+Mounting Type
+Through Hole
+
+*
+]
+[
+DESIGNATOR
+U3
+FOOTPRINT
+SMD_RH-5015
+PARTTYPE
+RH-5015
+DESCRIPTION
+Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+RH-5015
+Designator
+U3
+Device
+RH-5015
+Unique ID
+gge41_0
+Description
+Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
+Name
+DNP
+LCSC Part Name
+PCB电路板测试点/测试针
+Supplier Part
+
+Manufacturer
+荣和
+Manufacturer Part
+DNP
+Supplier Footprint
+-
+JLCPCB Part Class
+Extended Part
+Datasheet
+https://item.szlcsc.com/datasheet/RH-5015/5885634.html
+Supplier
+LCSC
+3D Model Title
+SMD_RH-5015
+Connector Type
+Ferrite Ring (SMD)
+Plastic Color
+Non-Plastic
+Board Space (Diameter φ/ Length x Width)
+2.67mmx1.02mm
+Check
+true
+
+*
+]
+[
+DESIGNATOR
+U13
+FOOTPRINT
+SMD_RH-5015
+PARTTYPE
+RH-5015
+DESCRIPTION
+Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+RH-5015
+Designator
+U13
+Device
+RH-5015
+Unique ID
+gge41_1
+Description
+Connector Type:Ferrite Ring (SMD) Plastic Color:Non-Plastic Board Space (Diameter φ/ Length x Width):2.67mmx1.02mm 
+Name
+DNP
+LCSC Part Name
+PCB电路板测试点/测试针
+Supplier Part
+
+Manufacturer
+荣和
+Manufacturer Part
+DNP
+Supplier Footprint
+-
+JLCPCB Part Class
+Extended Part
+Datasheet
+https://item.szlcsc.com/datasheet/RH-5015/5885634.html
+Supplier
+LCSC
+3D Model Title
+SMD_RH-5015
+Connector Type
+Ferrite Ring (SMD)
+Plastic Color
+Non-Plastic
+Board Space (Diameter φ/ Length x Width)
+2.67mmx1.02mm
+Check
+true
 
 *
 ]
@@ -2756,6 +2752,8 @@ Symbol
 CL05A105KA5NQNC
 Designator
 C3
+Device
+CL05A105KA5NQNC
 Unique ID
 gge85
 Name
@@ -2788,8 +2786,6 @@ Temperature Coefficient
 X5R
 Description
 Capacitance:1uF Tolerance:±10% Tolerance:±10% Voltage Rating:25V Temperature Coefficient:X5R 
-Device
-CL05A105KA5NQNC
 
 *
 ]
@@ -3646,6 +3642,8 @@ Supplier
 
 Manufacturer
 DNP
+Value
+DNP
 LCSC Part Name
 厚膜电阻 0Ω ±1%
 Supplier Footprint
@@ -3658,8 +3656,6 @@ https://item.szlcsc.com/datasheet/0603WAF0000T5E/21903.html
 R0603
 Type
 Thick Film Resistor
-Value
-DNP
 Tolerance
 ±1%
 Power(Watts)
@@ -3885,7 +3881,7 @@ D2-2 1N5819WS_C191023-A Passive
 (
 +5V IN 
 F1-1 JK-SMD050L/60V-1 Passive 
-U3-1 B4B-XH-A(LF)(SN)-1 Passive 
+U5-1 S4B-XH-SM4-TB(LF)(SN)-1 Passive 
 )
 (
 +5V 
@@ -3894,8 +3890,7 @@ U4-1 RT9080-33GJ5-VIN Passive
 U4-3 RT9080-33GJ5-EN Passive 
 C4-2 CL31A226KAHNNNE-2 Input   
 C8-2 CL10A105KB8NNNC-2 Passive 
-C10-1 VP2A470M0810-1 Input   
-U10-1 RH-5015-1 Passive 
+C10-1 SVZ1VM470E06E00RAXXX-1 Input   
 U9-2 MD7218A38PA1-VIN Passive 
 C14-1 CL10A225KO8NNNC-1 Input   
 )
@@ -3905,17 +3900,17 @@ U4-2 RT9080-33GJ5-GND Passive
 C4-1 CL31A226KAHNNNE-1 Input   
 C8-1 CL10A105KB8NNNC-1 Passive 
 C9-1 CL10A105KB8NNNC-1 Passive 
-C10-2 VP2A470M0810-2 Input   
-U8-1 RH-5015-1 Passive 
-U13-1 PAD_D3.3_M3Screw_1-1 Passive 
-U15-1 PAD_D3.3_M3Screw_1-1 Passive 
-U16-1 PAD_D3.3_M3Screw_1-1 Passive 
+C10-2 SVZ1VM470E06E00RAXXX-2 Input   
 U12-3 CDSOT23-SM712-ES-GND Passive 
-U3-4 B4B-XH-A(LF)(SN)-4 Passive 
-U1-5 MAX3485CSA-JSM-GND Passive 
+U1-5 THVD2410DR-GND Passive 
 C1-1 CL05B104KO5NNNC-1 Passive 
 R2-2 0402WGF1002TCE-2 Input   
-U5-1 PAD_D3.3_M3Screw_1-1 Passive 
+H2-1 HOLE-1 Input   
+H3-1 HOLE-1 Input   
+H4-1 HOLE-1 Input   
+U5-4 S4B-XH-SM4-TB(LF)(SN)-4 Passive 
+U5-5 S4B-XH-SM4-TB(LF)(SN)-5 Passive 
+H1-1 HOLE-1 Input   
 U2-5 STM32G031F8P6-VSS/VSSA Passive 
 U6-2 TC2030-2 Input   
 D3-3 TPESD8004MUTAG-GND Passive 
@@ -3923,10 +3918,9 @@ D3-8 TPESD8004MUTAG-GND Passive
 SW1-4 GT-TZ084B-H015-L1-4 Passive 
 SW1-3 GT-TZ084B-H015-L1-3 Passive 
 C12-1 CL05B104KO5NNNC-1 Passive 
-LED2-1 MHT192CGCT-- Input   
-LED3-2 KT-0603R-K Passive 
+LED2-2 KT-0805G-K Passive 
+LED3-1 NCD0805R1_C84256-- Passive 
 C17-1 CL10A106MA8NRNC-1 Input   
-H1-1 PZ2.54-2x2PLT-L11.0 Pin header-1 Passive 
 R15-2 0402WGF1002TCE-2 Input   
 C22-1 CL05B103KB5NNNC-1 Input   
 U7-4 CHT40MEMS-VSS Passive 
@@ -3936,6 +3930,7 @@ C15-2 CL05B104KO5NNNC-2 Passive
 C18-1 CL10C100JB8NNNC-1 Input   
 C23-1 CL10C100JB8NNNC-1 Input   
 C24-2 CL05B104KO5NNNC-2 Passive 
+H6-1 2541WV-04P-1 Passive 
 U17-1 X096-2864KSWPG01-H30-NC(GND) Passive 
 U17-8 X096-2864KSWPG01-H30-VSS Passive 
 U17-10 X096-2864KSWPG01-H30-BS0 Passive 
@@ -3959,23 +3954,24 @@ R9-1 FRC0402F6203TS-1 Passive
 C7-1 CL10A475KO8NNNC-1 Passive 
 C11-1 CL10A225KO8NNNC-1 Input   
 U9-1 MD7218A38PA1-GND Passive 
+C13-1 CL10A225KO8NNNC-1 Input   
+C14-2 CL10A225KO8NNNC-2 Input   
 )
 (
 +3v3 
 U4-5 RT9080-33GJ5-VOUT Passive 
 C9-2 CL10A105KB8NNNC-2 Passive 
-U11-1 RH-5015-1 Passive 
-U1-8 MAX3485CSA-JSM-VCC Passive 
+U1-8 THVD2410DR-VCC Passive 
 C1-2 CL05B104KO5NNNC-2 Passive 
 U2-4 STM32G031F8P6-VDD/VDDA Passive 
 U6-1 TC2030-1 Input   
 C12-2 CL05B104KO5NNNC-2 Passive 
 C17-2 CL10A106MA8NRNC-2 Input   
-H1-3 PZ2.54-2x2PLT-L11.0 Pin header-3 Passive 
 U7-3 CHT40MEMS-VDD Passive 
 U18-1 BS212C-1-VDD Passive 
 C15-1 CL05B104KO5NNNC-1 Passive 
 C24-1 CL05B104KO5NNNC-1 Passive 
+H6-2 2541WV-04P-2 Passive 
 U17-9 X096-2864KSWPG01-H30-VDD Passive 
 U17-11 X096-2864KSWPG01-H30-BS1 Passive 
 C2-2 CL05A105KA5NQNC-2 Passive 
@@ -3987,44 +3983,44 @@ R17-1 0603WAF0000T5E-1 Input
 (
 RS485_T_A 
 U12-1 CDSOT23-SM712-ES-IO Passive 
-U3-2 B4B-XH-A(LF)(SN)-2 Passive 
 R1-2 0402WGF1200TCE-2 Input   
 R19-2 0402WGF100JTCE-2 Input   
+U5-2 S4B-XH-SM4-TB(LF)(SN)-2 Passive 
 )
 (
 RS485_T_B 
 U12-2 CDSOT23-SM712-ES-IO Passive 
-U3-3 B4B-XH-A(LF)(SN)-3 Passive 
 R1-1 0402WGF1200TCE-1 Input   
 R18-2 0402WGF100JTCE-2 Input   
+U5-3 S4B-XH-SM4-TB(LF)(SN)-3 Passive 
 )
 (
 USART2_RX 
-U1-1 MAX3485CSA-JSM-RO Passive 
+U1-1 THVD2410DR-R Passive 
 U2-10 STM32G031F8P6-PA3 Passive 
-H1-4 PZ2.54-2x2PLT-L11.0 Pin header-4 Passive 
+H6-3 2541WV-04P-3 Passive 
 )
 (
 USART2_DE 
-U1-2 MAX3485CSA-JSM-RE# Passive 
-U1-3 MAX3485CSA-JSM-DE Passive 
+U1-2 THVD2410DR-RE# Passive 
+U1-3 THVD2410DR-DE Passive 
 R2-1 0402WGF1002TCE-1 Input   
 U2-8 STM32G031F8P6-PA1 Passive 
 )
 (
 USART2_TX 
-U1-4 MAX3485CSA-JSM-DI Passive 
+U1-4 THVD2410DR-D Passive 
 U2-9 STM32G031F8P6-PA2 Passive 
-H1-2 PZ2.54-2x2PLT-L11.0 Pin header-2 Passive 
+H6-4 2541WV-04P-4 Passive 
 )
 (
 $1N100 
-U1-6 MAX3485CSA-JSM-A Passive 
+U1-6 THVD2410DR-A Passive 
 R19-1 0402WGF100JTCE-1 Input   
 )
 (
 $1N103 
-U1-7 MAX3485CSA-JSM-B Passive 
+U1-7 THVD2410DR-B Passive 
 R18-1 0402WGF100JTCE-1 Input   
 )
 (
@@ -4100,23 +4096,25 @@ R11-2 0402WGF4701TCE-2 Input
 )
 (
 $2N40 
-LED2-2 MHT192CGCT-+ Input   
+LED2-1 KT-0805G-A Passive 
 R7-2 0402WGF3300TCE-2 Input   
 )
 (
 $2N41 
-LED3-1 KT-0603R-A Passive 
+LED3-2 NCD0805R1_C84256-+ Passive 
 R8-2 0402WGF3300TCE-2 Input   
 )
 (
 KEY_2 
 U18-5 BS212C-1-KEY2 Passive 
 C23-2 CL10C100JB8NNNC-2 Input   
+U3-1 RH-5015-1 Passive 
 )
 (
 KEY_1 
 U18-6 BS212C-1-KEY1 Passive 
 C18-2 CL10C100JB8NNNC-2 Input   
+U13-1 RH-5015-1 Passive 
 )
 (
 $3N4 

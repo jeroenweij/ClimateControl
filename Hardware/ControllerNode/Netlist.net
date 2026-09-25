@@ -1503,11 +1503,11 @@ Type:Thick Film Resistor Resistance:1MΩ Tolerance:±1% Tolerance:±1% Power(Wat
 DESIGNATOR
 C15
 FOOTPRINT
-C0402
+C0805
 PARTTYPE
-CL05B104KO5NNNC
+CL21B104KCFNNNE
 DESCRIPTION
-Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature Coefficient:X7R 
+Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:100V Temperature Coefficient:X7R 
 Component Kind
 Standard
 Add into BOM
@@ -1515,43 +1515,43 @@ yes
 Convert to PCB
 yes
 Symbol
-CL05B104KO5NNNC
+CL21B104KCFNNNE
 Designator
 C15
-Device
-CL05B104KO5NNNC
 Unique ID
 gge40
 Name
 100nF
 LCSC Part Name
-100nF ±10% 16V
+100nF ±10% 100V
 Supplier Part
-C1525
+C28233
 Manufacturer
 SAMSUNG(三星)
 Manufacturer Part
-CL05B104KO5NNNC
+CL21B104KCFNNNE
 Supplier Footprint
-0402
+0805
 JLCPCB Part Class
 Basic Part
 Datasheet
-https://item.szlcsc.com/datasheet/CL05B104KO5NNNC/1877.html
+https://item.szlcsc.com/datasheet/CL21B104KCFNNNE/28983.html
 Supplier
 LCSC
 3D Model Title
-C0402_L1.0-W0.5-H0.5
+C0805_L2.0-W1.3-H1.3
 Value
 100nF
 Tolerance
 ±10%
 Voltage Rating
-16V
+100V
 Temperature Coefficient
 X7R
 Description
-Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature Coefficient:X7R 
+Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:100V Temperature Coefficient:X7R 
+Device
+CL21B104KCFNNNE
 
 *
 ]
@@ -1803,7 +1803,7 @@ CDSOT23-SM712-ES
 Unique ID
 gge47
 Name
-CDSOT23-SM712-ES
+DNP
 Reuse Block
 
 Group ID
@@ -1815,11 +1815,11 @@ true
 LCSC Part Name
 712，两路双向ESD静电防护器件，30kV，CJ：40pF；RS485/RS422串口通讯防护
 Supplier Part
-C5199207
+DNP
 Manufacturer
-ElecSuper(静芯)
+DNP
 Manufacturer Part
-CDSOT23-SM712-ES
+DNP
 Supplier Footprint
 SOT-23
 JLCPCB Part Class
@@ -1827,7 +1827,7 @@ Extended Part
 Datasheet
 https://item.szlcsc.com/datasheet/CDSOT23-SM712-ES/5884007.html
 Supplier
-LCSC
+DNP
 3D Model Title
 SOT-23-3P_L2.9-W1.3-H1.0-LS2.4-P0.95
 Polarity
@@ -1856,6 +1856,8 @@ Junction Capacitance
 40pF
 Description
 Polarity:Bidirectional Reverse Stand-Off Voltage (Vrwm):12V；7V Clamping Voltage:19V；26V Peak Pulse Current (Ipp):17A Peak Pulse Power Dissipation (Ppp):350W Voltage - Breakdown:7.5V；13.3V Reverse Leakage Current (Ir):1uA Number of Channels:2 Operating Tem
+Fitted
+No
 
 *
 ]
@@ -1999,11 +2001,11 @@ Operating Temperature
 ]
 [
 DESIGNATOR
-U13
+H3
 FOOTPRINT
-SMD_BD5.5-D3.9
+HOLEHOLE
 PARTTYPE
-PAD_D3.3_M3Screw_1
+HOLE
 DESCRIPTION
 
 Component Kind
@@ -2012,40 +2014,32 @@ Add into BOM
 yes
 Convert to PCB
 yes
-Symbol
-PAD_D3.3_M3SCREW_1
 Designator
-U13
+H3
+Symbol
+HOLE
 Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge62
+HOLE
 Name
-PAD_D3.3_M3Screw_1
+HOLE
+Unique ID
+gge107
 Reuse Block
 
 Group ID
 
 Channel ID
 
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
+link
+
 Manufacturer
 
 Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
+
+Supplier Part
 
 Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
+
 Description
 
 
@@ -2053,11 +2047,11 @@ Description
 ]
 [
 DESIGNATOR
-U15
+H4
 FOOTPRINT
-SMD_BD5.5-D3.9
+HOLEHOLE
 PARTTYPE
-PAD_D3.3_M3Screw_1
+HOLE
 DESCRIPTION
 
 Component Kind
@@ -2066,40 +2060,32 @@ Add into BOM
 yes
 Convert to PCB
 yes
-Symbol
-PAD_D3.3_M3SCREW_1
 Designator
-U15
+H4
+Symbol
+HOLE
 Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge64
+HOLE
 Name
-PAD_D3.3_M3Screw_1
+HOLE
+Unique ID
+gge107_0
 Reuse Block
 
 Group ID
 
 Channel ID
 
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
+link
+
 Manufacturer
 
 Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
+
+Supplier Part
 
 Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
+
 Description
 
 
@@ -2107,11 +2093,11 @@ Description
 ]
 [
 DESIGNATOR
-U16
+H5
 FOOTPRINT
-SMD_BD5.5-D3.9
+HOLEHOLE
 PARTTYPE
-PAD_D3.3_M3Screw_1
+HOLE
 DESCRIPTION
 
 Component Kind
@@ -2120,40 +2106,32 @@ Add into BOM
 yes
 Convert to PCB
 yes
-Symbol
-PAD_D3.3_M3SCREW_1
 Designator
-U16
+H5
+Symbol
+HOLE
 Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge65
+HOLE
 Name
-PAD_D3.3_M3Screw_1
+HOLE
+Unique ID
+gge107_1
 Reuse Block
 
 Group ID
 
 Channel ID
 
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
+link
+
 Manufacturer
 
 Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
+
+Supplier Part
 
 Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
+
 Description
 
 
@@ -2161,11 +2139,11 @@ Description
 ]
 [
 DESIGNATOR
-U12
+H6
 FOOTPRINT
-SMD_BD5.5-D3.9
+HOLEHOLE
 PARTTYPE
-PAD_D3.3_M3Screw_1
+HOLE
 DESCRIPTION
 
 Component Kind
@@ -2174,40 +2152,32 @@ Add into BOM
 yes
 Convert to PCB
 yes
-Symbol
-PAD_D3.3_M3SCREW_1
 Designator
-U12
+H6
+Symbol
+HOLE
 Device
-PAD_D3.3_M3Screw_1
-Unique ID
-gge62_0
+HOLE
 Name
-PAD_D3.3_M3Screw_1
+HOLE
+Unique ID
+gge107_2
 Reuse Block
 
 Group ID
 
 Channel ID
 
-LCSC Part Name
-PAD_D3.3_M3Screw_1
-Supplier Part
-C9900016282
+link
+
 Manufacturer
 
 Manufacturer Part
-PAD_D3.3_M3Screw_1
-Supplier Footprint
-SCREW
-JLCPCB Part Class
-Extended Part
-Datasheet
+
+Supplier Part
 
 Supplier
-LCSC
-3D Model Title
-SMD_BD5.5-D3.9
+
 Description
 
 
@@ -2543,11 +2513,11 @@ Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature
 DESIGNATOR
 LED2
 FOOTPRINT
-LED0603-RD_GREEN
+LED0805-R-RD
 PARTTYPE
-MHT192CGCT
+KT-0805G
 DESCRIPTION
-Lamp Holder Type:- Illumination Color:Yellow Green Voltage - Forward(Vf):1.7V~2.4V Voltage - Forward(Vf):1.7V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:568nm~575nm Wavelength - Dominant:568nm~575nm Peak Wavelength:575nm Diode Confi
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
 Component Kind
 Standard
 Add into BOM
@@ -2555,65 +2525,63 @@ yes
 Convert to PCB
 yes
 Symbol
-MHT192CGCT
+0805G (Green)
 Designator
 LED2
+Device
+KT-0805G
 Supplier
 LCSC
 Supplier Part
-C389518
+C2297
 Manufacturer
-MEIHUA(美华)
+KENTO
 Manufacturer Part
-MHT192CGCT
+KT-0805G
 JLCPCB Part Class
-Extended Part
-Device
-MHT192CGCT
+Basic Part
 Unique ID
 gge33
 LCSC Part Name
-普绿/黄绿
+0805 翠绿 高亮
 Supplier Footprint
-0603
+0805
 Datasheet
-https://item.szlcsc.com/datasheet/MHT192CGCT/364864.html
+https://item.szlcsc.com/datasheet/KT-0805G/2670.html
 3D Model Title
-LED0603-RD_GREEN
+LED0805-RD
 Illumination Color
-Yellow Green
+Emerald Green
 Voltage - Forward(Vf)
-1.7V~2.4V
+2.6V~3.1V
 Power(Watts)
-60mW
+100mW
 Forward Current
-20mA
+5mA
 Wavelength - Dominant
-568nm~575nm
+513nm~528nm
 Peak Wavelength
-575nm
+525nm
 Lens Color
 Water Clear
 Luminous Intensity
-57mcd
+430mcd
 Viewing Angle
 120°
 Operating Temperature
 -40℃~+85℃
 Name
-MHT192CGCT
+KT-0805G
 Description
-Lamp Holder Type:- Illumination Color:Yellow Green Voltage - Forward(Vf):1.7V~2.4V Voltage - Forward(Vf):1.7V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:568nm~575nm Wavelength - Dominant:568nm~575nm Peak Wavelength:575nm Diode Confi
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
 Lamp Holder Type
--
+2mm x 1.25mm square LED
 Diode Configuration
 Discrete Diode
 Color Temperature
 -
 Mounting Style
 -
-Check
-true
 
 *
 ]
@@ -2707,11 +2675,11 @@ Circuit:SPST Actuator Style:Round Button Operating Force:2.5N Mounting Type:Surf
 DESIGNATOR
 LED3
 FOOTPRINT
-LED-SMD_L1.6-W0.8-R-RD
+LED0805-RD
 PARTTYPE
-KT-0603R
+NCD0805R1_C84256
 DESCRIPTION
-Lamp Holder Type:1.6mm x 0.8mm square LED Illumination Color:Red Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:20mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:645
+Lamp Holder Type:- Illumination Color:Red Voltage - Forward(Vf):1.6V~2.6V Voltage - Forward(Vf):1.6V~2.6V Power(Watts):65mW Test Current:25mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:630nm Peak Wavelength:630nm D
 Component Kind
 Standard
 Add into BOM
@@ -2719,71 +2687,71 @@ yes
 Convert to PCB
 yes
 Symbol
-KT-0603R
+FC-2012HRK-620D
 Designator
 LED3
 Device
-KT-0603R
+NCD0805R1_C84256
 Unique ID
 gge35
 Name
-KT-0603R
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+NCD0805R1
 LCSC Part Name
-0603 红灯 高亮
+片式发光二极管
 Supplier Part
-C2286
+C84256
 Manufacturer
-KENTO
+国星光电
 Manufacturer Part
-KT-0603R
+NCD0805R1
 Supplier Footprint
-0603
+0805
 JLCPCB Part Class
 Basic Part
 Datasheet
-https://item.szlcsc.com/datasheet/KT-0603R/2659.html
+https://item.szlcsc.com/datasheet/NCD0805R1/85425.html
 Supplier
 LCSC
 3D Model Title
-LED0603_L1.6-W0.8-H0.6
+LED0805-RD
 Lamp Holder Type
-1.6mm x 0.8mm square LED
+-
 Illumination Color
 Red
 Voltage - Forward(Vf)
-1.8V~2.4V
+1.6V~2.6V
 Power(Watts)
-40mW
-Forward Current
-20mA
+65mW
 Wavelength - Dominant
 615nm~630nm
 Peak Wavelength
-645nm
+630nm
 Diode Configuration
 Discrete Diode
 Lens Color
-Water Clear
+-
 Color Temperature
 -
 Luminous Intensity
-300mcd
+195mcd
 Viewing Angle
-120°
+130°
 Mounting Style
--
+Top-mount
 Operating Temperature
--40℃~+85℃
+-30℃~+85℃
 Description
-Lamp Holder Type:1.6mm x 0.8mm square LED Illumination Color:Red Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:20mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:645
+Lamp Holder Type:- Illumination Color:Red Voltage - Forward(Vf):1.6V~2.6V Voltage - Forward(Vf):1.6V~2.6V Power(Watts):65mW Test Current:25mA Wavelength - Dominant:615nm~630nm Wavelength - Dominant:615nm~630nm Peak Wavelength:630nm Peak Wavelength:630nm D
+Test Current
+25mA
+Half wave width
+15nm
+Emitting Material
+-
+Lumens
+-
+ESD Withstand Voltage
+-
 
 *
 ]
@@ -3183,7 +3151,7 @@ yes
 Convert to PCB
 yes
 Name
-PZ2.54-2x2PLT-L11.0 Pin header
+DNP
 Designator
 H1
 Symbol
@@ -3200,22 +3168,22 @@ Channel ID
 
 Check
 true
+Manufacturer
+DNP
+Manufacturer Part
+DNP
+Supplier Part
+DNP
+Supplier
+DNP
 LCSC Part Name
 2x2P 间距:2.54mm 方针 立贴
-Supplier Part
-C55213913
-Manufacturer
-SHOU HAN(首韩)
-Manufacturer Part
-PZ2.54-2x2PLT-L11.0 Pin header
 Supplier Footprint
 SMD,P=2.54mm
 JLCPCB Part Class
 Extended Part
 Datasheet
 https://item.szlcsc.com/datasheet/PZ2.54-2x2PLT-L11.0%2520Pin%2520header/59050537.html
-Supplier
-LCSC
 3D Model Title
 HDR-SMD_4P-P2.54-V-M-R2-C2-S7.5
 Pin Structure
@@ -3259,11 +3227,11 @@ Pin Structure:2x2P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Head
 DESIGNATOR
 U5
 FOOTPRINT
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL
+SOIC-8_L4.9-W3.9-P1.27-LS6.0-TL
 PARTTYPE
-MAX3485CSA-JSM
+THVD2410DR
 DESCRIPTION
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
 Component Kind
 Standard
 Add into BOM
@@ -3271,41 +3239,31 @@ yes
 Convert to PCB
 yes
 Symbol
-MAX3485CSA_C6395158
+THVD2410DR
 Designator
 U5
-Device
-MAX3485CSA-JSM
 Unique ID
 gge28_0
 Name
-MAX3485CSA-JSM
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+THVD2410DR
 LCSC Part Name
-3.3V、12Mbps半双工RS-485/RS-422收发器
+THVD2410半双工RS-485收发器
 Supplier Part
-C6395158
+C1849398
 Manufacturer
-JSMSEMI(杰盛微)
+TI(德州仪器)
 Manufacturer Part
-MAX3485CSA-JSM
+THVD2410DR
 Supplier Footprint
-SOP-8
+SOIC-8
 JLCPCB Part Class
 Extended Part
 Datasheet
-https://item.szlcsc.com/datasheet/MAX3485CSA-JSM/7346196.html
+https://www.ti.com/cn/lit/ds/symlink/thvd2450.pdf
 Supplier
 LCSC
 3D Model Title
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL-1
+SOIC-8_L4.9-W3.9-H1.7-LS6.0-P1.27
 Type
 Transceiver
 Number of Drivers
@@ -3313,23 +3271,25 @@ Number of Drivers
 Number of Receivers
 1
 Voltage - Supply
-3.3V
+3V~5.5V
 Data Rate
-12Mbps
+500Kbps
 Number of Nodes
-32
+256
 ESD Protect
-±8kV
+±16kV
 Operating Temperature
--40℃~+85℃
+-40℃~+125℃
 Quiescent Supply Current
-500uA
+1uA
 Communication Mode
 Half-Duplex
 Features
-Tx/Rx enable；Thermal shutdown protection；Enable shutdown；Overcurrent Protection
+Tx/Rx enable；Thermal shutdown protection；Fail-safe；Enable shutdown；Overcurrent Protection；Low-power mode
 Description
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
+Device
+THVD2410DR
 
 *
 ]
@@ -3759,11 +3719,11 @@ Pins Structure:1x4P Pitch:2.5mm Mounting Type:Through Hole Reference Series:XH N
 DESIGNATOR
 U7
 FOOTPRINT
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL
+SOIC-8_L4.9-W3.9-P1.27-LS6.0-TL
 PARTTYPE
-MAX3485CSA-JSM
+THVD2410DR
 DESCRIPTION
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
 Component Kind
 Standard
 Add into BOM
@@ -3771,41 +3731,31 @@ yes
 Convert to PCB
 yes
 Symbol
-MAX3485CSA_C6395158
+THVD2410DR
 Designator
 U7
-Device
-MAX3485CSA-JSM
 Unique ID
 gge28
 Name
-MAX3485CSA-JSM
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+THVD2410DR
 LCSC Part Name
-3.3V、12Mbps半双工RS-485/RS-422收发器
+THVD2410半双工RS-485收发器
 Supplier Part
-C6395158
+C1849398
 Manufacturer
-JSMSEMI(杰盛微)
+TI(德州仪器)
 Manufacturer Part
-MAX3485CSA-JSM
+THVD2410DR
 Supplier Footprint
-SOP-8
+SOIC-8
 JLCPCB Part Class
 Extended Part
 Datasheet
-https://item.szlcsc.com/datasheet/MAX3485CSA-JSM/7346196.html
+https://www.ti.com/cn/lit/ds/symlink/thvd2450.pdf
 Supplier
 LCSC
 3D Model Title
-SOP-8_L4.9-W3.9-P1.27-LS6.0-BL-1
+SOIC-8_L4.9-W3.9-H1.7-LS6.0-P1.27
 Type
 Transceiver
 Number of Drivers
@@ -3813,23 +3763,25 @@ Number of Drivers
 Number of Receivers
 1
 Voltage - Supply
-3.3V
+3V~5.5V
 Data Rate
-12Mbps
+500Kbps
 Number of Nodes
-32
+256
 ESD Protect
-±8kV
+±16kV
 Operating Temperature
--40℃~+85℃
+-40℃~+125℃
 Quiescent Supply Current
-500uA
+1uA
 Communication Mode
 Half-Duplex
 Features
-Tx/Rx enable；Thermal shutdown protection；Enable shutdown；Overcurrent Protection
+Tx/Rx enable；Thermal shutdown protection；Fail-safe；Enable shutdown；Overcurrent Protection；Low-power mode
 Description
-Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3.3V Voltage - Supply:3.3V Data Rate:12Mbps Data Rate:12Mbps Number of Nodes:32 ESD Protect:±8kV ESD Protect:±8kV Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85℃ Q
+Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
+Device
+THVD2410DR
 
 *
 ]
@@ -5353,7 +5305,7 @@ U1-1 LMR16030PDDAR-BOOT Passive
 C6-1 CL05B104KO5NNNC-1 Passive 
 )
 (
-$1N11 
+VIN 
 U1-2 LMR16030PDDAR-VIN Passive 
 D2-1 SS26A_C908236-K Passive 
 C1-2 CS3216X7R225K101NRI-2 Passive 
@@ -5364,7 +5316,7 @@ R4-1 1206W4F1004T5E-1 Input
 (
 $1N94 
 U1-3 LMR16030PDDAR-EN Passive 
-C15-2 CL05B104KO5NNNC-2 Passive 
+C15-2 CL21B104KCFNNNE-2 Input   
 R11-1 0402WGF1002TCE-1 Input   
 )
 (
@@ -5409,14 +5361,14 @@ C8-1 CL10A105KB8NNNC-1 Passive
 C9-1 CL10A105KB8NNNC-1 Passive 
 C10-2 VP2A470M0810-2 Input   
 C11-2 RVT220UF16V67RV0015-2 Input   
-C15-1 CL05B104KO5NNNC-1 Passive 
+C15-1 CL21B104KCFNNNE-1 Input   
 U8-1 RH-5015-1 Passive 
 U3-3 CDSOT23-SM712-ES-GND Passive 
 D5-2 SMAJ58A_C2980408-2 Passive 
-U13-1 PAD_D3.3_M3Screw_1-1 Passive 
-U15-1 PAD_D3.3_M3Screw_1-1 Passive 
-U16-1 PAD_D3.3_M3Screw_1-1 Passive 
-U12-1 PAD_D3.3_M3Screw_1-1 Passive 
+H3-1 HOLE-1 Input   
+H4-1 HOLE-1 Input   
+H5-1 HOLE-1 Input   
+H6-1 HOLE-1 Input   
 U2-5 STM32G031F8P6-VSS/VSSA Passive 
 U6-2 TC2030-2 Input   
 D3-3 TPESD8004MUTAG-GND Passive 
@@ -5424,22 +5376,22 @@ D3-8 TPESD8004MUTAG-GND Passive
 SW1-4 GT-TZ084B-H015-L1-4 Passive 
 SW1-3 GT-TZ084B-H015-L1-3 Passive 
 C12-1 CL05B104KO5NNNC-1 Passive 
-LED2-1 MHT192CGCT-- Input   
+LED2-2 KT-0805G-K Passive 
 SW2-4 GT-TZ084B-H015-L1-4 Passive 
 SW2-3 GT-TZ084B-H015-L1-3 Passive 
-LED3-2 KT-0603R-K Passive 
+LED3-1 NCD0805R1_C84256-- Passive 
 LED1-1 TZ-P2-0603YGTCS1-0.6T-K Passive 
 C16-1 CL05B104KO5NNNC-1 Passive 
 C17-1 CL10A106MA8NRNC-1 Input   
 H1-1 PZ2.54-2x2PLT-L11.0 Pin header-1 Passive 
-U5-5 MAX3485CSA-JSM-GND Passive 
+U5-5 THVD2410DR-GND Passive 
 C18-1 CL05B104KO5NNNC-1 Passive 
 R9-2 0402WGF1002TCE-2 Input   
 R15-2 0402WGF1002TCE-2 Input   
 C22-1 CL05B103KB5NNNC-1 Input   
 U19-3 CDSOT23-SM712-ES-GND Passive 
 U18-4 B4B-XH-A(LF)(SN)-4 Passive 
-U7-5 MAX3485CSA-JSM-GND Passive 
+U7-5 THVD2410DR-GND Passive 
 C14-1 CL05B104KO5NNNC-1 Passive 
 R5-2 0402WGF1002TCE-2 Input   
 R21-1 0603WAF5600T5E-1 Input   
@@ -5507,9 +5459,9 @@ C12-2 CL05B104KO5NNNC-2 Passive
 R6-1 0402WGF3300TCE-1 Input   
 C17-2 CL10A106MA8NRNC-2 Input   
 H1-3 PZ2.54-2x2PLT-L11.0 Pin header-3 Passive 
-U5-8 MAX3485CSA-JSM-VCC Passive 
+U5-8 THVD2410DR-VCC Passive 
 C18-2 CL05B104KO5NNNC-2 Passive 
-U7-8 MAX3485CSA-JSM-VCC Passive 
+U7-8 THVD2410DR-VCC Passive 
 C14-2 CL05B104KO5NNNC-2 Passive 
 R20-2 0603WAF5600T5E-2 Input   
 U17-5 INA180A1IDBVR(LX)-VS Passive 
@@ -5529,19 +5481,19 @@ RS485_A
 RJ1-4 HC-WK88-H18-B-4 Passive 
 RJ2-4 HC-WK88-H18-B-4 Passive 
 U3-1 CDSOT23-SM712-ES-IO Passive 
-U5-6 MAX3485CSA-JSM-A Passive 
+U5-6 THVD2410DR-A Passive 
 )
 (
 RS485_B 
 RJ1-5 HC-WK88-H18-B-5 Passive 
 RJ2-5 HC-WK88-H18-B-5 Passive 
 U3-2 CDSOT23-SM712-ES-IO Passive 
-U5-7 MAX3485CSA-JSM-B Passive 
+U5-7 THVD2410DR-B Passive 
 )
 (
 USART1_TX 
 U2-20 STM32G031F8P6-PB3/PB4/PB5/PB6 Passive 
-U5-4 MAX3485CSA-JSM-DI Passive 
+U5-4 THVD2410DR-D Passive 
 )
 (
 SW_CLCK 
@@ -5561,8 +5513,8 @@ D3-7 TPESD8004MUTAG-NC Passive
 (
 USART1_DE 
 U2-17 STM32G031F8P6-PA12[PA10] Passive 
-U5-2 MAX3485CSA-JSM-RE# Passive 
-U5-3 MAX3485CSA-JSM-DE Passive 
+U5-2 THVD2410DR-RE# Passive 
+U5-3 THVD2410DR-DE Passive 
 R9-1 0402WGF1002TCE-1 Input   
 )
 (
@@ -5598,19 +5550,19 @@ U14-1 SN74LVC1G126DBVR-TP-OE Passive
 USART2_RX 
 U2-10 STM32G031F8P6-PA3 Passive 
 H1-4 PZ2.54-2x2PLT-L11.0 Pin header-4 Passive 
-U7-1 MAX3485CSA-JSM-RO Passive 
+U7-1 THVD2410DR-R Passive 
 )
 (
 USART2_TX 
 U2-9 STM32G031F8P6-PA2 Passive 
 H1-2 PZ2.54-2x2PLT-L11.0 Pin header-2 Passive 
-U7-4 MAX3485CSA-JSM-DI Passive 
+U7-4 THVD2410DR-D Passive 
 )
 (
 USART2_DE 
 U2-8 STM32G031F8P6-PA1 Passive 
-U7-2 MAX3485CSA-JSM-RE# Passive 
-U7-3 MAX3485CSA-JSM-DE Passive 
+U7-2 THVD2410DR-RE# Passive 
+U7-3 THVD2410DR-DE Passive 
 R5-1 0402WGF1002TCE-1 Input   
 )
 (
@@ -5631,16 +5583,16 @@ C22-2 CL05B103KB5NNNC-2 Input
 (
 USART1_RX 
 U2-1 STM32G031F8P6-PB7/PB8 Passive 
-U5-1 MAX3485CSA-JSM-RO Passive 
+U5-1 THVD2410DR-R Passive 
 )
 (
 $2N40 
-LED2-2 MHT192CGCT-+ Input   
+LED2-1 KT-0805G-A Passive 
 R7-2 0402WGF3300TCE-2 Input   
 )
 (
 $2N41 
-LED3-1 KT-0603R-A Passive 
+LED3-2 NCD0805R1_C84256-+ Passive 
 R8-2 0402WGF3300TCE-2 Input   
 )
 (
@@ -5666,12 +5618,12 @@ R21-2 0603WAF5600T5E-2 Input
 )
 (
 $4N21 
-U7-6 MAX3485CSA-JSM-A Passive 
+U7-6 THVD2410DR-A Passive 
 R19-1 0402WGF100JTCE-1 Input   
 )
 (
 $4N18 
-U7-7 MAX3485CSA-JSM-B Passive 
+U7-7 THVD2410DR-B Passive 
 R18-1 0402WGF100JTCE-1 Input   
 )
 (

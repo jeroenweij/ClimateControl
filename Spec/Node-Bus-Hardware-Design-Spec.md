@@ -46,7 +46,7 @@ The shared power rail runs at 48V DC, stepped down locally at each node to 5V (s
 | Pull-down MOSFET | master | onsemi BSS123 (N-ch) | LCSC C513249 | SOT-23, 100V Vds (margin over 48V), Vgs(th) 1.7V (full turn-on from a 3.3V GPIO), 170mA (vs. ~1mA needed) |
 | Gate series resistor | master | 330Ω | commodity | |
 | Gate pull-down resistor | master | 10kΩ | commodity | Holds the MOSFET off if the master GPIO floats at boot → line not pulled low → **bus stays enabled** |
-| ENABLE pull-up | each node | **1MΩ** | LCSC `C17927` (`1206W4F1004T5E`, 1206 thick-film, 200V, 250mW, ±1%) | To the node's local 48V input. ~48µA/node; ~0.96mA / ~46mW across a full 20-node bus. Feeds the buck EN pin through a 10kΩ series + 10nF-to-GND filter (noise + EN abs-max protection). |
+| ENABLE pull-up | each node | **1MΩ** | LCSC `C17927` (`1206W4F1004T5E`, 1206 thick-film, 200V, 250mW, ±1%) | To the node's local 48V input. ~48µA/node; ~0.96mA / ~46mW across a full 20-node bus. Feeds the buck EN pin through a 10kΩ series + 100nF-to-GND filter (~1ms, noise rejection). The filter cap sits at the full ENABLE voltage (~48V), so it must be rated **≥100V**: `CL21B104KCFNNNE`, LCSC `C28233` (0805 X7R). |
 
 **Pull-up value — 1MΩ per node.** Across 20 nodes this parallels to ~50kΩ: ~0.96mA total draw, and a ~0.5ms enable-edge RC against ~10nF of bus capacitance — fine for a slow control line. Lower values just waste power; higher values get noise-sensitive for little gain. The full 48V sits across the pull-up whenever the line is held low, so the resistor's package voltage rating (not its value) is the real constraint — the selected 1206 part is rated 200V.
 
@@ -188,7 +188,7 @@ Per-node A/B passives, fit only where noted, DNP elsewhere:
 
 | Part | Value | Populate |
 |---|---|---|
-| Fail-safe bias | A→3V3, B→GND, ~560 Ω each | once on the whole bus (at MainController). Not needed by THVD2410 receivers (fail-safe on an open or idle bus); required while any board with a non-fail-safe MAX3485 remains on the bus |
+| Fail-safe bias | **None** | not fitted anywhere on the main bus — the THVD2410 receiver is itself fail-safe (logic high with the inputs open or shorted, which covers an idle terminated bus sitting at ~0V A–B), so no board needs a biased idle level |
 | ESD/surge | **None external** — the THVD2410's integrated IEC ESD protection (±12 kV contact/air) covers the bus pins. Do not fit an SM712 or any other clamp below ~70V on A/B: it would conduct during a ground-last hot-plug and become the fault path the transceiver is there to block. | DNP on every node (the SM712 footprint, U3, stays empty) |
 | Series R | 10 Ω in each of A/B | optional, tames ringing/EMI |
 
