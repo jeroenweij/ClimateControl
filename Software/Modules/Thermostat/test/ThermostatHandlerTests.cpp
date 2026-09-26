@@ -368,4 +368,50 @@ namespace
             CC_CHECK_EQ(ReadI16(tx[idx].data), 2150); // still steps normally from 21.00
         }
     }
+    // Display traffic: bytes written to the OLED since the last check.
+    size_t DisplayWrites()
+    {
+        const size_t n = FakeI2c::WrittenLen(Ssd1306::DefaultAddress);
+        FakeI2c::ClearWritten(Ssd1306::DefaultAddress);
+        return n;
+    }
+
+    CC_TEST(ThermostatHandler, WakingTheDisplayDrawsOnceThenNothingWhileUnchanged)
+    {
+        ResetWorld();
+        World w;
+        DisplayWrites(); // Init()'s bring-up
+
+        PressButton(Board::UserButton2, true); // wakes the panel (and steps the setpoint)
+        w.handler.Loop();
+        CC_CHECK(DisplayWrites() > 1000); // one full frame (1 KB)
+
+        PressButton(Board::UserButton2, false);
+        for (int i = 0; i < 20; i++)
+        {
+            FakeClock::Advance(50);
+            w.handler.Loop();
+        }
+        CC_CHECK_EQ(DisplayWrites(), 0u); // nothing on screen changed -- no redraws
+    }
+
+    CC_TEST(ThermostatHandler, AVisibleChangeRedrawsButNotWithinTheMinimumInterval)
+    {
+        ResetWorld();
+        World w;
+        PressButton(Board::UserButton2, true);
+        w.handler.Loop(); // wake + first frame
+        PressButton(Board::UserButton2, false);
+        w.handler.Loop();
+        DisplayWrites();
+
+        FakeClock::Advance(50);
+        PressButton(Board::UserButton2, true); // another setpoint step, 50 ms after the last frame
+        w.handler.Loop();
+        CC_CHECK_EQ(DisplayWrites(), 0u); // too soon -- waits
+
+        FakeClock::Advance(200); // past the 200 ms minimum
+        w.handler.Loop();
+        CC_CHECK(DisplayWrites() > 1000); // the pending change is drawn
+    }
 } // namespace

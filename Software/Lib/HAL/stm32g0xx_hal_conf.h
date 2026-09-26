@@ -52,9 +52,9 @@ extern "C"
 #endif /* HSE_STARTUP_TIMEOUT */
 
 #if !defined(HSI_VALUE)
-#define HSI_VALUE (16000000UL) /*!< Value of the Internal oscillator in Hz. Not configured to run \
-                                     the clock tree at a higher frequency yet -- see              \
-                                     Node-Bus-Hardware-Design-Spec.md, 64MHz max is a future option. */
+#define HSI_VALUE (16000000UL) /*!< Value of the Internal oscillator in Hz. The applications \
+                                     run SYSCLK at 64 MHz from it through the PLL --             \
+                                     Hal::System::ClockTo64MHz(). */
 #endif /* HSI_VALUE */
 
 #if !defined(LSI_VALUE)

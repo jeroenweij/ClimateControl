@@ -9,6 +9,7 @@
 
 #include "BoardPins.h"
 #include "BootHealth.h"
+#include "Logger.h"
 #include "MemoryMap.h"
 #include "System.h"
 
@@ -24,10 +25,13 @@ int main()
     Hal::System::SetVectorTable(Board::Flash::AppBase);
     Hal::System::Init();
 
-    // TODO: clock tree to 64 MHz (HSI16 -> PLL). Board::BusBaudRate (115200)
-    // isn't an exact divisor at either clock, but the resulting generator
-    // error is negligible next to the HSI16 spread itself
-    // (Node-Bus-Hardware-Design-Spec.md §6.1).
+    // 64 MHz from the HSI16 through the PLL -- before any peripheral comes
+    // up, since UART baud and the rest are derived from the clock. Still
+    // fully working at 16 MHz if the PLL won't lock.
+    if (!Hal::System::ClockTo64MHz())
+    {
+        LOG_WARN("PLL did not lock -- running at 16 MHz");
+    }
 
     Damper damper;
 

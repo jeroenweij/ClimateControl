@@ -35,8 +35,22 @@ class ThermostatHandler : public NodeLib::INodeHandler
   private:
     void SampleRoom();
     void ServiceButtons(); // +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
-    void RenderDisplay();
-    void WakeDisplay(); // turns the panel on (if asleep) and restarts its inactivity timer
+    // What the panel shows, quantized the way it is drawn -- a change the
+    // eye can't see (a 0.01 degC step) doesn't cost a redraw.
+    struct SView
+    {
+        int16_t tempTenths;
+        int16_t setpointTenths;
+        int16_t humidityPercent;
+        uint8_t damperBar; // filled pixels of the damper bar
+        bool    linkUp;
+
+        bool operator==(const SView& other) const;
+    };
+
+    SView CurrentView() const;
+    void  RenderDisplay(); // redraws only on a visible change, at most every minRedrawMs
+    void  WakeDisplay(); // turns the panel on (if asleep) and restarts its inactivity timer
 
     void PublishRoom(); // current room values to Node's change-driven publisher
     void ReportRoom(const NodeLib::Endpoint endpoint); // reply to a Get
@@ -65,6 +79,14 @@ class ThermostatHandler : public NodeLib::INodeHandler
     bool upWasPressed;
     bool linkUp; // any frame at all on this point-to-point link counts (Snoop())
     bool displayOn;
+
+    // A full redraw is a 1 KB I2C transfer (~0.1 s at 100 kHz) that blocks
+    // the loop -- and with it the link to the ControllerNode, which gives up
+    // after 3 missed 200 ms polls. So: nothing while the view is unchanged,
+    // and no more often than minRedrawMs while it is changing.
+    SView             shownView;
+    bool              redrawNeeded; // woken, or a change is waiting out minRedrawMs
+    Tools::DelayTimer redrawTimer;
 
     Tools::DelayTimer sampleTimer;
     Tools::DelayTimer displayTimer; // panel sleeps when this elapses (§4.2)

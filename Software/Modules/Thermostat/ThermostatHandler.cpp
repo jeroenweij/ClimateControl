@@ -34,6 +34,12 @@ namespace
     // "woken by a button press... after an inactivity timeout it... turns off").
     constexpr uint32_t DisplayAwakeMs = 10000;
 
+    // Minimum time between display redraws (ThermostatHandler.h, shownView).
+    constexpr uint32_t minRedrawMs = 200;
+
+    // Damper bar: 56 px inside a 60 px frame (RenderDisplay()).
+    constexpr int DamperBarPx = 56;
+
     void PackU16(uint8_t* const p, const uint16_t v)
     {
         p[0] = static_cast<uint8_t>(v);
@@ -65,6 +71,9 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     upWasPressed(false),
     linkUp(false),
     displayOn(false),
+    shownView{},
+    redrawNeeded(false),
+    redrawTimer(),
     sampleTimer(),
     displayTimer()
 {
@@ -155,9 +164,27 @@ void ThermostatHandler::WakeDisplay()
     if (!displayOn)
     {
         display.On();
-        displayOn = true;
+        displayOn    = true;
+        redrawNeeded = true; // the panel may show a stale frame -- draw now
     }
     displayTimer.Start(DisplayAwakeMs);
+}
+
+bool ThermostatHandler::SView::operator==(const SView& other) const
+{
+    return tempTenths == other.tempTenths && setpointTenths == other.setpointTenths &&
+        humidityPercent == other.humidityPercent && damperBar == other.damperBar && linkUp == other.linkUp;
+}
+
+ThermostatHandler::SView ThermostatHandler::CurrentView() const
+{
+    SView view;
+    view.tempTenths      = static_cast<int16_t>(roomTemp / 10);
+    view.setpointTenths  = static_cast<int16_t>(setpoint / 10);
+    view.humidityPercent = static_cast<int16_t>(humidity / 100);
+    view.damperBar       = static_cast<uint8_t>((DamperBarPx * damperActual) / 100);
+    view.linkUp          = linkUp;
+    return view;
 }
 
 void ThermostatHandler::RenderDisplay()
@@ -172,12 +199,23 @@ void ThermostatHandler::RenderDisplay()
         return;
     }
 
+    const SView view = CurrentView();
+    if (!redrawNeeded && view == shownView)
+    {
+        return; // nothing visible changed
+    }
+    redrawNeeded = true;
+    if (redrawTimer.IsRunning() && !redrawTimer.Finished())
+    {
+        return; // redrawn too recently -- pick it up once minRedrawMs is over
+    }
+
     display.Clear();
 
     // Room temperature, big, top-left; degree mark; link status top-right.
-    display.DrawNumber(2, 2, 14, 24, 3, roomTemp / 10, 1);
+    display.DrawNumber(2, 2, 14, 24, 3, view.tempTenths, 1);
     display.FillCircle(72, 6, 2, true);
-    if (linkUp)
+    if (view.linkUp)
     {
         display.FillCircle(120, 6, 3, true);
     }
@@ -188,18 +226,22 @@ void ThermostatHandler::RenderDisplay()
 
     // Setpoint, smaller, bottom-left, with a small square "target" marker.
     display.DrawRect(2, 42, 5, 5, true);
-    display.DrawNumber(10, 40, 7, 12, 1, setpoint / 10, 1);
+    display.DrawNumber(10, 40, 7, 12, 1, view.setpointTenths, 1);
 
     // Humidity, bottom-middle.
-    display.DrawNumber(66, 40, 7, 12, 1, static_cast<int>(humidity / 100), 0);
+    display.DrawNumber(66, 40, 7, 12, 1, view.humidityPercent, 0);
     display.FillCircle(90, 44, 1, true);
     display.FillCircle(93, 47, 1, true);
 
     // Damper position, bottom row.
     display.DrawRect(2, 58, 60, 5, true);
-    display.FillRect(4, 60, (56 * damperActual) / 100, 1, true);
+    display.FillRect(4, 60, view.damperBar, 1, true);
 
     display.Flush();
+
+    shownView    = view;
+    redrawNeeded = false;
+    redrawTimer.Start(minRedrawMs);
 }
 
 void ThermostatHandler::PublishRoom()

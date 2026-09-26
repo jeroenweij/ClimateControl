@@ -26,7 +26,7 @@ namespace Hal
     // take for their peripherals.
     //
     // The prescaler is derived from the timer clock at Init(), so the 1 us
-    // tick holds on the current HSI16 clock tree and after the move to 64 MHz.
+    // tick holds at the applications' 64 MHz and at the reset-default 16 MHz.
     class Pwm
     {
       public:

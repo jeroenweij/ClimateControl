@@ -12,6 +12,11 @@ namespace Hal
         {
         }
 
+        bool ClockTo64MHz()
+        {
+            return true;
+        }
+
         void SetVectorTable(const uint32_t)
         {
         }

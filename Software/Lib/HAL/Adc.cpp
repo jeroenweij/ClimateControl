@@ -29,12 +29,12 @@ Adc::Adc(const uint8_t channel) :
 {
     __HAL_RCC_ADC_CLK_ENABLE();
 
-    // Synchronous clock, PCLK/2 -- avoids configuring RCC's separate
+    // Synchronous clock, PCLK/4 -- avoids configuring RCC's separate
     // asynchronous-ADC-clock mux for a peripheral this project only ever
-    // polls occasionally; comfortably inside the ADC's own max-clock range
-    // (DS12992 Table 57) for any reasonable PCLK on this project's
-    // HSI16-derived clock tree (RM0444 Sec15.3.5).
-    ADC1->CFGR2 = ADC_CFGR2_CKMODE_0;
+    // polls occasionally. At the 64 MHz PCLK (System::ClockTo64MHz()) that is
+    // 16 MHz, with margin under the ADC's 35 MHz max (DS12992 Table 57) --
+    // PCLK/2 would be 32 MHz, uncomfortably close (RM0444 Sec15.3.5).
+    ADC1->CFGR2 = ADC_CFGR2_CKMODE_1;
 
     // RM0444 Sec15.3.2: enable the regulator and wait before calibrating.
     ADC1->CR |= ADC_CR_ADVREGEN;

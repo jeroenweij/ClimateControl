@@ -99,6 +99,8 @@ The `Thermostat` reuses the **STM32G031F8P6** (project MCU) and the node-core sc
 
 No motion/PIR sensor. The display is woken by a **button press**; after an inactivity timeout it dims (contrast register) then turns off (`0xAE`). Averaged over realistic use the OLED contributes < 0.1 mA — it effectively leaves the power budget, and the screen-off state also avoids burn-in of the static digits.
 
+While on, the panel is redrawn only when something it shows visibly changes (temperature/setpoint to 0.1 °C, humidity to 1 %, the damper bar's pixel width, link state), at most every 200 ms (`ThermostatHandler::RenderDisplay()`). A full redraw is a blocking 1 KB I²C transfer, ~0.1 s at 100 kHz, and the Thermostat serves its link from the same loop — the ControllerNode drops the link after 3 missed 200 ms polls — so redrawing every pass would put the link at risk.
+
 *Optional:* an ambient-light sensor (phototransistor on an ADC pin, or an I²C ALS on the shared bus) to drop OLED contrast in a dark room — near-zero added cost, not required.
 
 ### 4.3 Buttons & room sensor
