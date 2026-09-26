@@ -165,20 +165,21 @@ The CN **bootloader never relays** — it only ever updates the CN itself. A The
 
 ### 5.2 The Thermostat runs full NodeLib
 
-The Thermostat application is an ordinary `NodeLib::Node` slave on its link USART (USART2, PA2/PA3 + PA1 DE), with `ConfigStore` giving it `module = Thermostat` and its `nodeId` (§5.2.1). It serves the §2 endpoint subset (`System*`; `Room*` as source of truth; `DamperActual`/`DamperMode` for the display; `Diagnostics*`; `Firmware`). The point-to-point nature of the link changes nothing on the slave side — it is effectively a `ControllerNode` app minus the damper, plus the OLED/sensor/buttons.
+The Thermostat application is an ordinary `NodeLib::Node` slave on its link USART (USART2, PA2/PA3 + PA1 DE), with `ConfigStore` giving it `module = Thermostat` and the fixed Thermostat `nodeId` (§5.2.1). It serves the §2 endpoint subset (`System*`; `Room*` as source of truth; `DamperActual`/`DamperMode` for the display; `Diagnostics*`; `Firmware`). The point-to-point nature of the link changes nothing on the slave side — it is effectively a `ControllerNode` app minus the damper, plus the OLED/sensor/buttons.
 
 `Firmware` on the Thermostat is handled as on any node: a running app receiving `Firmware[EnterBootloader]` parks its UI, writes `Board::EnterBootloaderMagic` to the backup register and resets; the bootloader then serves the `Begin`/`Write`/`End`/`Activate` transfer.
 
-#### 5.2.1 Thermostat `nodeId` — same as its ControllerNode
+#### 5.2.1 Thermostat `nodeId` — one fixed id for every Thermostat
 
-The Thermostat is provisioned with the **same `nodeId` as the ControllerNode it is paired to**. The pair is programmed together at manufacture — identical `nodeId`, different `module` (`1` = ControllerNode, `4` = Thermostat). The link is private, so the shared id never collides: the CN acts only as master on the link, the Thermostat only as slave.
+Every Thermostat has the **same fixed `nodeId`, `NodeLib::THERMOSTAT_NODE_ID = 1`** (`Lib/NodeLib/Id.h`), with `module = 4`. It is not provisioned per unit: that one `ConfigRecord` is generated at build time and merged into the Thermostat's `thermostat-full.hex` (`FIXED_NODE_ID` in `Modules/Thermostat/CMakeLists.txt`, which reads the value from `Id.h`), so `make flash-full MODULE=thermostat` is the whole bench step. The link is private, so the id never collides with anything — it does not need to relate to the ControllerNode's own bus id.
 
 Consequences:
-- A Thermostat is **not field-interchangeable** without re-provisioning.
-- The server, `0x63` and `ota_jobs` identify a Thermostat by its owning ControllerNode's id directly; no separate address space.
-- `FirmwareSlave`'s `(nodeId-1)×10 ms` announce back-off is dead time on the 1:1 link — `LinkMaster` just waits out its discovery window.
-- `LinkMaster`'s single peer id is `ConfigStore::NodeId()` (the CN's own id).
-- The `provision` CMake target (`Node-Flash-Layout-and-Bootloader-Spec.md` §6.3) has a pair mode that writes both records with a shared id in one bench step.
+- Any Thermostat is a **drop-in replacement** for any other — no pairing or re-provisioning step.
+- The Thermostat still has a valid `ConfigRecord`, so everything keyed on `ConfigStore::Valid()` / `GetModule()` works unchanged: the bootloader's OTA slave and its USART2 select (§5.5), and the module byte in `Announce` / `SystemInfo`.
+- The link id never leaves the link. The server, `0x63` and `ota_jobs` identify a Thermostat by its owning ControllerNode's bus id; the physical unit is told apart by its `uid` (§5.6).
+- `LinkMaster`'s single peer id is the constant `THERMOSTAT_NODE_ID`.
+- With id `1`, `FirmwareSlave`'s `(nodeId-1)×10 ms` announce back-off is zero.
+- `tools/provision.py` refuses `--module thermostat`; the Thermostat record comes only from the build.
 
 ### 5.3 `LinkMaster` — the CN's single-peer poll loop
 
@@ -186,7 +187,7 @@ The CN application instantiates, on its link USART, `NodeLib::LinkMaster` — a 
 
 | `NodeMaster` | `LinkMaster` |
 |---|---|
-| dynamic discovery, `activeNodes[MAX_NODES]` | fixed single peer, id = `ConfigStore::NodeId()` (§5.2.1) |
+| dynamic discovery, `activeNodes[MAX_NODES]` | fixed single peer, id = `THERMOSTAT_NODE_ID` (§5.2.1) |
 | round-robin across N slaves | poll the one peer every **200 ms** |
 | `Discover` + Announce collection each cycle | one `Discover` at bring-up / after link loss to read the peer's app-vs-bootloader `state`; no periodic re-discovery |
 | injects master `Set`/`Get` in the gaps | same |
@@ -234,7 +235,7 @@ The server makes the same check *before* creating the job — it has the Thermos
 | `Thermostat` | USART2 | PA2 / PA3 (AF1) | PA1 (AF1) |
 | everything else | USART1 | PB6 / PB7 (AF0) | PA12 (AF1) |
 
-Half-duplex 2-wire RS485 with hardware driver-enable (`USART_CR3_DEM`, `DEAT`/`DEDT`) in both cases — identical framing, baud and `FirmwareSlave` logic. `main.cpp`'s `StayResident()` routes a provisioned node (`ConfigStore::Valid()`) to `FirmwareSlave(BusBaud, NodeId(), module)`; a provisioned Thermostat lands there and serves the transfer on USART2. The "one bootloader binary, all four boards" property and the Thermostat pin map of §4.4 are unchanged.
+Half-duplex 2-wire RS485 with hardware driver-enable (`USART_CR3_DEM`, `DEAT`/`DEDT`) in both cases — identical framing, baud and `FirmwareSlave` logic. `main.cpp`'s `StayResident()` routes a provisioned node (`ConfigStore::Valid()`) to `FirmwareSlave(BusBaud, NodeId(), module)`; a Thermostat always lands there (its fixed record is part of its factory image, §5.2.1) and serves the transfer on USART2. The "one bootloader binary, all four boards" property and the Thermostat pin map of §4.4 are unchanged.
 
 ### 5.6 Server & MainController awareness
 
@@ -252,7 +253,7 @@ Built in firmware: the `EEndpoint`/`EFirmware` additions, the `NodeLib` framing 
 
 Built in the `Webserver`: `ota_jobs.target` (`'node'` | `'thermostat'`); the `0x63 ThermostatStatus` decode + `thermostats` table (`controller_node_id`, `uid`, `fw_version`, `bl_state`, `link_up`, `last_seen`); the `firmware_images` repository (one image per module, module + version parsed from the upload filename `<Module>_<major>.<minor>.bin` and cross-checked against the descriptor, which the build fills from `CC_FW_VERSION`); the **Firmware** page, which lists every node with its installed version against the held image and gives each ControllerNode a second row for its Thermostat, plus per-node and per-module ("update all") push buttons that grey out when the target is offline or already current; and a single-flight OTA **queue** (one push at a time, the rest `state = 'queued'`, fed by both single presses and "update all"). Node firmware versions come from `SystemInfo` reports, thermostat versions from `0x63`.
 
-Not built yet: the MainController side (emitting `0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the `provision` target's pair mode, the pre-flight already-current check against `0x63` before creating a thermostat job, and `Force` re-flash.
+Not built yet: the MainController side (emitting `0x63 ThermostatStatus`, `module == 4` routing in the OTA sequence — waits on the MainController uplink layer as a whole), the pre-flight already-current check against `0x63` before creating a thermostat job, and `Force` re-flash.
 
 ---
 

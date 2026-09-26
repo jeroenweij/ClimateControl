@@ -219,11 +219,9 @@ The record CRC is a small table-less software CRC-32 (zlib flavour — poly `0xE
 class ConfigStore
 {
   public:
-    enum class Module : uint8_t { Unknown, ControllerNode, TemperatureNode, MainController, Thermostat };
-
     static bool           Valid();      // magic + crc32, and 1 <= NodeId < MAX_NODES, on the record at 0x0800_F000
     static uint8_t        NodeId();     // only meaningful when Valid()
-    static Module         GetModule();
+    static ModuleType     GetModule();  // NodeLib::ModuleType (EModuleType.h): Unknown, ControllerNode, TemperatureNode, MainController, Thermostat
     static const uint8_t* Settings();   // 16 bytes, caller interprets per GetModule()
 };
 ```
@@ -232,6 +230,7 @@ class ConfigStore
 
 - **Unprovisioned / corrupt record** (blank `0xFF` page, bad magic, bad CRC): the node does **not** join the bus. `NodeLib::Node::Init()` raises a non-recoverable `ErrorHandler::Error(false)` (error LED solid) — a board that reached the field un-provisioned is a manufacturing escape, not something to paper over with a default address.
 - **Provisioning:** a CMake `provision` target generates the 32-byte `ConfigRecord` blob (given `nodeId` + `module` + optional settings) and `JLinkExe` writes it to `0x0800_F000` — same tool and bench step as flashing the bootloader. The bootloader and app are then identical across units; only this one page differs.
+- **Thermostat — fixed record, not provisioned:** every Thermostat carries the same record (`nodeId = NodeLib::THERMOSTAT_NODE_ID`, `module = 4`), generated at build time and merged into `thermostat-full.hex`, so any unit is a drop-in replacement (`ControllerNode-Thermostat-Link-Spec.md` §5.2.1). `add_stm32_executable(... FIXED_NODE_ID <id>)` is the mechanism.
 - A provisioned node answers `Discover` with its stored id (in the `Announce` payload).
 
 ---

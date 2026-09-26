@@ -3,12 +3,9 @@
  *************************************************************/
 
 #include "BoardPins.h"
-#include "Logger.h"
 
-#include "ConfigStore.h"
 #include "LinkMaster.h"
 
-using NodeLib::ConfigStore;
 using NodeLib::Endpoint;
 using NodeLib::LinkMaster;
 using NodeLib::Message;
@@ -16,7 +13,7 @@ using NodeLib::Operation;
 
 LinkMaster::LinkMaster() :
     Node(Hal::Uart::Instance::Usart2, Board::LinkUart),
-    peerId(0),
+    peerId(THERMOSTAT_NODE_ID),
     linkUp(false),
     peerInBootloader(false),
     sendOk(true),
@@ -31,10 +28,6 @@ LinkMaster::LinkMaster() :
 void LinkMaster::Init()
 {
     Node::Init(); // master path: brings up USART2, skips the flash id read
-
-    // The Thermostat shares this ControllerNode's provisioned id (§5.2.1).
-    peerId = ConfigStore::Valid() ? ConfigStore::NodeId() : 0;
-    LOG_INFO("LinkMaster peer id " << peerId);
 
     // One Discover so the peer's Announce tells us app vs. bootloader; repeated
     // periodically thereafter (see discoverTimer in Loop()).

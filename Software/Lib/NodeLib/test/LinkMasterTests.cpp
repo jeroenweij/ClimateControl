@@ -21,7 +21,8 @@ using NodeLib::Operation;
 
 namespace
 {
-    const uint8_t peerId = 6; // ControllerNode id, shared with its Thermostat
+    const uint8_t cnId   = 6; // this ControllerNode's own bus id
+    const uint8_t peerId = NodeLib::THERMOSTAT_NODE_ID; // fixed, independent of cnId
 
     struct RecordingHandler : NodeLib::INodeHandler
     {
@@ -46,7 +47,7 @@ namespace
         FakeClock::Reset();
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
-        FakeConfig::SetNodeId(peerId);
+        FakeConfig::SetNodeId(cnId);
         FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 

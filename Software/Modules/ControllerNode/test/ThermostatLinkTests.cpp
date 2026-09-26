@@ -35,7 +35,8 @@ using NodeLib::Operation;
 // it doesn't apply here.
 namespace
 {
-    const uint8_t peerId = 6;
+    const uint8_t cnId   = 6;
+    const uint8_t peerId = NodeLib::THERMOSTAT_NODE_ID;
 
     void ResetWorld()
     {
@@ -44,7 +45,7 @@ namespace
         FakeAdc::Reset();
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
-        FakeConfig::SetNodeId(peerId);
+        FakeConfig::SetNodeId(cnId);
         FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 

@@ -29,6 +29,13 @@ namespace NodeLib
     // reply). See Spec/Node-Message-Model-Spec.md §2.
     static const uint8_t BROADCAST_NODE = 0xFF;
 
+    // Every Thermostat's nodeId on its private link to its ControllerNode
+    // (ControllerNode-Thermostat-Link-Spec.md §5.2.1). Fixed, not provisioned
+    // per unit: the Thermostat's flash-full image carries a ConfigRecord with
+    // this id -- Modules/Thermostat/CMakeLists.txt parses it from this line --
+    // so any Thermostat is a drop-in replacement.
+    static const uint8_t THERMOSTAT_NODE_ID = 1;
+
     struct __attribute__((packed)) Id
     {
         uint8_t   node;

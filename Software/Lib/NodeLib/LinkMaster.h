@@ -17,9 +17,9 @@ namespace NodeLib
     // it shares only the framing/Node plumbing, none of the discovery array or
     // round-robin cursor.
     //
-    // The peer (the paired Thermostat) is provisioned with the SAME nodeId as
-    // this ControllerNode (link is private; §5.2.1), so the peer address is just
-    // ConfigStore::NodeId().
+    // The peer (the paired Thermostat) always has THERMOSTAT_NODE_ID -- every
+    // Thermostat carries the same fixed id, independent of this ControllerNode's
+    // own bus id (link is private; §5.2.1).
     class LinkMaster : public Node
     {
       public:

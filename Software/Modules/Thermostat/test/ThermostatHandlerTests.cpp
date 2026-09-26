@@ -25,7 +25,7 @@ using NodeLib::Operation;
 
 namespace
 {
-    const uint8_t nodeId = 6;
+    const uint8_t nodeId = NodeLib::THERMOSTAT_NODE_ID;
 
     // Button GPIOs are active-low with an internal pull-up; the fake register
     // block resets to 0 (every pin reading as "pressed"), so every test must

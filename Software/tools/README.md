@@ -8,6 +8,12 @@ address (`NodeId`) and module type; firmware only ever reads it
 (`NodeLib::ConfigStore`). See `Spec/Node-Flash-Layout-and-Bootloader-Spec.md`
 §6.3.
 
+A `Thermostat` is **not** provisioned: every unit carries the same fixed record
+(`nodeId = NodeLib::THERMOSTAT_NODE_ID`, module Thermostat), which the build
+merges into `thermostat-full.hex`. `make -C Software flash-full MODULE=thermostat`
+is the whole bench step, and `provision.py` refuses `--module thermostat`
+(`Spec/ControllerNode-Thermostat-Link-Spec.md` §5.2.1).
+
 ### Per board
 
 ```

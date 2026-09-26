@@ -69,6 +69,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     module = gcr.MODULES[args.module]
+    if module == gcr.THERMOSTAT and not args.force:
+        ap.error("a Thermostat is not provisioned per unit -- its fixed record "
+                 "is part of flash-full (make flash-full MODULE=thermostat)")
     if module not in gcr.PROVISIONABLE and not args.force:
         ap.error(f"module '{args.module}' is not a provisioned bus node; --force to override")
 
