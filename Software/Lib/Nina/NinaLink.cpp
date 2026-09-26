@@ -60,6 +60,12 @@ namespace
     // A real serial link occasionally drops or delays a response -- retry the
     // same command this many times before treating it as a real failure.
     const uint8_t MaxAttemptsPerState = 3;
+    // The "AT" probe after a reset gets far more slack than a config step --
+    // a module still booting is normal -- but not unlimited: a NINA-W152 has
+    // been seen on the bench to boot (+STARTUP) and then never answer "AT"
+    // at all, and only another reset brings it back. A normal boot answers
+    // within ~2 s; this is ~20 s of probing (ProbeTimeoutMs each).
+    const uint8_t MaxProbeAttempts = 10;
     // Backstop behind the keepalive deadline: a very long silence with no
     // valid frame received forces a reset and full re-join even if the
     // keepalive bookkeeping itself were ever wedged. Well above the server's
@@ -355,9 +361,13 @@ void NinaLink::Loop()
             {
                 TransitionTo(State::ConfiguringSsid);
             }
-            // Error/Timeout: the module may still be booting -- RunCommand's
-            // own per-attempt timeout already paces the retry, just try again
-            // (unbounded here by design, unlike the states below).
+            else if (result != NinaAt::Result::Pending && ++attemptsInState >= MaxProbeAttempts)
+            {
+                Fail(); // booted but deaf -- reset it again (MaxProbeAttempts)
+            }
+            // else Error/Timeout: the module may still be booting --
+            // RunCommand's own per-attempt timeout already paces the retry,
+            // just try again.
             break;
         }
 
