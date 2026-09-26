@@ -4,6 +4,7 @@
 
 #include <string.h>
 
+#include "BoardPins.h"
 #include "EEndpoint.h"
 #include "EFirmware.h"
 #include "EOperation.h"
@@ -499,4 +500,36 @@ CC_TEST(Node, PushesSystemStatusAtStartupThenOnlyWhenTheErrorFlagsChange)
     node.Loop(); // and cleared again
     CC_CHECK_EQ(statusReports(&flags), 1);
     CC_CHECK_EQ(flags, 0);
+}
+
+namespace
+{
+    bool ErrorLedOn()
+    {
+        return (Board::ErrorLed.port->ODR & Board::ErrorLed.pin) != 0u;
+    }
+} // namespace
+
+CC_TEST(Node, ErrorLedShowsWhetherTheMasterIsPollingUs)
+{
+    ResetWorld();
+    Node             node;
+    RecordingHandler handler;
+    node.RegisterHandler(&handler);
+    node.Init();
+
+    node.Loop();
+    CC_CHECK(ErrorLedOn()); // never polled yet since boot
+
+    bus::InjectFrame(Message(kNodeId, Operation::Poll));
+    node.Loop();
+    CC_CHECK(!ErrorLedOn()); // on the bus
+
+    FakeClock::Advance(1001); // polls stopped for the heartbeat window
+    node.Loop();
+    CC_CHECK(ErrorLedOn());
+
+    bus::InjectFrame(Message(kNodeId, Operation::Poll)); // master back
+    node.Loop();
+    CC_CHECK(!ErrorLedOn());
 }

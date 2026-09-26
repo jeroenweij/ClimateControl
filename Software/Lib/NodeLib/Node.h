@@ -100,6 +100,10 @@ namespace NodeLib
         void SendReport(const Endpoint endpoint, const uint8_t* const data, const uint8_t len);
         void SendStatus(const SystemStatus& status);
         void ReportStatusIfChanged();
+        // Error LED on while this slave isn't being polled (never yet since
+        // boot, or the heartbeat ran out), off while it is. Pin touched only
+        // on a change.
+        void ShowBusState(const bool up);
         void SendAck(const Message& m);
         void SendNack(const Message& m);
 
@@ -127,6 +131,9 @@ namespace NodeLib
         bool     statusReported;
         uint8_t  reportedState;
         uint16_t reportedErrorFlags;
+
+        bool busShown; // ShowBusState() has driven the LED at least once
+        bool busUp;
 
         Hal::Uart         uart;
         Hal::Crc          crc;

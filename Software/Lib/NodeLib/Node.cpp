@@ -67,6 +67,8 @@ Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const 
     statusReported(false),
     reportedState(0),
     reportedErrorFlags(0),
+    busShown(false),
+    busUp(false),
     uart(),
     crc(),
     frame(crc),
@@ -141,6 +143,25 @@ void Node::Loop()
         statusReported = false; // re-send once the master is back
         handler->ConnectionLost();
     }
+
+    if (nodeId != masterNodeId)
+    {
+        // Running from the first Poll until polls stop for the heartbeat
+        // window (Finished() stops it) -- i.e. exactly "the master is talking
+        // to us".
+        ShowBusState(hearthBeatTimer.IsRunning());
+    }
+}
+
+void Node::ShowBusState(const bool up)
+{
+    if (busShown && up == busUp)
+    {
+        return;
+    }
+    busShown = true;
+    busUp    = up;
+    errorHandler.Indicate(!up);
 }
 
 void Node::ReportStatusIfChanged()

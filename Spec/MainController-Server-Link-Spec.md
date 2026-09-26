@@ -250,7 +250,7 @@ Firmware pushes cost the MC nothing beyond the generic relay it already has — 
 
 | Event | Behaviour |
 |---|---|
-| Uplink down | Bus and supervisory logic keep running. `Report`s during the outage are lost, not queued. On reconnect: `UplinkHello` → server pulls `Roster`, issues `Get`s to refill the state cache, re-asserts `config_overrides`. The refill asks for each module's state endpoints (`service/refill.go`): on a `Roster` entry only those the cache has no value for (this also covers a restart of the server itself, whose cache is memory-only), on a `NodePresence` up all of them. The `Get`s are paced ~25 ms apart so the MainController's 25-deep bus queue isn't flooded. |
+| Uplink down | Bus and supervisory logic keep running. The MainController's error LED is on steady until the uplink is back. `Report`s during the outage are lost, not queued. On reconnect: `UplinkHello` → server pulls `Roster`, issues `Get`s to refill the state cache, re-asserts `config_overrides`. The refill asks for each module's state endpoints (`service/refill.go`): on a `Roster` entry only those the cache has no value for (this also covers a restart of the server itself, whose cache is memory-only), on a `NodePresence` up all of them. The `Get`s are paced ~25 ms apart so the MainController's 25-deep bus queue isn't flooded. |
 | Server restart | Same as uplink down, from the MC's view. |
 | NINA wedged | AT watchdog: no URC / `OK` within a timeout → `RESET_NINA` pulse (PA6, open-drain) → re-init → reconnect. |
 | Node drops mid-OTA | The node's app slot is invalid → its bootloader stays resident → `NodePresence` down then up → server retries from `ota_jobs.last_offset`. |

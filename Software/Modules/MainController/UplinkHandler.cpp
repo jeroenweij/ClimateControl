@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "Backup.h"
+#include "BoardPins.h"
 #include "ImageDescriptor.h"
 #include "LogRing.h"
 #include "Logger.h"
@@ -58,7 +59,10 @@ UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocato
     config{Secrets::WifiSsid, Secrets::WifiPassword, Secrets::ServerHost, static_cast<uint16_t>(Secrets::ServerPort)},
     link(port, config, *this, outboundQueue, outboundQueueSize),
     resetPending(false),
-    resetToBootloader(false)
+    resetToBootloader(false),
+    errorLed(Board::ErrorLed, Hal::Gpio::Mode::Output),
+    uplinkShown(false),
+    uplinkUp(false)
 {
 }
 
@@ -70,6 +74,18 @@ void UplinkHandler::Init()
 void UplinkHandler::Loop()
 {
     link.Loop();
+    ShowUplinkState(link.InDataMode());
+}
+
+void UplinkHandler::ShowUplinkState(const bool up)
+{
+    if (uplinkShown && up == uplinkUp)
+    {
+        return;
+    }
+    uplinkShown = true;
+    uplinkUp    = up;
+    errorLed.Write(!up);
 }
 
 void UplinkHandler::EnqueueUplink(const Message& message)

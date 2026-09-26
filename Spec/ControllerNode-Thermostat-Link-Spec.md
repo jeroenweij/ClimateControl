@@ -123,6 +123,7 @@ No motion/PIR sensor. The display is woken by a **button press**; after an inact
 | 8 | link DE (PA1) — half-duplex RS-485 (§3) |
 | 16 / 17 | `KOUT1`/`KOUT2` from the BS212C-1 touch IC — button 1/2 (PA11 / PA12) |
 | 14 | status LED (PA7) |
+| 15 | error LED (PB0, net `LED_ERROR`) — on while the ControllerNode isn't polling the link (`Node::ShowBusState()`) |
 | 6 / 18 / 19 | NRST + reset button / SWDIO / SWCLK |
 | 7 | OLED `RES#` (PA0) — GPIO output |
 | 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, gates the `Q3`/`Q4` pair per §4.1's I²C reference circuit |

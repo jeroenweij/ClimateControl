@@ -17,6 +17,10 @@ namespace NodeLib
 
         void Error(const bool recoverable) const;
 
+        // Steady error-LED state for a condition the node rides out (e.g. the
+        // bus gone quiet) -- as opposed to Error(), which never returns.
+        void Indicate(const bool on) const;
+
       private:
         mutable Hal::Gpio led;
         Hal::Gpio         button;

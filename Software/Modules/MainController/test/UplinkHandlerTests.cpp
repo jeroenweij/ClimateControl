@@ -4,6 +4,7 @@
 
 #include <string.h>
 
+#include "BoardPins.h"
 #include "EEndpoint.h"
 #include "EOperation.h"
 #include "NodeMaster.h"
@@ -55,6 +56,10 @@ struct UplinkHandlerTestAccess
     static void PushLog(UplinkHandler& u)
     {
         u.PushLog();
+    }
+    static void ShowUplinkState(UplinkHandler& u, const bool up)
+    {
+        u.ShowUplinkState(up);
     }
     static bool Send(UplinkHandler& u, const Message& m)
     {
@@ -606,4 +611,58 @@ CC_TEST(UplinkHandler, PushLogReportsLinesLostToAnOverflowFirst)
     CC_CHECK_EQ(Access::Queued(uplink), 2);
     CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 9, "~ 3 lost"));
     CC_CHECK(IsMainLog(Access::Queue(uplink, 1), 9, "I: x"));
+}
+
+namespace
+{
+    bool ErrorLedOn()
+    {
+        return (Board::ErrorLed.port->ODR & Board::ErrorLed.pin) != 0u;
+    }
+} // namespace
+
+CC_TEST(UplinkHandler, ErrorLedIsOnWhileTheUplinkIsDown)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    uplink.Init();
+
+    uplink.Loop(); // no NINA session in the host build -- never reaches data mode
+
+    CC_CHECK(ErrorLedOn());
+}
+
+CC_TEST(UplinkHandler, ErrorLedGoesOffWhenTheUplinkComesUpAndBackOnWhenItIsLost)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+
+    UplinkHandlerTestAccess::ShowUplinkState(uplink, false);
+    CC_CHECK(ErrorLedOn());
+    UplinkHandlerTestAccess::ShowUplinkState(uplink, true); // connected
+    CC_CHECK(!ErrorLedOn());
+    UplinkHandlerTestAccess::ShowUplinkState(uplink, false); // lost
+    CC_CHECK(ErrorLedOn());
+}
+
+CC_TEST(UplinkHandler, TheBusMasterLeavesTheErrorLedToTheUplink)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    master.RegisterHandler(&uplink);
+    master.Init();
+
+    UplinkHandlerTestAccess::ShowUplinkState(uplink, true); // uplink up -> LED off
+    for (int i = 0; i < 50; i++)
+    {
+        FakeClock::Advance(100);
+        master.Loop(); // a slave's bus-loss LED logic must not run on the master
+    }
+    CC_CHECK(!ErrorLedOn());
 }

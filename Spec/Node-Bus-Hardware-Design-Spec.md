@@ -204,7 +204,9 @@ Driven by `NodeLib`:
 
 `Node`/`NodeMaster` take no pin arguments — they use `Board::ActivityLed` / `Board::ErrorLed` / `Board::UserButton` directly.
 - **Activity LED** (`Board::ActivityLed`, PA7 / pin 14) — lit while the node transmits its queued messages (`Node::flushQueue`), off when idle.
-- **Error LED** (`Board::ErrorLed`, PB0 / pin 15) — driven by `NodeLib::ErrorHandler`, blinked at 1 Hz on error; if `recoverable`, blinks until the user button is pressed.
+- **Error LED** (`Board::ErrorLed`, PB0 / pin 15) — driven by `NodeLib::ErrorHandler`, blinked at 1 Hz on error; if `recoverable`, blinks until the user button is pressed. Outside a fatal error it shows the node's connection, **steady on while it is down** and off while it is up (pin only touched on a change):
+  - **Bus nodes and the Thermostat** (every slave `NodeLib::Node`): on until the first `Poll` after boot, and again once polls stop for the 1 s heartbeat window — the same condition that fires `ConnectionLost()` (`Node::ShowBusState()`). For the Thermostat that is its link to the ControllerNode.
+  - **MainController** (the bus master, where `Node` leaves the LED alone): on while the uplink to the server is down — not yet up after boot, or lost (`UplinkHandler::ShowUplinkState()`, following `NinaLink::InDataMode()`).
 - **User button** (`Board::UserButton`, PA11 / pin 16) — configured `InputPullUp`, so active-low: wire button → pin → GND, 100 nF across it for debounce, optional 100–330 Ω series. Internal ~40 kΩ pull-up is enough for an on-board button; add an external 10 kΩ if it's on a long lead.
 
 All LED GPIOs are push-pull, active-high (`led.Write(true)` = lit). Wire each `pin → R → LED anode, cathode → GND`.

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "Gpio.h"
 #include "INodeHandler.h"
 #include "NodeMaster.h"
 
@@ -80,6 +81,9 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     // would feed the ring it is draining.
     void PushLog();
     void EnqueueUplink(const NodeLib::Message& message);
+    // Error LED on while the uplink to the server is down (not yet up after
+    // boot, or lost), off while it is up. Only touches the pin on a change.
+    void ShowUplinkState(const bool up);
 
     NodeLib::NodeMaster& master;
     BudgetAllocator&     budgetAllocator;
@@ -109,4 +113,8 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
 
     bool resetPending;
     bool resetToBootloader;
+
+    Hal::Gpio errorLed;
+    bool      uplinkShown; // ShowUplinkState() has driven the LED at least once
+    bool      uplinkUp;
 };

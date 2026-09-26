@@ -16,6 +16,11 @@ ErrorHandler::ErrorHandler() :
     led.Write(false);
 }
 
+void ErrorHandler::Indicate(const bool on) const
+{
+    led.Write(on);
+}
+
 void ErrorHandler::Error(const bool recoverable) const
 {
     // button is active-low (InputPullUp) -- Read() is true while released.
