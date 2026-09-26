@@ -454,6 +454,9 @@ func (s *Server) handleDeleteFirmware(w http.ResponseWriter, r *http.Request) {
 type fwUpdateReq struct {
 	Node   *int   `json:"node"` // 0 = the MainController itself (self-update)
 	Target string `json:"target"`
+	// Force re-flashes a Thermostat that already runs the held version
+	// (service.EnqueueUpdate).
+	Force bool `json:"force"`
 }
 
 func (s *Server) handleFirmwareUpdate(w http.ResponseWriter, r *http.Request) {
@@ -473,7 +476,7 @@ func (s *Server) handleFirmwareUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "the MainController has no paired thermostat")
 		return
 	}
-	jobID, err := s.svc.EnqueueUpdate(r.Context(), *req.Node, req.Target, s.otaJobDir())
+	jobID, err := s.svc.EnqueueUpdate(r.Context(), *req.Node, req.Target, s.otaJobDir(), req.Force)
 	s.writeEnqueueResult(w, []int64{jobID}, err)
 }
 
@@ -511,7 +514,7 @@ func (s *Server) handleSetAllowDowngrade(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) writeEnqueueResult(w http.ResponseWriter, ids []int64, err error) {
 	switch {
-	case errors.Is(err, service.ErrOtaQueued):
+	case errors.Is(err, service.ErrOtaQueued), errors.Is(err, service.ErrAlreadyCurrent):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrNoFirmwareImage):
 		writeErr(w, http.StatusBadRequest, err.Error())

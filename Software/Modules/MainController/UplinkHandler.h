@@ -12,6 +12,7 @@
 
 #include "BudgetAllocator.h"
 #include "HalNinaPort.h"
+#include "ThermostatMonitor.h"
 
 // MainController's bridge to the server over the on-board NINA-W152
 // (MainController-Server-Link-Spec.md). The connection itself -- Wi-Fi join,
@@ -84,9 +85,13 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     // Error LED on while the uplink to the server is down (not yet up after
     // boot, or lost), off while it is up. Only touches the pin on a change.
     void ShowUplinkState(const bool up);
+    // Moves due 0x63 ThermostatStatus Reports (ThermostatMonitor) into the
+    // outbound queue -- same half-full rule and per-pass cap as PushLog().
+    void PushThermostatStatus();
 
     NodeLib::NodeMaster& master;
     BudgetAllocator&     budgetAllocator;
+    ThermostatMonitor    thermostats;
 
     // Frames for the server, staged here by ReceivedMessage() (called
     // synchronously from the bus receive path -- it must only enqueue, never
@@ -97,7 +102,8 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     static const uint8_t outboundQueueSize = 32;
     NodeLib::Message     outboundQueue[outboundQueueSize];
 
-    static const uint8_t maxLogLinesPerPass = 2;
+    static const uint8_t maxLogLinesPerPass         = 2;
+    static const uint8_t maxThermostatStatusPerPass = 2;
 
     // Last active/bootloader state CheckNodePresence() has told the server
     // about, indexed nodeId-1. Seeded by SendRoster() itself (so the roster

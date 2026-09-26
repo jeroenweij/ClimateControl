@@ -240,7 +240,13 @@ func updatable(online, hasImg bool, installed, latest int, job string, allowDown
 }
 
 // EnqueueUpdate queues one push for a target, loading the image from the repo.
-func (s *Service) EnqueueUpdate(ctx context.Context, nodeID int, target, otaDir string) (int64, error) {
+//
+// force (or the operator's allow-downgrade toggle, which is the same "re-push
+// this version anyway" intent) re-flashes a Thermostat even when it already
+// runs the held version. Without it such a push is refused up front
+// (ErrAlreadyCurrent) rather than rebooting a working Thermostat for nothing
+// -- the ControllerNode's own guard is only the backstop for a stale 0x63.
+func (s *Service) EnqueueUpdate(ctx context.Context, nodeID int, target, otaDir string, force bool) (int64, error) {
 	mod, err := s.moduleForTarget(ctx, nodeID, target)
 	if err != nil {
 		return 0, err
@@ -252,11 +258,21 @@ func (s *Service) EnqueueUpdate(ctx context.Context, nodeID int, target, otaDir 
 	if !ok {
 		return 0, ErrNoFirmwareImage
 	}
+	force = force || s.AllowDowngrade()
+	if target == "thermostat" && !force {
+		therms, err := s.st.Thermostats(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if installed := therms[nodeID].FWVersion; installed != 0 && installed == fi.Version {
+			return 0, ErrAlreadyCurrent
+		}
+	}
 	bin, err := os.ReadFile(fi.ImagePath)
 	if err != nil {
 		return 0, err
 	}
-	return s.StartOTA(ctx, nodeID, target, fi.Filename, bin, otaDir)
+	return s.startOTA(ctx, nodeID, target, fi.Filename, bin, otaDir, force)
 }
 
 // EnqueueUpdateAll queues a push for every currently-updatable target that
@@ -271,7 +287,7 @@ func (s *Service) EnqueueUpdateAll(ctx context.Context, module, otaDir string) (
 		if t.Module != module || !t.CanUpdate {
 			continue
 		}
-		id, err := s.EnqueueUpdate(ctx, t.NodeID, t.Target, otaDir)
+		id, err := s.EnqueueUpdate(ctx, t.NodeID, t.Target, otaDir, false)
 		if err != nil {
 			s.log.Warn("update-all: enqueue", "node", t.NodeID, "target", t.Target, "err", err)
 			continue

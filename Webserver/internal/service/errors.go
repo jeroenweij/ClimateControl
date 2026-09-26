@@ -44,3 +44,8 @@ var ErrUnknownNodeModule = errors.New("cannot determine the node's module type")
 // match the chosen push target (a Thermostat image for a "node" push, or a
 // non-Thermostat image for a "thermostat" push).
 var ErrOtaTargetMismatch = errors.New("image module does not match the selected target")
+
+// ErrAlreadyCurrent is returned when a Thermostat push is requested for the
+// version it already runs (per its last 0x63 ThermostatStatus) and not forced
+// -- the pre-flight half of the link spec's already-current guard (§5.4.1).
+var ErrAlreadyCurrent = errors.New("thermostat already runs this firmware version (force to re-flash anyway)")

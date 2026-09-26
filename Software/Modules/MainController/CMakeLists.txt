@@ -8,6 +8,7 @@ add_stm32_executable(mainController
         ${CMAKE_SOURCE_DIR}/Lib/Nina/NinaLink.cpp
         BudgetAllocator.cpp
         UplinkHandler.cpp
+        ThermostatMonitor.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/mainController.ld
     MODULE MainController
     LIBRARIES

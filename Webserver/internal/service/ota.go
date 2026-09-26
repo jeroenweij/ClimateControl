@@ -70,6 +70,13 @@ var otaNodeReenterAfter = 90
 // link — ControllerNode-Thermostat-Link-Spec.md §5). For a thermostat push the
 // image's descriptor module must be Thermostat.
 func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename string, bin []byte, imageDir string) (int64, error) {
+	return s.startOTA(ctx, nodeID, target, filename, bin, imageDir, false)
+}
+
+// startOTA is StartOTA with force: a "thermostat" push then carries the
+// Force flag, so the ControllerNode re-flashes even an already-current
+// Thermostat (link spec §5.4.1). No effect on a "node" push.
+func (s *Service) startOTA(ctx context.Context, nodeID int, target, filename string, bin []byte, imageDir string, force bool) (int64, error) {
 	if target == "" {
 		target = "node"
 	}
@@ -122,6 +129,7 @@ func (s *Service) StartOTA(ctx context.Context, nodeID int, target, filename str
 		FWVersion: int(desc.FWVersionMajor)<<8 | int(desc.FWVersionMinor),
 		Module:    int(pushModule),
 		ImagePath: path,
+		Force:     force && target == "thermostat",
 	})
 	if err != nil {
 		return 0, err
@@ -179,6 +187,7 @@ func (s *Service) kickOta() {
 			image:          bin,
 			crc32:          job.CRC32,
 			fw:             uint16(job.FWVersion),
+			force:          job.Force,
 			module:         nodelib.Module(job.Module),
 			mainController: job.NodeID == 0 && job.Target == "node",
 			reports:        make(chan nodelib.FirmwareStatusReport, 8),
@@ -207,6 +216,7 @@ type otaDriver struct {
 	image  []byte
 	crc32  uint32
 	fw     uint16
+	force  bool // thermostat push: Begin with the Force flag (store.OtaJob.Force)
 	module nodelib.Module
 
 	// mainController: this push targets the MainController itself (node 0),
@@ -386,7 +396,7 @@ func (d *otaDriver) run() {
 	if d.target == "thermostat" {
 		// The ControllerNode does EnterBootloader + the bootloader-Announce
 		// wait itself (spec §5.4) -- Begin is the whole first step here.
-		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, false))
+		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, d.force))
 	} else {
 		if !d.enterBootloader() {
 			d.done("error", "node did not enter bootloader", 0)

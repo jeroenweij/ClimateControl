@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS ota_jobs (
     state       TEXT NOT NULL DEFAULT 'pending',
     last_offset INTEGER NOT NULL DEFAULT 0,
     error       TEXT,
-    image_path  TEXT NOT NULL
+    image_path  TEXT NOT NULL,
+    force       INTEGER NOT NULL DEFAULT 0     -- thermostat push: re-flash even if already on this version (Begin flags bit 0)
 );
 
 -- The firmware repository: one image per module type. Uploading a new image

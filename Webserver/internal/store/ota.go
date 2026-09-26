@@ -24,6 +24,10 @@ type OtaJob struct {
 	LastOffset int    `json:"lastOffset"`
 	Error      string `json:"error,omitempty"`
 	ImagePath  string `json:"-"`
+	// Force re-flashes a Thermostat even if it already runs this version --
+	// sent as ThermostatFirmware[Begin] flags bit 0, which disables the
+	// ControllerNode's already-current guard (link spec §5.4.1).
+	Force bool `json:"force,omitempty"`
 }
 
 // CreateOtaJob records a new firmware push.
@@ -33,10 +37,10 @@ func (s *Store) CreateOtaJob(ctx context.Context, j OtaJob) (int64, error) {
 		target = "node"
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO ota_jobs (node_id, target, filename, size, crc32, fw_version, module, started, state, image_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
+		INSERT INTO ota_jobs (node_id, target, filename, size, crc32, fw_version, module, started, state, image_path, force)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
 		j.NodeID, target, j.Filename, j.Size, int64(j.CRC32), j.FWVersion, j.Module,
-		time.Now().UnixMilli(), j.ImagePath)
+		time.Now().UnixMilli(), j.ImagePath, j.Force)
 	if err != nil {
 		return 0, err
 	}
@@ -169,7 +173,7 @@ func (s *Store) HasPendingOtaJob(ctx context.Context, nodeID int, target string)
 }
 
 const otaSelect = `SELECT id, node_id, target, filename, size, crc32, fw_version, module,
-	started, finished, state, last_offset, error, image_path FROM ota_jobs`
+	started, finished, state, last_offset, error, image_path, force FROM ota_jobs`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -181,7 +185,7 @@ func scanOtaJob(row rowScanner) (OtaJob, error) {
 	var errMsg sql.NullString
 	var crc int64
 	err := row.Scan(&j.ID, &j.NodeID, &j.Target, &j.Filename, &j.Size, &crc, &j.FWVersion, &j.Module,
-		&j.Started, &finished, &j.State, &j.LastOffset, &errMsg, &j.ImagePath)
+		&j.Started, &finished, &j.State, &j.LastOffset, &errMsg, &j.ImagePath, &j.Force)
 	if err != nil {
 		return OtaJob{}, err
 	}

@@ -12,6 +12,7 @@ cc_add_test(UplinkHandlerTests
         UplinkHandlerTests.cpp
         ${MC_DIR}/BudgetAllocator.cpp
         ${MC_DIR}/UplinkHandler.cpp
+        ${MC_DIR}/ThermostatMonitor.cpp
         ${MC_DIR}/HalNinaPort.cpp
         ${CC_SW_ROOT}/Lib/Nina/NinaAt.cpp
         ${CC_SW_ROOT}/Lib/Nina/NinaLink.cpp
@@ -28,6 +29,7 @@ cc_add_test(NinaBringUpTests
         NinaBringUpTests.cpp
         ${MC_DIR}/BudgetAllocator.cpp
         ${MC_DIR}/UplinkHandler.cpp
+        ${MC_DIR}/ThermostatMonitor.cpp
         ${MC_DIR}/HalNinaPort.cpp
         ${CC_SW_ROOT}/Lib/Nina/NinaAt.cpp
         ${CC_SW_ROOT}/Lib/Nina/NinaLink.cpp
@@ -35,3 +37,10 @@ cc_add_test(NinaBringUpTests
     INCLUDES ${MC_DIR} ${CC_SW_ROOT}/Lib/Nina ${CC_SW_ROOT}/test/scenarios
 )
 target_compile_definitions(NinaBringUpTests PRIVATE CC_BOARD_MainController CC_NINA_LOG)
+
+cc_add_test(ThermostatMonitorTests
+    SOURCES
+        ThermostatMonitorTests.cpp
+        ${MC_DIR}/ThermostatMonitor.cpp
+    INCLUDES ${MC_DIR}
+)

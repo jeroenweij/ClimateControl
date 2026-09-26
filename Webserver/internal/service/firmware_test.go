@@ -100,7 +100,7 @@ func TestFirmwareViewMainController(t *testing.T) {
 	}
 
 	// A push is accepted as a self-update (targetNodeId 0).
-	id, err := svc.EnqueueUpdate(ctx, 0, "node", t.TempDir())
+	id, err := svc.EnqueueUpdate(ctx, 0, "node", t.TempDir(), false)
 	if err != nil {
 		t.Fatalf("EnqueueUpdate(0): %v", err)
 	}
@@ -167,5 +167,65 @@ func TestFirmwareViewClassification(t *testing.T) {
 		if tg.Target == "node" && tg.CanUpdate {
 			t.Errorf("node now on latest, still CanUpdate: %+v", tg)
 		}
+	}
+}
+
+// A Thermostat push for the version its last 0x63 reported is refused up
+// front unless forced; a forced one carries Force on the job (-> Begin flags).
+func TestThermostatUpdatePreflightAndForce(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	repo := t.TempDir()
+
+	if err := svc.Store().UpsertNode(ctx, 4, nodelib.ModuleControllerNode, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StoreFirmware(ctx, "Thermostat_1.2.bin", imageV(nodelib.ModuleThermostat, 1, 2), repo); err != nil {
+		t.Fatal(err)
+	}
+	// Thermostat behind node 4 already runs 1.2.
+	if err := svc.Store().UpsertThermostat(ctx, nodelib.ThermostatStatus{ControllerNodeID: 4, LinkUp: true, FWMajor: 1, FWMinor: 2}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.EnqueueUpdate(ctx, 4, "thermostat", t.TempDir(), false); !errors.Is(err, ErrAlreadyCurrent) {
+		t.Fatalf("unforced same-version push: got %v, want ErrAlreadyCurrent", err)
+	}
+
+	id, err := svc.EnqueueUpdate(ctx, 4, "thermostat", t.TempDir(), true)
+	if err != nil {
+		t.Fatalf("forced push: %v", err)
+	}
+	job, err := svc.Store().OtaJob(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !job.Force {
+		t.Errorf("forced job stored without Force")
+	}
+}
+
+func TestThermostatUpdateOnAnOlderVersionIsNotForced(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	repo := t.TempDir()
+
+	if err := svc.Store().UpsertNode(ctx, 4, nodelib.ModuleControllerNode, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StoreFirmware(ctx, "Thermostat_1.2.bin", imageV(nodelib.ModuleThermostat, 1, 2), repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Store().UpsertThermostat(ctx, nodelib.ThermostatStatus{ControllerNodeID: 4, LinkUp: true, FWMajor: 1, FWMinor: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := svc.EnqueueUpdate(ctx, 4, "thermostat", t.TempDir(), false)
+	if err != nil {
+		t.Fatalf("push onto an older thermostat: %v", err)
+	}
+	job, _ := svc.Store().OtaJob(ctx, id)
+	if job.Force {
+		t.Errorf("unforced job stored with Force")
 	}
 }

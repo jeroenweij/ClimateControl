@@ -52,6 +52,7 @@ func Open(path string) (*Store, error) {
 func migrate(db *sql.DB) error {
 	steps := []string{
 		`ALTER TABLE ota_jobs ADD COLUMN target TEXT NOT NULL DEFAULT 'node'`,
+		`ALTER TABLE ota_jobs ADD COLUMN force INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, s := range steps {
 		if _, err := db.Exec(s); err != nil && !strings.Contains(err.Error(), "duplicate column name") {

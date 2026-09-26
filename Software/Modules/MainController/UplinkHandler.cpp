@@ -52,6 +52,7 @@ namespace
 UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocator) :
     master(master),
     budgetAllocator(budgetAllocator),
+    thermostats(master),
     outboundQueue{},
     nodePresenceActive{},
     nodePresenceBootloader{},
@@ -75,6 +76,10 @@ void UplinkHandler::Loop()
 {
     link.Loop();
     ShowUplinkState(link.InDataMode());
+    if (link.InDataMode())
+    {
+        thermostats.Loop(); // polling only helps while there's someone to tell
+    }
 }
 
 void UplinkHandler::ShowUplinkState(const bool up)
@@ -101,6 +106,7 @@ void UplinkHandler::OnFrame(const Message& message)
 void UplinkHandler::OnConnected()
 {
     SendRoster();
+    thermostats.ResendAll();
 }
 
 void UplinkHandler::BeforeFrames()
@@ -108,9 +114,23 @@ void UplinkHandler::BeforeFrames()
     // Only after the roster dump has seeded the snapshot -- on the very pass
     // that sent it this would compare against last session's stale one.
     CheckNodePresence();
+    PushThermostatStatus();
     // Likewise after the hello, so lines logged while the link was down
     // (bring-up, boot) flush right behind it.
     PushLog();
+}
+
+void UplinkHandler::PushThermostatStatus()
+{
+    Message status;
+    for (uint8_t i = 0; i < maxThermostatStatusPerPass; i++)
+    {
+        if (link.Queued() >= outboundQueueSize / 2 || !thermostats.NextStatus(status))
+        {
+            return;
+        }
+        EnqueueUplink(status);
+    }
 }
 
 void UplinkHandler::AfterFrames()
@@ -304,6 +324,7 @@ void UplinkHandler::ReceivedMessage(const Message& message)
     // Bus-side supervision runs regardless of uplink state -- see the class
     // comment.
     budgetAllocator.Observe(message);
+    thermostats.Observe(message);
 
     // Called synchronously from NodeMaster's bus receive path (see the class
     // comment in UplinkHandler.h) -- must only enqueue, never block on NINA.
