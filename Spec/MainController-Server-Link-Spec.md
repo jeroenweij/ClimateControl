@@ -187,12 +187,12 @@ One server-side module implements the `NodeLib` wire format: the `Frame` deframe
 |---|---|---|
 | **Building map** — floor plan, live per-room temperature (§7.1) | renders from the state cache, live-updates over `/ws` | none beyond the node `Report`s already arriving |
 | **Overrides** — change setpoint / damper mode / any writable endpoint | writes `config_overrides`, composes `Set <node> <endpoint> <value>` | downlink `Set` → node `Report` / `Ack` → cache + push |
-| **Status** — per-node module / fw / uptime / error flags / bus counters | shows `SystemInfo` / `SystemStatus` / `DiagRxCounters` / `MainStatus` | on-demand `Get` downlink |
+| **Status** — per-node module / fw / live values (damper as `actual → target` while a move hasn't landed) / faults / bus counters | shows `SystemInfo` / `SystemStatus` / `DiagRxCounters` / `MainStatus`; the **Fault** column shows the node's active `errorFlags` by name, and after they clear the last one raised with its time (kept in server memory, not persisted) | pushed `SystemStatus` on change; on-demand `Get` downlink |
 | **Logs** — one log view per node: the MainController's live, a bus node's read on demand or followed | MainController: the in-memory `MainLog` buffer + `/ws` push (§5.1); bus node: drains its `DiagLog` ring | MainController: none beyond the pushed `MainLog` `Report`s; bus node: `Get DiagLog` downlink, one per line |
 | **Firmware** — installed version per node (+ a row per Thermostat), the held image per module, per-node / "update all" push | `SystemInfo` fw + `0x63` + `firmware_images`; accepts a `<Module>_<major>.<minor>.bin` | single-flight OTA queue, OTA sequence (§8) |
 | **Map setup** (separate config page) | per-floor floor-plan image upload; click to place each `ControllerNode`; optional room polygon | none |
 
-When a node rejoins, the server re-applies any matching `config_overrides` (a rebooted node returns at defaults).
+When a node rejoins, the server re-applies any matching `config_overrides` (a rebooted node returns at defaults). The held damper overrides follow the node's own rule that a `DamperTarget` Set means Manual: holding a target also holds `DamperMode` = Manual, and holding any other mode drops the held target — so re-applying them (target first, by endpoint order) can't contradict itself.
 
 ### 7.1 Building map render
 
@@ -250,7 +250,7 @@ Firmware pushes cost the MC nothing beyond the generic relay it already has — 
 
 | Event | Behaviour |
 |---|---|
-| Uplink down | Bus and supervisory logic keep running. `Report`s during the outage are lost, not queued. On reconnect: `UplinkHello` → server pulls `Roster`, issues `Get`s to refill the state cache, re-asserts `config_overrides`. |
+| Uplink down | Bus and supervisory logic keep running. `Report`s during the outage are lost, not queued. On reconnect: `UplinkHello` → server pulls `Roster`, issues `Get`s to refill the state cache, re-asserts `config_overrides`. The refill asks for each module's state endpoints (`service/refill.go`): on a `Roster` entry only those the cache has no value for (this also covers a restart of the server itself, whose cache is memory-only), on a `NodePresence` up all of them. The `Get`s are paced ~25 ms apart so the MainController's 25-deep bus queue isn't flooded. |
 | Server restart | Same as uplink down, from the MC's view. |
 | NINA wedged | AT watchdog: no URC / `OK` within a timeout → `RESET_NINA` pulse (PA6, open-drain) → re-init → reconnect. |
 | Node drops mid-OTA | The node's app slot is invalid → its bootloader stays resident → `NodePresence` down then up → server retries from `ota_jobs.last_offset`. |

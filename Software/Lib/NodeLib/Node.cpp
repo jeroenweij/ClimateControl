@@ -64,6 +64,9 @@ Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const 
     resetPending(false),
     resetToBootloader(false),
     identifyLedOn(false),
+    statusReported(false),
+    reportedState(0),
+    reportedErrorFlags(0),
     uart(),
     crc(),
     frame(crc),
@@ -128,10 +131,33 @@ void Node::Loop()
     PumpRx();
     ServiceIdentify();
 
+    if (nodeId != masterNodeId)
+    {
+        ReportStatusIfChanged();
+    }
+
     if (hearthBeatTimer.Finished() && handler != nullptr)
     {
+        statusReported = false; // re-send once the master is back
         handler->ConnectionLost();
     }
+}
+
+void Node::ReportStatusIfChanged()
+{
+    SystemStatus status{};
+    if (handler)
+    {
+        handler->FillStatus(status);
+    }
+    if (statusReported && status.state == reportedState && status.errorFlags == reportedErrorFlags)
+    {
+        return;
+    }
+    statusReported     = true;
+    reportedState      = status.state;
+    reportedErrorFlags = status.errorFlags;
+    SendStatus(status);
 }
 
 void Node::ResetHearthBeat()
@@ -271,15 +297,7 @@ void Node::HandleSystemMessage(const Message& m)
             {
                 handler->FillStatus(status);
             }
-            const uint32_t uptimeSec = Hal::Tick::Millis() / 1000u;
-
-            uint8_t payload[8];
-            payload[0] = status.state;
-            PackU32(&payload[1], uptimeSec);
-            payload[5] = static_cast<uint8_t>(status.errorFlags);
-            payload[6] = static_cast<uint8_t>(status.errorFlags >> 8);
-            payload[7] = Hal::System::ResetCause();
-            SendReport(Endpoint::SystemStatus, payload, sizeof(payload));
+            SendStatus(status);
             break;
         }
 
@@ -440,6 +458,17 @@ void Node::HandleDiagnosticsMessage(const Message& m)
 void Node::SendReport(const Endpoint endpoint, const uint8_t* const data, const uint8_t len)
 {
     QueueMessage(Id(nodeId, endpoint, Operation::Report), data, len);
+}
+
+void Node::SendStatus(const SystemStatus& status)
+{
+    uint8_t payload[8];
+    payload[0] = status.state;
+    PackU32(&payload[1], Hal::Tick::Millis() / 1000u);
+    payload[5] = static_cast<uint8_t>(status.errorFlags);
+    payload[6] = static_cast<uint8_t>(status.errorFlags >> 8);
+    payload[7] = Hal::System::ResetCause();
+    SendReport(Endpoint::SystemStatus, payload, sizeof(payload));
 }
 
 void Node::SendAck(const Message& m)

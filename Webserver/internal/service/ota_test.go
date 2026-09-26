@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/jweij/climatecontrol/webserver/internal/hub"
@@ -14,10 +15,27 @@ import (
 	"github.com/jweij/climatecontrol/webserver/internal/store"
 )
 
-type fakeSender struct{ frames []nodelib.Frame }
+// fakeSender records what the service sends. Mutex-guarded: the state
+// refill worker (refill.go) sends from its own goroutine.
+type fakeSender struct {
+	mu     sync.Mutex
+	frames []nodelib.Frame
+}
 
-func (f *fakeSender) Connected() bool            { return true }
-func (f *fakeSender) Send(fr nodelib.Frame) bool { f.frames = append(f.frames, fr); return true }
+func (f *fakeSender) Connected() bool { return true }
+func (f *fakeSender) Send(fr nodelib.Frame) bool {
+	f.mu.Lock()
+	f.frames = append(f.frames, fr)
+	f.mu.Unlock()
+	return true
+}
+
+// Frames returns a copy of everything sent so far.
+func (f *fakeSender) Frames() []nodelib.Frame {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]nodelib.Frame(nil), f.frames...)
+}
 func (f *fakeSender) SendGet(n int, e nodelib.Endpoint) bool {
 	return f.Send(nodelib.Frame{Node: uint8(n), Endpoint: e, Operation: nodelib.OpGet})
 }

@@ -49,6 +49,8 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     thermostatLink(link),
     supplyTemp(),
     roomControlLoop(link, supplyTemp, damper),
+    reportedTarget(0),
+    reportedTargetValid(false),
     reportedActual(0),
     reportedActualValid(false),
     reportedMode(0),
@@ -61,6 +63,16 @@ void ControllerHandler::Loop()
     supplyTemp.Loop();
     roomControlLoop.Loop();
     damper.Loop();
+
+    // Target as well as actual, so a commanded move that hasn't landed yet
+    // (still moving, or cut short by a stall) is visible upstream.
+    const uint8_t target = damper.Target();
+    if (!reportedTargetValid || target != reportedTarget)
+    {
+        reportedTarget      = target;
+        reportedTargetValid = true;
+        Report(Endpoint::DamperTarget, &target, 1);
+    }
 
     const uint8_t actual = damper.Actual();
     if (!reportedActualValid || actual != reportedActual)
@@ -119,6 +131,10 @@ void ControllerHandler::HandleDamper(const Message& m)
             }
             else if (m.id.operation == Operation::Set && m.len >= 1)
             {
+                // A commanded position is a manual override in any mode --
+                // switch to Manual so the room loop (Auto) or a fixed mode
+                // (Closed/Open) doesn't immediately move it somewhere else.
+                damper.SetMode(Damper::Mode::Manual);
                 damper.SetTarget(m.data[0]);
             }
             else
@@ -283,6 +299,7 @@ void ControllerHandler::ReportThermostatFirmwareStatus()
 void ControllerHandler::ConnectionLost()
 {
     LOG_WARN("Main bus connection lost");
+    reportedTargetValid = false;
     reportedActualValid = false;
     reportedModeValid   = false;
     roomControlLoop.ConnectionLost();
@@ -303,6 +320,10 @@ void ControllerHandler::FillStatus(SystemStatus& status)
     if (!thermostatLink.LinkUp())
     {
         status.errorFlags |= ThermostatLinkDown;
+    }
+    if (damper.Stalled())
+    {
+        status.errorFlags |= DamperStalled;
     }
 }
 

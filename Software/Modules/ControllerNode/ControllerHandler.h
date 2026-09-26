@@ -37,6 +37,7 @@ class ControllerHandler : public NodeLib::INodeHandler
     enum ErrorBit : uint16_t
     {
         ThermostatLinkDown = 1u << 0,
+        DamperStalled      = 1u << 1,
     };
 
     void HandleDamper(const NodeLib::Message& m);
@@ -56,6 +57,8 @@ class ControllerHandler : public NodeLib::INodeHandler
     SupplyTemp      supplyTemp;
     RoomControlLoop roomControlLoop;
 
+    uint8_t reportedTarget;
+    bool    reportedTargetValid;
     uint8_t reportedActual;
     bool    reportedActualValid;
     uint8_t reportedMode;

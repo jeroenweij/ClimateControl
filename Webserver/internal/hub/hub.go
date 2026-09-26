@@ -127,6 +127,12 @@ func (h *Hub) PublishPresence(node int, module nodelib.Module, up bool) {
 	h.broadcast(PresenceEvent{Type: "presence", Node: node, Module: module.String(), Up: up})
 }
 
+// PublishFault tells the UI a node's fault picture changed; it re-fetches
+// the node list, which carries it.
+func (h *Hub) PublishFault(node int) {
+	h.broadcast(map[string]any{"type": "fault", "node": node})
+}
+
 // PublishThermostat broadcasts a paired-thermostat state change so the
 // Firmware view can refresh.
 func (h *Hub) PublishThermostat(controllerNodeID int, linkUp bool) {

@@ -98,6 +98,8 @@ namespace NodeLib
         void HandleDiagnosticsMessage(const Message& m);
 
         void SendReport(const Endpoint endpoint, const uint8_t* const data, const uint8_t len);
+        void SendStatus(const SystemStatus& status);
+        void ReportStatusIfChanged();
         void SendAck(const Message& m);
         void SendNack(const Message& m);
 
@@ -119,6 +121,12 @@ namespace NodeLib
         bool resetPending;
         bool resetToBootloader;
         bool identifyLedOn;
+
+        // Last SystemStatus state/errorFlags pushed unsolicited, so a fault
+        // shows up upstream when it happens rather than on the next Get.
+        bool     statusReported;
+        uint8_t  reportedState;
+        uint16_t reportedErrorFlags;
 
         Hal::Uart         uart;
         Hal::Crc          crc;

@@ -37,7 +37,7 @@ enum class Endpoint : uint8_t
 
     // 0x1_  system — every node; NodeLib supplies the handler
     SystemInfo     = 0x10,  // RO  module, hwRev, fwVersion, uid[12]
-    SystemStatus   = 0x11,  // RO  state, uptimeSec, errorFlags, resetCause  (also periodic Report)
+    SystemStatus   = 0x11,  // RO  state, uptimeSec, errorFlags, resetCause  (also pushed whenever state/errorFlags change)
     SystemControl  = 0x12,  // WO  Set: 1=reset->app  2=reset->bootloader  3=identify(seconds)
 
     // 0x2_  firmware — every node; data[0] = FirmwareOp (Begin/Write/End/Activate/Abort/Status)
@@ -48,7 +48,7 @@ enum class Endpoint : uint8_t
     ThermostatFirmware = 0x22,
 
     // 0x3_  application, ControllerNode
-    DamperTarget   = 0x30,  // RW  uint8 %
+    DamperTarget   = 0x30,  // RW  uint8 %  -- a Set also switches DamperMode to Manual (an explicit position is a manual override in any mode)
     DamperActual   = 0x31,  // RO  uint8 %
     DamperMode     = 0x32,  // RW  enum: 0 closed 1 open 2 auto 3 manual; 4 stalled (RO fault code, Set never accepts it)
     DamperBudget   = 0x33,  // RW  uint8 %  -- ceiling on DamperTarget while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md)
@@ -131,6 +131,7 @@ On-change push + slow keepalive + `Get` on demand:
 - A node queues a `Report` for an endpoint when its value **changes** (past a per-endpoint deadband — e.g. damper ±1%, temperature ±0.1°C, any enum change). The queued `Report` goes out on the next `Poll`.
 - **Keepalive:** each node re-`Report`s its key endpoints on a periodic cadence (~60 s) even if unchanged, so a dropped on-change `Report` self-heals and the master can bound staleness. Staggered across endpoints so one poll isn't oversized.
 - The master may `Set`/`Get` any endpoint at any time — `Get` covers cold-start sync and forced refresh; the node answers with a `Report` in its next poll window.
+- **Faults:** `NodeLib` pushes `SystemStatus` itself whenever the app's `FillStatus()` `state` / `errorFlags` change (and once at start and after a lost connection), so a fault is visible upstream when it happens, not on the next `Get`. The `errorFlags` bit meanings are per module (`ControllerHandler.h`: bit 0 Thermostat link down, bit 1 damper stalled; `TemperatureHandler.h`: bit 0 return sensor, bit 1 supply sensor), mirrored by the server's `nodelib.FaultNames`.
 - `NodeLib` provides the plumbing: a small per-endpoint "dirty" flag + deadband compare the app calls (`Node::PublishIfChanged(endpoint, value)`), the keepalive timer, and the queue.
 
 ### 6.2 Dispatch

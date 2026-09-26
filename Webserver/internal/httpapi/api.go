@@ -48,7 +48,17 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, nodes)
+	out := make([]nodeView, len(nodes))
+	for i, n := range nodes {
+		out[i] = nodeView{RosterNode: n, NodeFaults: s.svc.Faults(n.ID)}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// nodeView is a roster row plus its live fault picture.
+type nodeView struct {
+	store.RosterNode
+	service.NodeFaults
 }
 
 // --- expected-node roster --------------------------------------------

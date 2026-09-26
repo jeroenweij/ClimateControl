@@ -455,3 +455,48 @@ CC_TEST(Node, AnsweringDiscoveryLogsIntoTheDiagLogRingOncePerSweep)
         CC_CHECK(memcmp(line, expected[i % 2], len) == 0);
     }
 }
+
+CC_TEST(Node, PushesSystemStatusAtStartupThenOnlyWhenTheErrorFlagsChange)
+{
+    ResetWorld();
+    Node             node;
+    RecordingHandler handler;
+    node.RegisterHandler(&handler);
+    node.Init();
+
+    const auto statusReports = [&](uint16_t* const lastFlags)
+    {
+        Flush(node);
+        Message   tx[8];
+        const int n     = bus::DecodeTx(tx, 8);
+        int       count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (tx[i].id.endpoint == Endpoint::SystemStatus && tx[i].id.operation == Operation::Report)
+            {
+                count++;
+                *lastFlags = static_cast<uint16_t>(tx[i].data[5] | (tx[i].data[6] << 8));
+            }
+        }
+        FakeBus::TruncateTx(0);
+        return count;
+    };
+
+    uint16_t flags = 0xFFFF;
+    node.Loop(); // first pass: nothing reported yet -> queued
+    CC_CHECK_EQ(statusReports(&flags), 1);
+    CC_CHECK_EQ(flags, 0);
+
+    node.Loop(); // unchanged -> nothing new
+    CC_CHECK_EQ(statusReports(&flags), 0);
+
+    handler.statusErrorFlags = 0x0002;
+    node.Loop(); // a fault appears -> pushed without being asked
+    CC_CHECK_EQ(statusReports(&flags), 1);
+    CC_CHECK_EQ(flags, 0x0002);
+
+    handler.statusErrorFlags = 0;
+    node.Loop(); // and cleared again
+    CC_CHECK_EQ(statusReports(&flags), 1);
+    CC_CHECK_EQ(flags, 0);
+}

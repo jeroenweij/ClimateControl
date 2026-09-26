@@ -8,7 +8,7 @@ import "encoding/binary"
 // the broken-out components for multi-field endpoints (SystemStatus, Diag*).
 type Value struct {
 	Kind   string         `json:"kind"` // number | enum | struct | raw
-	Num    float64        `json:"num,omitempty"`
+	Num    float64        `json:"num"`  // always sent: 0 is a real reading (damper 0 %, mode Closed), not "absent"
 	Unit   string         `json:"unit,omitempty"`
 	Text   string         `json:"text,omitempty"`
 	Fields map[string]any `json:"fields,omitempty"`

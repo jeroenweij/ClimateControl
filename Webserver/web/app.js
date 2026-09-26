@@ -79,6 +79,9 @@ function handleEvent(msg) {
       loadNodes().then(refreshCurrentView);
       if (currentView() === "firmware") loadFirmware();
       break;
+    case "fault":
+      loadNodes().then(refreshCurrentView);
+      break;
     case "thermostat":
       if (currentView() === "firmware") loadFirmware();
       break;
@@ -199,7 +202,9 @@ function paintOverlay(svg, floor, editable) {
   for (const p of state.placements.filter((p) => p.floorId === floor.id)) {
     const v = state.values.get(key(p.nodeId, "RoomTemp"));
     const set = state.values.get(key(p.nodeId, "RoomSetpoint"));
-    const temp = v && v.value.kind === "number" ? v.value.num : null;
+    // A room is never really at 0.0 °C -- treat it as "no valid measurement"
+    // (shown as "—", muted), same as no reading at all.
+    const temp = v && v.value.kind === "number" && v.value.num !== 0 ? v.value.num : null;
     const col = temp == null ? "var(--muted)" : tempColor(temp);
     const gid = `g${p.nodeId}`;
     defs += `<radialGradient id="${gid}">
@@ -597,11 +602,28 @@ function liveText(nodeId, endpoint, fmt) {
   return v && (v.value.kind === "number" || v.value.kind === "enum") ? fmt(v.value) : "—";
 }
 
+// "actual → target" while a commanded position hasn't been reached (still
+// moving, or cut short by a stall); just the actual once they agree. Null if
+// the node has reported neither.
+function damperText(nodeId) {
+  const num = (ep) => {
+    const v = state.values.get(key(nodeId, ep));
+    return v && v.value.kind === "number" ? v.value.num : null;
+  };
+  const actual = num("DamperActual");
+  const target = num("DamperTarget");
+  if (actual === null && target === null) return null;
+  if (actual === null) return `? → ${target.toFixed(0)}%`;
+  if (target === null || target === actual) return `${actual.toFixed(0)}%`;
+  return `${actual.toFixed(0)}% → ${target.toFixed(0)}%`;
+}
+
 function renderOverrideCard(n) {
   const ov = overridesForNode(n.id);
   const roomTxt = liveText(n.id, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`);
   const setTxt = liveText(n.id, "RoomSetpoint", (v) => `${v.num.toFixed(1)}°C`);
-  const damperTxt = liveText(n.id, "DamperActual", (v) => `${v.num.toFixed(0)}%`);
+  const damperTxt = damperText(n.id) ?? "—";
+  const actualTxt = liveText(n.id, "DamperActual", (v) => `${v.num.toFixed(0)}%`);
   const modeTxt = liveText(n.id, "DamperMode", (v) => damperModeLabel(v.num));
 
   return `<div class="ov-card">
@@ -626,10 +648,10 @@ function renderOverrideCard(n) {
     </div>
 
     <div class="ov-row">
-      <div class="ov-label">Damper target <span class="hint">— only acted on in Manual mode</span></div>
+      <div class="ov-label">Damper target <span class="hint">— switches the damper to Manual</span></div>
       <div class="ov-inline">
         <input type="number" min="0" max="100" step="5" class="ov-num" data-endpoint="DamperTarget"
-          value="${ov.DamperTarget ? ov.DamperTarget.value : ""}" placeholder="${damperTxt}">
+          value="${ov.DamperTarget ? ov.DamperTarget.value : ""}" placeholder="${actualTxt}">
         <span class="ov-unit">%</span>
         <button type="button" class="ov-set" data-node="${n.id}" data-endpoint="DamperTarget">Set &amp; hold</button>
       </div>
@@ -715,11 +737,25 @@ async function renderStatus() {
 
 function roomOrDuct(nodeId) {
   const parts = [];
-  for (const ep of ["RoomTemp", "SupplyTemp", "ReturnTemp", "DamperActual"]) {
+  for (const ep of ["RoomTemp", "SupplyTemp", "ReturnTemp"]) {
     const v = state.values.get(key(nodeId, ep));
     if (v && v.value.kind === "number") parts.push(`${ep.replace("Temp", "")} ${v.value.num.toFixed(1)}${v.value.unit || ""}`);
   }
+  const damper = damperText(nodeId);
+  if (damper) parts.push(`Damper ${damper}`);
   return parts.join(" · ") || "—";
+}
+
+// Active faults in red; once cleared, the last one raised stays visible in
+// grey with its time, so a transient fault (a stall the next move clears)
+// isn't missed.
+function faultCell(n) {
+  if (n.faults && n.faults.length) return `<span class="off">${esc(n.faults.join(", "))}</span>`;
+  if (n.lastFault) {
+    const at = n.lastFaultTs ? ` ${new Date(n.lastFaultTs).toLocaleTimeString()}` : "";
+    return `<span class="hint">last: ${esc(n.lastFault)}${at}</span>`;
+  }
+  return "—";
 }
 
 const STATUS_CLASS = { online: "on", bootloader: "warn", offline: "off", unexpected: "warn", "link-down": "warn" };
@@ -732,6 +768,7 @@ function renderNodeTable() {
         <td>${n.id}</td><td>${esc(n.name || "")}</td><td>${esc(n.module)}</td>
         <td class="${STATUS_CLASS[n.status] || "off"}">${esc(n.status)}</td>
         <td>${esc(roomOrDuct(n.id))}</td>
+        <td>${faultCell(n)}</td>
         <td>${n.lastSeen ? new Date(n.lastSeen * 1000).toLocaleTimeString() : "—"}</td>
         <td><button data-node-log="${n.id}" ${canReadLog(n) ? "" : "disabled"}>Log</button></td>
       </tr>`

@@ -334,3 +334,56 @@ CC_TEST(ControllerHandler, LoopReportsDamperActualOnceTheMoveSettles)
     CC_CHECK(FindReport(tx, n, Endpoint::DamperActual, &value, 1));
     CC_CHECK_EQ(value, 80);
 }
+
+CC_TEST(ControllerHandler, LoopReportsANewDamperTargetBeforeTheMoveSettles)
+{
+    ResetWorld();
+    World w;
+    w.handler.Loop(); // initial reports
+    Flush(w.node);
+    FakeBus::TruncateTx(0); // discard them
+
+    w.damper.SetTarget(77);
+    w.handler.Loop(); // target changed, move still running
+    Flush(w.node);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   value;
+    CC_CHECK(FindReport(tx, n, Endpoint::DamperTarget, &value, 1));
+    CC_CHECK_EQ(value, 77);
+    CC_CHECK(!FindReport(tx, n, Endpoint::DamperActual, &value, 1)); // not landed yet
+}
+
+CC_TEST(ControllerHandler, SetDamperTargetSwitchesAnyModeToManual)
+{
+    ResetWorld();
+    World w;
+    w.damper.SetMode(Damper::Mode::Auto);
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DamperTarget, Operation::Set), 35));
+    w.node.Loop();
+
+    CC_CHECK(w.damper.GetMode() == Damper::Mode::Manual);
+    CC_CHECK_EQ(w.damper.Target(), 35);
+}
+
+CC_TEST(ControllerHandler, AStallSetsTheDamperStalledErrorFlag)
+{
+    ResetWorld();
+    World w;
+
+    SystemStatus before{};
+    w.handler.FillStatus(before);
+    CC_CHECK((before.errorFlags & 0x0002) == 0);
+
+    w.damper.SetTarget(80);
+    FakeAdc::SetValue(500); // Damper's stallThresholdCounts
+    w.handler.Loop(); // arms the stall confirm timer
+    FakeClock::Advance(201); // past Damper's stallConfirmMs
+    w.handler.Loop(); // stall declared
+
+    SystemStatus after{};
+    w.handler.FillStatus(after);
+    CC_CHECK((after.errorFlags & 0x0002) != 0);
+}

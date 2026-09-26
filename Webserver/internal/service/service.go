@@ -61,11 +61,33 @@ type Service struct {
 	// version image, for bench-testing the OTA path itself without bumping
 	// CC_FW_VERSION on every build.
 	allowDowngrade bool
+
+	// Each node's module, from Roster/NodePresence -- names its errorFlags
+	// bits (faults.go) and picks its state endpoints (refill.go).
+	modules map[int]nodelib.Module
+
+	// Per-node active faults + the last one raised (faults.go). In memory
+	// only: a server restart forgets the history, not the current state
+	// (the node re-reports it).
+	faults map[int]*NodeFaults
+
+	// Paced state-refill Gets (refill.go).
+	refillQ    chan refillReq
+	refillOnce sync.Once
+	refillGap  time.Duration
 }
 
 // New builds the service. Call SetSender once the uplink server exists.
 func New(st *store.Store, hb *hub.Hub, log *slog.Logger) *Service {
-	return &Service{st: st, hb: hb, log: log, fwRequested: make(map[int]bool), diagLog: make(map[int]chan nodelib.Frame)}
+	return &Service{
+		st: st, hb: hb, log: log,
+		fwRequested: make(map[int]bool),
+		diagLog:     make(map[int]chan nodelib.Frame),
+		modules:     make(map[int]nodelib.Module),
+		faults:      make(map[int]*NodeFaults),
+		refillQ:     make(chan refillReq, 64),
+		refillGap:   refillGapDefault,
+	}
 }
 
 // SetSender installs the downlink path (breaks the construction cycle).
@@ -182,6 +204,9 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 			return
 		}
 		v := nodelib.DecodeValue(f.Endpoint, f.Data)
+		if f.Endpoint == nodelib.EndpointSystemStatus {
+			s.onStatus(node, v)
+		}
 		now := time.Now().UnixMilli()
 		if err := s.st.InsertReading(ctx, now, node, f.Endpoint, f.Data, v); err != nil {
 			s.log.Warn("store reading", "err", err)
@@ -220,12 +245,19 @@ func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	ctx := context.Background()
 	_ = s.st.UpsertNode(ctx, int(e.NodeID), e.Module, true)
 	_ = s.st.SetNodeState(ctx, int(e.NodeID), int(e.State))
+	s.setModule(int(e.NodeID), e.Module)
 	s.warnIfUnexpected(int(e.NodeID), e.Module)
 	s.hb.PublishPresence(int(e.NodeID), e.Module, true)
 	// SystemInfo (running firmware version) is Get-only on the node side --
 	// it's never self-reported (Node.cpp's HandleSystemMessage), so the
 	// Firmware tab's "Installed" column stays unknown unless something asks.
 	s.send.SendGet(int(e.NodeID), nodelib.EndpointSystemInfo)
+	// A Roster follows every (re)connect -- including this server's own
+	// restart, which empties the live-value cache while the nodes, which only
+	// report on change, have nothing new to say. Ask for whatever is missing.
+	if e.State == 0 {
+		s.refillState(int(e.NodeID), e.Module, true)
+	}
 }
 
 // OnPresence records a node up/down transition. Uses UpsertNode (an upsert)
@@ -240,11 +272,16 @@ func (s *Service) OnPresence(p nodelib.NodePresence) {
 		state = 1
 	}
 	_ = s.st.SetNodeState(ctx, int(p.NodeID), state)
+	s.setModule(int(p.NodeID), p.Module)
 	s.hb.PublishPresence(int(p.NodeID), p.Module, p.Up)
 	if p.Up {
 		s.warnIfUnexpected(int(p.NodeID), p.Module)
 		s.reassertOverrides(int(p.NodeID))
 		s.send.SendGet(int(p.NodeID), nodelib.EndpointSystemInfo)
+		if !p.Bootloader {
+			// (Re)joined: everything cached for it may be stale.
+			s.refillState(int(p.NodeID), p.Module, false)
+		}
 	}
 }
 
@@ -298,6 +335,27 @@ func (s *Service) onFirmwareWriteReply(nack bool, f nodelib.Frame) {
 
 // --- overrides -----------------------------------------------------------
 
+// keepDamperOverridesConsistent mirrors the ControllerNode's own rule --
+// a DamperTarget Set switches the damper to Manual -- in the held overrides,
+// so re-asserting them after a rejoin can't contradict itself: a held target
+// implies a held Manual mode, and holding any other mode drops the target.
+func (s *Service) keepDamperOverridesConsistent(ctx context.Context, node int, ep nodelib.Endpoint, value float64, user string) {
+	switch ep {
+	case nodelib.EndpointDamperTarget:
+		_ = s.st.SetOverride(ctx, node, nodelib.EndpointDamperMode, damperModeManual, user)
+	case nodelib.EndpointDamperMode:
+		if value != damperModeManual {
+			_ = s.st.DeleteOverride(ctx, node, nodelib.EndpointDamperTarget)
+		}
+	}
+}
+
+// DamperMode wire value for Manual (Node-Message-Model-Spec.md §3).
+const damperModeManual = 3
+
+// reassertOverrides re-sends a node's held overrides. They come back ordered
+// by endpoint, so a DamperTarget (0x30, which switches the node to Manual)
+// always goes before the DamperMode (0x32) held alongside it.
 func (s *Service) reassertOverrides(node int) {
 	ovs, err := s.st.Overrides(context.Background(), node)
 	if err != nil {
@@ -333,6 +391,7 @@ func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint
 	if ep != nodelib.EndpointSystemControl {
 		_ = s.st.SetOverride(ctx, node, ep, value, user)
 	}
+	s.keepDamperOverridesConsistent(ctx, node, ep, value, user)
 	return nil
 }
 

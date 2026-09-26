@@ -78,9 +78,9 @@ void Damper::Loop()
 void Damper::SetTarget(const uint8_t percent)
 {
     const uint8_t clamped = Clamp100(percent);
-    if (clamped == target && !powered)
+    if (clamped == target && !powered && !stalled)
     {
-        return;
+        return; // already there -- but after a stall, the same target is a retry
     }
     LOG_INFO("Damper target " << clamped << "%");
     target  = clamped;

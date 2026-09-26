@@ -10,12 +10,12 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 ## 1. Tools and how-to
 
 - **Scope** on `PA6` (servo signal, pin 13), the switched servo rail, and `PA0` (`SENSE`, INA180 output). A second channel on the 5 V and 3.3 V rails for §5.
-- **Command a move** through the bench server (`MainController-Server-Link-Spec.md`). Put the damper in `Manual` first so the room loop doesn't override the target:
+- **Command a move** through the bench server (`MainController-Server-Link-Spec.md`) or the Overrides page. A target switches the damper to `Manual` by itself, so the room loop won't move it back:
   ```
-  curl -X POST http://<server>:8090/api/commands -d '{"node":<id>,"endpoint":"DamperMode","value":3}'
   curl -X POST http://<server>:8090/api/commands -d '{"node":<id>,"endpoint":"DamperTarget","value":50}'
   ```
-  `DamperMode` `2` returns it to `Auto`.
+  `DamperMode` `2` returns it to `Auto` (and drops the held target).
+- **Watch it on the Status page:** the damper shows `actual → target` until a move lands, and the **Fault** column shows an active stall in red, then "last: Damper stalled <time>" after it clears.
 - **Read the stall-sense ADC while a move runs:** J-Link `mem32 0x40012440 1` reads `ADC1_DR`, the last conversion. J-Link reads memory without halting, and `Damper::Loop()` samples every pass while the servo is powered.
 - **Node log:** `GET /api/nodes/<id>/log` drains the node's DiagLog ring (move, stall and park messages from `Damper`).
 
@@ -50,8 +50,8 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 | # | Do | Expect | If not |
 |---|---|---|---|
 | 5.1 | Read `ADC1_DR` idle-powered, while moving freely, and with the horn blocked by hand (briefly) | Roughly ~90–240 counts running, ~830 stalled (`Node-Bus-Power-Path-Spec.md` §3.1.1) | Adjust `stallThresholdCounts` (now 500) in `Damper.h` so it sits clearly between the two |
-| 5.2 | Block the horn, command a move | Rail cut within ~200 ms (`stallConfirmMs`); `DamperMode` reports `4`; log line "Damper stall detected" | — |
-| 5.3 | Next `DamperTarget` after a stall | Stall clears, servo tries again | — |
+| 5.2 | Block the horn, command a move | Rail cut within ~200 ms (`stallConfirmMs`); `DamperMode` reports `4`; Fault column shows "Damper stalled"; log line "Damper stall detected" | — |
+| 5.3 | Next `DamperTarget` after a stall, also the same value | Stall clears, servo tries again; Fault column drops to "last: Damper stalled" | — |
 | 5.4 | 20× full 0 ↔ 100 moves, horn free | Never reports a stall (start-of-move current step doesn't false-trigger) | Raise `stallConfirmMs`, or check the switched-side reservoir cap |
 | 5.5 | Scope 5 V and 3.3 V during 5.2 | 5 V dips but recovers; 3.3 V stays in spec; MCU does not reset | Power-path issue (`Node-Bus-Power-Path-Spec.md` §3.1) |
 | 5.6 | Moves while the bus is busy | No bus CRC errors or dropped polls on this node or its neighbours | Rail noise into the RS-485 transceiver — decoupling / layout |

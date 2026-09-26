@@ -267,3 +267,40 @@ CC_TEST(Damper, ParkNeutralStopsEarlyOnAStall)
     CC_CHECK(Hal::Tick::Millis() - start < moveSettleMs);
     CC_CHECK_EQ(damper.Actual(), 90); // never reached neutral
 }
+
+CC_TEST(Damper, ResendingTheSameTargetAfterAStallRetriesTheMove)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(77);
+    FakeAdc::SetValue(stallThresholdCounts);
+    damper.Loop();
+    FakeClock::Advance(stallConfirmMs + 1);
+    damper.Loop();
+    CC_CHECK(damper.Stalled());
+    CC_CHECK(!damper.Moving());
+
+    FakeAdc::SetValue(0);
+    damper.SetTarget(77); // same value -- still a fresh attempt after a stall
+
+    CC_CHECK(!damper.Stalled());
+    CC_CHECK(damper.Moving());
+    CC_CHECK_EQ(FakePwm::PulseUs(), 2040);
+}
+
+CC_TEST(Damper, ResendingTheSameTargetWhenSettledDoesNothing)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(77);
+    FakeClock::Advance(moveSettleMs + 1);
+    damper.Loop();
+    CC_CHECK(!damper.Moving());
+
+    damper.SetTarget(77);
+    CC_CHECK(!damper.Moving()); // already there -- no pointless servo power-up
+}
