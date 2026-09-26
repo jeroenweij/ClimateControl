@@ -51,6 +51,16 @@ var otaWriteWait = 3 * time.Second
 // resets the NINA and reconnects in ~10 s. A var only so tests can shrink it.
 var otaResumeWait = 120 * time.Second
 
+// otaNodeWindow is how many chunks a bus-node push keeps in flight. The
+// MainController relays them onto the bus back to back and the node's
+// bootloader (Boot::FirmwareSlave) queues one Ack/Nack per chunk for its next
+// Poll, so the uplink stays busy instead of idling a round trip per chunk --
+// the one-chunk cadence (~140 ms) is exactly what makes the NINA stop
+// forwarding. Acks are cumulative, so a bootloader that still keeps only its
+// last reply works too, just with fewer chunks individually CRC-checked. A
+// Thermostat push stays at one chunk: its ControllerNode relays one at a time.
+const otaNodeWindow = 4
+
 // After this many status probes that actually went out, unanswered, a bus
 // node is presumed to have restarted into its application (which never sends
 // a bootloader status) and is sent back into the bootloader. Generous on
@@ -422,6 +432,9 @@ func (d *otaDriver) run() {
 	d.progress("writing", 0)
 
 	d.resume = d.resumeNode
+	if d.target == "node" {
+		d.window = otaNodeWindow
+	}
 	offset, ok := d.writeImage(d.endpoint(), nodelib.EncodeFirmwareWrite)
 	if !ok {
 		return

@@ -37,6 +37,15 @@ namespace Boot
         void Loop();
 
       private:
+        // One queued Write reply (see writeReplies below).
+        struct SWriteReply
+        {
+            bool     nack;
+            bool     programFailed;
+            uint16_t offset;
+            uint16_t crc16;
+        };
+
         // Reported in the Status message (data[1]); mirrors the spec's state
         // enum (0 = app, which the bootloader never reports).
         enum class State : uint8_t
@@ -53,6 +62,8 @@ namespace Boot
 
         void HandleBegin(const NodeLib::Message& m);
         void HandleWrite(const NodeLib::Message& m);
+        void StageWrite(const NodeLib::Message& m);
+        void CommitStagedWrites();
         void HandleEnd();
         void HandleActivate();
         void HandleAbort();
@@ -79,7 +90,7 @@ namespace Boot
 
         void SendAnnounce();
         void SendStatus();
-        void SendWriteReply();
+        void SendWriteReply(const SWriteReply& reply);
         void SendDone();
         void SendFrame(const NodeLib::Message& m);
         void Fault(const uint8_t error);
@@ -116,11 +127,25 @@ namespace Boot
 
         bool statusPending;
 
-        bool     writeReplyPending;
-        bool     writeReplyNack;
-        uint16_t writeReplyOffset;
-        uint16_t writeReplyCrc16;
-        bool     writeReplyProgramFailed;
+        // Write replies waiting for the next Poll, oldest first. The master
+        // keeps several chunks in flight (a window), so several Writes can
+        // arrive between two Polls -- each gets its own Ack/Nack, sent in
+        // order on the next Poll. Sized above the master's window; when full,
+        // the oldest is dropped (acks are cumulative, so the newest carries
+        // the most).
+        // Writes received since the last Poll, programmed only when the Poll
+        // arrives (CommitStagedWrites()). Programming flash stalls the CPU --
+        // the code runs from flash -- and a windowed master sends its next
+        // chunks back to back, so programming each chunk on arrival loses
+        // bytes of the one behind it to a USART overrun. The master is quiet
+        // from its Poll until our Done, so the Poll is the safe moment.
+        static const uint8_t maxStagedWrites = 8;
+        NodeLib::Message     stagedWrites[maxStagedWrites];
+        uint8_t              stagedCount;
+
+        static const uint8_t maxWriteReplies = 8;
+        SWriteReply          writeReplies[maxWriteReplies];
+        uint8_t              writeReplyCount;
 
         // Pending reply for whichever of Begin/End/Abort was last handled.
         bool    opReplyPending;

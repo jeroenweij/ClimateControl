@@ -479,3 +479,99 @@ CC_TEST(FirmwareSlave, WriteOverrunIsNackedNotSilentlyDropped)
     CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Nack, &idx));
     CC_CHECK_EQ(static_cast<uint16_t>(tx[idx].data[0] | (tx[idx].data[1] << 8)), 224); // names expectedOffset
 }
+
+CC_TEST(FirmwareSlave, SeveralWritesBetweenPollsEachGetTheirOwnAckInOrder)
+{
+    ResetWorld();
+    FirmwareSlave slave(kNodeId, kModule);
+    slave.Init();
+    InjectOtaFrame(MakeBegin(kModule, validImageSize, 0, 0));
+    Poll(slave);
+    FakeOtaUart::Reset();
+
+    // A windowed master: four chunks back to back, then one Poll.
+    uint8_t chunks[4][8];
+    for (uint8_t c = 0; c < 4; c++)
+    {
+        for (uint8_t i = 0; i < 8; i++)
+        {
+            chunks[c][i] = static_cast<uint8_t>(c * 16 + i);
+        }
+        InjectOtaFrame(MakeWrite(static_cast<uint16_t>(c * 8), chunks[c], 8));
+    }
+    Poll(slave);
+
+    Message   tx[8];
+    const int n    = DecodeOtaTx(tx, 8);
+    int       acks = 0;
+    for (int i = 0; i < n; i++)
+    {
+        if (tx[i].id.endpoint == Endpoint::Firmware && tx[i].id.operation == Operation::Ack)
+        {
+            const uint16_t offset = static_cast<uint16_t>(tx[i].data[0] | (tx[i].data[1] << 8));
+            const uint16_t crc    = static_cast<uint16_t>(tx[i].data[2] | (tx[i].data[3] << 8));
+            CC_CHECK_EQ(offset, acks * 8); // one per chunk, oldest first
+            CC_CHECK_EQ(crc, ChunkCrc16(chunks[acks], 8));
+            acks++;
+        }
+    }
+    CC_CHECK_EQ(acks, 4);
+    CC_CHECK(tx[n - 1].id.operation == Operation::Done); // Done still closes the reply
+}
+
+CC_TEST(FirmwareSlave, AFullReplyQueueKeepsTheNewestAcks)
+{
+    ResetWorld();
+    FirmwareSlave slave(kNodeId, kModule);
+    slave.Init();
+    InjectOtaFrame(MakeBegin(kModule, validImageSize, 0, 0));
+    Poll(slave);
+    FakeOtaUart::Reset();
+
+    // Ten chunks between two Polls -- two more than the queue holds.
+    uint8_t chunk[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    for (uint8_t c = 0; c < 10; c++)
+    {
+        InjectOtaFrame(MakeWrite(static_cast<uint16_t>(c * 8), chunk, 8));
+        slave.Loop(); // consume as it arrives, as the real receive ring does
+    }
+    Poll(slave);
+
+    Message   tx[16];
+    const int n     = DecodeOtaTx(tx, 16);
+    int       first = -1, last = -1, acks = 0;
+    for (int i = 0; i < n; i++)
+    {
+        if (tx[i].id.operation == Operation::Ack)
+        {
+            const int offset = tx[i].data[0] | (tx[i].data[1] << 8);
+            first            = first < 0 ? offset : first;
+            last             = offset;
+            acks++;
+        }
+    }
+    CC_CHECK_EQ(acks, 8);
+    CC_CHECK_EQ(first, 16); // chunks 0 and 1 dropped
+    CC_CHECK_EQ(last, 72); // the newest is kept
+}
+
+CC_TEST(FirmwareSlave, WritesAreProgrammedOnlyWhenThePollArrives)
+{
+    ResetWorld();
+    FirmwareSlave slave(kNodeId, kModule);
+    slave.Init();
+    InjectOtaFrame(MakeBegin(kModule, validImageSize, 0, 0));
+    Poll(slave);
+
+    const uint8_t chunk[8] = {0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8};
+    InjectOtaFrame(MakeWrite(0, chunk, sizeof(chunk)));
+    slave.Loop(); // received -- but more chunks may still be arriving behind it
+
+    CC_CHECK(FakeFlash::Data()[0] != chunk[0]); // not programmed yet (flash stalls the CPU)
+
+    Poll(slave); // the master is now quiet until our Done
+    for (uint8_t i = 0; i < sizeof(chunk); i++)
+    {
+        CC_CHECK_EQ(FakeFlash::Data()[i], chunk[i]);
+    }
+}

@@ -102,11 +102,10 @@ FirmwareSlave::FirmwareSlave(const uint8_t nodeId, const uint8_t module) :
     expectedOffset(0),
     partialCommitted(0),
     statusPending(false),
-    writeReplyPending(false),
-    writeReplyNack(false),
-    writeReplyOffset(0),
-    writeReplyCrc16(0),
-    writeReplyProgramFailed(false),
+    stagedWrites{},
+    stagedCount(0),
+    writeReplies{},
+    writeReplyCount(0),
     opReplyPending(false),
     opReplyNack(false),
     opReplyError(ErrNone),
@@ -155,6 +154,7 @@ void FirmwareSlave::OnMessage(const Message& m)
     {
         if (m.id.operation == Operation::Poll)
         {
+            CommitStagedWrites(); // before the replies -- they report these writes
             if (statusPending)
             {
                 SendStatus();
@@ -165,11 +165,11 @@ void FirmwareSlave::OnMessage(const Message& m)
                 SendOpReply();
                 opReplyPending = false;
             }
-            if (writeReplyPending)
+            for (uint8_t i = 0; i < writeReplyCount; i++)
             {
-                SendWriteReply();
-                writeReplyPending = false;
+                SendWriteReply(writeReplies[i]);
             }
+            writeReplyCount = 0;
             SendDone();
         }
         return;
@@ -200,9 +200,10 @@ void FirmwareSlave::OnFirmware(const Message& m)
             HandleBegin(m);
             break;
         case FirmwareOp::Write:
-            HandleWrite(m);
+            StageWrite(m);
             break;
         case FirmwareOp::End:
+            CommitStagedWrites(); // every chunk sent before End counts
             HandleEnd();
             break;
         case FirmwareOp::Activate:
@@ -251,15 +252,36 @@ void FirmwareSlave::HandleBegin(const Message& m)
     // not whatever was left over from the image it's replacing.
     Tools::BootHealth::ResetFailedBootCount();
 
-    imageSize         = size;
-    imageCrc32        = imageCrc;
-    fwVersion         = version;
-    expectedOffset    = 0;
-    partialCommitted  = 0;
-    lastError         = ErrNone;
-    state             = State::Receiving;
-    writeReplyPending = false;
+    imageSize        = size;
+    imageCrc32       = imageCrc;
+    fwVersion        = version;
+    expectedOffset   = 0;
+    partialCommitted = 0;
+    lastError        = ErrNone;
+    state            = State::Receiving;
+    writeReplyCount  = 0;
+    stagedCount      = 0; // chunks for the old transfer are void
     QueueOpReply(false, ErrNone);
+}
+
+void FirmwareSlave::StageWrite(const Message& m)
+{
+    if (stagedCount == maxStagedWrites)
+    {
+        // The master outran the stage -- program the oldest now rather than
+        // lose it (this one may then overrun, but nothing is dropped here).
+        CommitStagedWrites();
+    }
+    stagedWrites[stagedCount++] = m;
+}
+
+void FirmwareSlave::CommitStagedWrites()
+{
+    for (uint8_t i = 0; i < stagedCount; i++)
+    {
+        HandleWrite(stagedWrites[i]);
+    }
+    stagedCount = 0;
 }
 
 void FirmwareSlave::HandleWrite(const Message& m)
@@ -359,11 +381,17 @@ void FirmwareSlave::QueueWriteReply(
     const uint16_t chunkCrc16,
     const bool     programFailed)
 {
-    writeReplyNack          = nack;
-    writeReplyOffset        = offset;
-    writeReplyCrc16         = chunkCrc16;
-    writeReplyProgramFailed = programFailed;
-    writeReplyPending       = true;
+    if (writeReplyCount == maxWriteReplies)
+    {
+        // Full (the master outran its window) -- drop the oldest; acks are
+        // cumulative, so keeping the newest loses the least.
+        for (uint8_t i = 1; i < maxWriteReplies; i++)
+        {
+            writeReplies[i - 1] = writeReplies[i];
+        }
+        writeReplyCount--;
+    }
+    writeReplies[writeReplyCount++] = {nack, programFailed, offset, chunkCrc16};
 }
 
 void FirmwareSlave::HandleEnd()
@@ -411,11 +439,12 @@ void FirmwareSlave::HandleActivate()
 
 void FirmwareSlave::HandleAbort()
 {
-    state             = State::Idle;
-    lastError         = ErrNone;
-    expectedOffset    = 0;
-    partialCommitted  = 0;
-    writeReplyPending = false;
+    state            = State::Idle;
+    lastError        = ErrNone;
+    expectedOffset   = 0;
+    partialCommitted = 0;
+    writeReplyCount  = 0;
+    stagedCount      = 0; // chunks for the old transfer are void
     QueueOpReply(false, ErrNone);
 }
 
@@ -454,12 +483,12 @@ void FirmwareSlave::SendStatus()
     SendFrame(m);
 }
 
-void FirmwareSlave::SendWriteReply()
+void FirmwareSlave::SendWriteReply(const SWriteReply& reply)
 {
-    Message m(Id(nodeId, Endpoint::Firmware, writeReplyNack ? Operation::Nack : Operation::Ack));
-    WriteU16(&m.data[0], writeReplyOffset);
-    WriteU16(&m.data[2], writeReplyCrc16);
-    m.data[4] = writeReplyProgramFailed ? 1 : 0;
+    Message m(Id(nodeId, Endpoint::Firmware, reply.nack ? Operation::Nack : Operation::Ack));
+    WriteU16(&m.data[0], reply.offset);
+    WriteU16(&m.data[2], reply.crc16);
+    m.data[4] = reply.programFailed ? 1 : 0;
     m.len     = WriteReplyLen;
     SendFrame(m);
 }
