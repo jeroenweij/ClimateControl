@@ -692,6 +692,7 @@ void Node::QueueMessage(const NodeLib::Message& m)
     }
     else
     {
+        LOG_WARN("Dropping message " << m);
         queueDrops++;
     }
 }

@@ -91,7 +91,7 @@ namespace NodeLib
         // Hard cap for fixed-size arrays (e.g. NodeMaster::activeNodes) -- one
         // definition, in Id.h, shared with ConfigStore.
         static const uint8_t maxNodes  = MAX_NODES;
-        static const int     queueSize = 25;
+        static const int     queueSize = 30;
 
         INodeHandler* handler;
         uint8_t       nodeId;
