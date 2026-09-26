@@ -28,7 +28,7 @@ MAGIC = 0x4E4F4443  # 'NODC'
 SCHEMA_VERSION = 1
 CONFIG_ADDR = 0x0800F000
 RECORD_SIZE = 32
-MAX_NODES = 25  # keep in sync with NodeLib::MAX_NODES
+MAX_NODES = 21  # keep in sync with NodeLib::MAX_NODES (Lib/NodeLib/Id.h)
 
 # Accepted --module names -> ConfigStore::Module value.
 MODULES = {
