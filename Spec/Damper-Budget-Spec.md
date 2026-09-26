@@ -266,7 +266,7 @@ Considered and rejected: exposing the servo's native `0–180°` range (or raw P
 - **The control math already runs at full resolution internally.** `RoomDemandPercent()` computes in centi-°C (0.01 °C, the same resolution `RoomTemp`/`SupplyTemp` carry on the wire) through the whole deadband/scaling calculation; only the final value handed to `Damper::SetTarget()` or `DamperBudget` rounds to `0..100`. Quantizing the *output* doesn't lose anything upstream of that rounding.
 - **Percent is already the locked wire unit for every other Damper endpoint** (`DamperTarget`/`DamperActual`/`DamperMode`, `Node-Message-Model-Spec.md` §5's "Percent: uint8, 0–100" convention, enforced today by `Damper::Clamp100()`). `DamperBudget` reusing it keeps every value `RoomControlLoop` compares (`desired < budget`, `damper.Target() > budget`) in the same unit.
 - **100 steps over 180° ≈ 1.8°/step is already finer than what matters mechanically** — a geared servo's own backlash, and a damper's nonlinear (butterfly-valve-like) airflow-vs-angle curve, both dwarf 1.8° of positioning error. Room thermal time constants are minutes; nothing here is fighting for a fraction of a degree.
-- If finer actuator resolution is ever wanted, it belongs entirely inside `Damper::SetTarget()`'s (currently still-TODO) percent→PWM-pulse-width mapping — the wire protocol, `RoomControlLoop`, and `BudgetAllocator` would never need to change.
+- If finer actuator resolution is ever wanted, it belongs entirely inside `Damper`'s percent→PWM-pulse-width mapping (`Damper::PulseFor()`, linear over 500–2500 µs) — the wire protocol, `RoomControlLoop`, and `BudgetAllocator` would never need to change.
 
 ---
 

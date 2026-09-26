@@ -140,6 +140,7 @@ namespace Board
     inline const Hal::Pin ServoPwm{GPIOA, GPIO_PIN_6}; // pin 13  net "PWM", TIM3_CH1 (AF1)
                                                        //   externally pulled to the safe damper position.
                                                        //   Same physical pin as the Main board's NinaReset.
+    constexpr uint8_t     ServoPwmAf = 1; // TIM3_CH1 on PA6
     inline const Hal::Pin ServoEnable{GPIOA, GPIO_PIN_5}; // pin 12  servo power-enable, HIGH = servo powered.
                                                           //   Off by default (pin Hi-Z at reset / unprogrammed):
                                                           //   the 5V servo rail sits behind a MCU-gated high-side

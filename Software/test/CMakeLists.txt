@@ -30,6 +30,7 @@ add_library(test_fakes STATIC
     fake/FakeCrc.cpp
     fake/FakeGpio.cpp
     fake/FakeAdc.cpp
+    fake/FakePwm.cpp
     fake/FakeFlash.cpp
     fake/FakeOtaUart.cpp
     fake/FakeSystem.cpp

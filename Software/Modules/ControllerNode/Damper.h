@@ -9,15 +9,21 @@
 #include "Adc.h"
 #include "DelayTimer.h"
 #include "Gpio.h"
+#include "Pwm.h"
 
 // The room damper actuator: a metal-geared servo on a MCU-gated 5 V rail
 // (Node-Bus-Power-Path-Spec.md §3.1). The servo is UNPOWERED at rest -- the
 // gearing holds position -- and energised (Board::ServoEnable) only for the
 // brief move to a new setpoint.
 //
-// PWM generation on TIM3_CH1 (Board::ServoPwm) is not wired yet: SetPercent()
-// stores the target and drives the enable line; the actual timer output is a
-// TODO once a timer HAL exists. Value units are percent open (0..100).
+// Position is a standard 50 Hz servo pulse on TIM3_CH1 (Board::ServoPwm),
+// mapped linearly from percent open (0..100) onto the DS3225's full
+// 500..2500 us, i.e. 0..180 deg. No per-unit trim or software end stops: the
+// linkage gears that travel down to under 90 deg of damper blade, and the
+// mechanics alone set minimum ventilation and maximum opening
+// (Node-Bus-Hardware-Design-Spec.md §4). The pulse is only driven while the
+// servo rail is on; with the rail off the signal is held low so it never
+// back-feeds an unpowered servo.
 //
 // Stall detection (Node-Bus-Power-Path-Spec.md §3.1.1): the servo has no
 // position feedback, so moveSettleMs alone can only bound how long a jam is
@@ -66,14 +72,20 @@ class Damper
     // StalledCode, it is not a commandable mode.
     uint8_t ReportedMode() const;
 
-    // Park at NeutralPercent and cut servo power -- for PrepareForReset() and
-    // any loss of the room control input (ControllerNode-Thermostat-Link-Spec.md
-    // §5.1).
+    // Drive to NeutralPercent and cut servo power -- for PrepareForReset()
+    // (ControllerNode-Thermostat-Link-Spec.md §5.1). Blocking: runs the move
+    // to completion (moveSettleMs, or earlier on a stall) because the caller
+    // resets straight after. Returns at once if already parked and unpowered.
     void ParkNeutral();
 
   private:
     // Time the servo is held powered after a commanded move.
     static const uint32_t moveSettleMs = 1500;
+
+    // Servo frame and pulse range (DS3225: 50 Hz, 500..2500 us over 180 deg).
+    static const uint16_t pwmPeriodUs   = 20000;
+    static const uint16_t closedPulseUs = 500; // 0 %
+    static const uint16_t openPulseUs   = 2500; // 100 %
 
     // Sustained-overcurrent window before a stall is declared. Long enough to
     // ride out the start-of-move current step the switched-side reservoir cap
@@ -95,8 +107,11 @@ class Damper
     void PowerOn();
     void PowerOff();
 
+    static uint16_t PulseFor(const uint8_t percent);
+
     Hal::Gpio         enable;
     Hal::Adc          currentSense;
+    Hal::Pwm          pwm;
     uint8_t           target;
     uint8_t           actual;
     Mode              mode;

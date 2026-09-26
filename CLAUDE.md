@@ -86,3 +86,4 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
 | `Damper-Budget-Spec.md` | `ControllerNode`'s room control loop (setpoint/room-temp vs. shared duct `SupplyTemp`) and `MainController`'s fair-share `DamperBudget` allocation across online `ControllerNode`s |
+| `ControllerNode-Bringup-Test-Plan.md` | Ordered hardware checks for the first real ControllerNode boards: servo PWM, stall-sense calibration, linkage end points, reset/OTA park, Thermostat link |

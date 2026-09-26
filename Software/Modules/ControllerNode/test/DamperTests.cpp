@@ -4,7 +4,9 @@
 
 #include "FakeAdc.h"
 #include "FakeClock.h"
+#include "FakePwm.h"
 #include "Test.h"
+#include "Tick.h"
 
 #include "Damper.h"
 
@@ -17,6 +19,7 @@ namespace
     {
         FakeClock::Reset();
         FakeAdc::Reset();
+        FakePwm::Reset();
     }
 
     // Damper::stallThresholdCounts / stallConfirmMs / moveSettleMs are
@@ -154,4 +157,113 @@ CC_TEST(Damper, SetModeClosedAndOpenDriveTheTargetDirectly)
 
     damper.SetMode(Damper::Mode::Open);
     CC_CHECK_EQ(damper.Target(), 100);
+}
+
+CC_TEST(Damper, InitStartsThePwmWithTheSignalLow)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    CC_CHECK(FakePwm::Initialised());
+    CC_CHECK_EQ(FakePwm::PulseUs(), 0);
+    CC_CHECK(!damper.Moving());
+}
+
+CC_TEST(Damper, TargetMapsLinearlyOntoTheDefaultPulseRange)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(0);
+    CC_CHECK_EQ(FakePwm::PulseUs(), 500);
+    damper.SetTarget(100);
+    CC_CHECK_EQ(FakePwm::PulseUs(), 2500);
+    damper.SetTarget(50);
+    CC_CHECK_EQ(FakePwm::PulseUs(), 1500);
+    damper.SetTarget(33);
+    CC_CHECK_EQ(FakePwm::PulseUs(), 1160);
+}
+
+CC_TEST(Damper, SignalDropsLowWhenTheServoPowersDown)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(80);
+    CC_CHECK_EQ(FakePwm::PulseUs(), 2100);
+
+    FakeClock::Advance(moveSettleMs + 1);
+    damper.Loop();
+
+    CC_CHECK(!damper.Moving());
+    CC_CHECK_EQ(FakePwm::PulseUs(), 0);
+}
+
+CC_TEST(Damper, SignalDropsLowOnAStall)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(80);
+    FakeAdc::SetValue(stallThresholdCounts);
+    damper.Loop();
+    FakeClock::Advance(stallConfirmMs + 1);
+    damper.Loop();
+
+    CC_CHECK(damper.Stalled());
+    CC_CHECK_EQ(FakePwm::PulseUs(), 0);
+}
+
+CC_TEST(Damper, ParkNeutralRunsTheMoveBeforeCuttingPower)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+    damper.SetTarget(90);
+    FakeClock::Advance(moveSettleMs + 1);
+    damper.Loop(); // settled at 90, unpowered
+
+    const uint32_t start = Hal::Tick::Millis();
+    damper.ParkNeutral();
+
+    CC_CHECK(Hal::Tick::Millis() - start >= moveSettleMs); // blocked for the whole move
+    CC_CHECK_EQ(damper.Actual(), 50);
+    CC_CHECK(!damper.Moving());
+    CC_CHECK_EQ(FakePwm::PulseUs(), 0);
+}
+
+CC_TEST(Damper, ParkNeutralReturnsAtOnceWhenAlreadyParked)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init(); // starts at neutral, unpowered
+
+    const uint32_t start = Hal::Tick::Millis();
+    damper.ParkNeutral();
+
+    CC_CHECK_EQ(Hal::Tick::Millis() - start, 0u);
+    CC_CHECK(!damper.Moving());
+}
+
+CC_TEST(Damper, ParkNeutralStopsEarlyOnAStall)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+    damper.SetTarget(90);
+    FakeClock::Advance(moveSettleMs + 1);
+    damper.Loop();
+
+    FakeAdc::SetValue(stallThresholdCounts);
+    const uint32_t start = Hal::Tick::Millis();
+    damper.ParkNeutral();
+
+    CC_CHECK(damper.Stalled());
+    CC_CHECK(!damper.Moving());
+    CC_CHECK(Hal::Tick::Millis() - start < moveSettleMs);
+    CC_CHECK_EQ(damper.Actual(), 90); // never reached neutral
 }

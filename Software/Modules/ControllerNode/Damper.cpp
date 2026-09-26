@@ -4,11 +4,16 @@
 
 #include "BoardPins.h"
 #include "Logger.h"
+#include "Tick.h"
 
 #include "Damper.h"
 
 namespace
 {
+    // How often ParkNeutral()'s blocking move re-runs Loop() -- stall checks
+    // stay well inside stallConfirmMs.
+    constexpr uint32_t parkPollMs = 5;
+
     uint8_t Clamp100(const uint8_t percent)
     {
         return percent > 100 ? 100 : percent;
@@ -18,6 +23,7 @@ namespace
 Damper::Damper() :
     enable(Board::ServoEnable, Hal::Gpio::Mode::Output),
     currentSense(Board::ServoCurrentSenseChannel),
+    pwm({Board::ServoPwm, Board::ServoPwmAf}, pwmPeriodUs),
     target(NeutralPercent),
     actual(NeutralPercent),
     mode(Mode::Auto),
@@ -30,6 +36,7 @@ Damper::Damper() :
 
 void Damper::Init()
 {
+    pwm.Init();
     PowerOff();
 }
 
@@ -79,7 +86,6 @@ void Damper::SetTarget(const uint8_t percent)
     target  = clamped;
     stalled = false; // a fresh move gets a fresh attempt
     PowerOn();
-    // TODO: program TIM3_CH1 pulse width for 'target' once a timer HAL exists.
 }
 
 void Damper::SetMode(const Mode newMode)
@@ -101,11 +107,20 @@ void Damper::SetMode(const Mode newMode)
 
 void Damper::ParkNeutral()
 {
+    if (!powered && target == NeutralPercent && actual == NeutralPercent)
+    {
+        return; // already parked
+    }
+
     LOG_WARN("Damper -> neutral, servo off");
-    target = NeutralPercent;
-    actual = NeutralPercent;
-    // TODO: drive the PWM to neutral before cutting power once the timer is wired.
-    PowerOff();
+    target  = NeutralPercent;
+    stalled = false;
+    PowerOn();
+    while (powered)
+    {
+        Loop(); // powers off once settled, or early on a stall
+        Hal::Tick::DelayMs(parkPollMs);
+    }
 }
 
 uint8_t Damper::Target() const
@@ -140,6 +155,9 @@ uint8_t Damper::ReportedMode() const
 
 void Damper::PowerOn()
 {
+    // Signal first, so the servo sees the target pulse the moment its rail
+    // comes up rather than whatever it last held.
+    pwm.SetPulseUs(PulseFor(target));
     powered = true;
     enable.Write(true);
     settleTimer.Start(moveSettleMs);
@@ -150,6 +168,13 @@ void Damper::PowerOff()
 {
     powered = false;
     enable.Write(false);
+    pwm.SetPulseUs(0); // signal low -- never drive an unpowered servo's input
     settleTimer.Stop();
     stallTimer.Stop();
+}
+
+uint16_t Damper::PulseFor(const uint8_t percent)
+{
+    // Rounded to the nearest us.
+    return static_cast<uint16_t>(closedPulseUs + ((openPulseUs - closedPulseUs) * Clamp100(percent) + 50) / 100);
 }

@@ -66,6 +66,8 @@ The shared power rail runs at 48V DC, stepped down locally at each node to 5V (s
 
 **Servo:** the damper actuator is a DSSERVO `DS3225`, 25 kg·cm metal-gear digital servo (coreless, "waterproof" housing, ~40×20×40.5 mm, 67 g, 180° version). Per the supplier's own spec sheet: operating voltage 4.8–7.2V, stall current 2.2–2.6A @5.0V → 2.8–3.2A @6.8V. At this design's actual 5.0–5.5V working point that interpolates to **~2.6–2.8A/node** working stall current. Run it at this board's existing 5.0–5.5V rail, not higher — the ceiling is the shared-rail LDOs downstream (`Node-Bus-Power-Path-Spec.md` §3), not the servo.
 
+**Linkage:** the servo drives the damper blade through a **2.5:1 reduction** — the full servo travel, 0–180° (0–100 %, 500–2500 µs), becomes 72° of blade travel. The mechanics alone set the end points: at 0 % the blade still leaves a minimum ventilation gap, and at 100 % it stops short of fully open, so the servo never runs into a hard stop at either end. Firmware therefore has no per-unit trim or software end stops (`Modules/ControllerNode/Damper.h`); a stall reported anywhere in the range means a mechanical fault, not an end point.
+
 **At 48V, converted from 5V-side servo current** (`I_bus = P_load / (V_bus × η)`, η ≈ 0.85–0.90 for a synchronous buck):
 
 | Scenario | 5V-side total (20 nodes) | Actual 48V bus current |

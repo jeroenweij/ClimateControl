@@ -12,6 +12,8 @@ set(HAL_CORE_SOURCES
     OneWire.cpp
     I2c.h
     I2c.cpp
+    Pwm.h
+    Pwm.cpp
     Flash.h
     Flash.cpp
     Crc.h
