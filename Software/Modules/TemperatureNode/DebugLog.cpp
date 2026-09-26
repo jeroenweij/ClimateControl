@@ -23,13 +23,18 @@ namespace
 {
     const uint32_t LogBaud = 115200;
 
+    void WriteChar(Uart& uart, const char character)
+    {
+        uart.WriteBytes(reinterpret_cast<const uint8_t*>(&character), 1);
+    }
+
     void WriteText(Uart& uart, const char* const text)
     {
         uart.WriteBytes(reinterpret_cast<const uint8_t*>(text), strlen(text));
     }
 } // namespace
 
-void Tools::Logger::Write(const char* const level, const char* const msg)
+void Tools::Logger::Write(const char level, const char* const msg)
 {
     static Uart uart;
     static bool initialized = false;
@@ -40,7 +45,7 @@ void Tools::Logger::Write(const char* const level, const char* const msg)
         initialized = true;
     }
 
-    WriteText(uart, level);
+    WriteChar(uart, level);
     WriteText(uart, ": ");
     WriteText(uart, msg);
     WriteText(uart, "\r\n");

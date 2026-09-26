@@ -358,9 +358,9 @@ CC_TEST(Node, DiagLogDrainsBufferedLogLinesOnePerGetThenReportsEmpty)
     node.Init();
     Tools::LogRing::Clear(); // drop whatever Init() logged
     FakeClock::Set(7000);
-    Tools::LogRing::Push("I", "first line");
+    Tools::LogRing::Push('I', "first line");
     FakeClock::Set(9000);
-    Tools::LogRing::Push("W", "second line");
+    Tools::LogRing::Push('W', "second line");
     FakeClock::Set(21000);
 
     // Report = uptimeSec(3 LE) + text; text-less means drained, uptime = now.
@@ -397,7 +397,7 @@ CC_TEST(Node, DiagLogFitsOneBusMessageEvenForAnOverlongLogLine)
     Node node;
     node.Init();
     Tools::LogRing::Clear();
-    Tools::LogRing::Push("E", "0123456789012345678901234567890123456789012345678901234567890123456789");
+    Tools::LogRing::Push('E', "0123456789012345678901234567890123456789012345678901234567890123456789");
 
     bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLog, Operation::Get)));
     Flush(node);

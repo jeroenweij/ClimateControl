@@ -189,8 +189,9 @@ CC_TEST(UplinkHandler, ObservesBusTrafficThroughReceivedMessageEvenWithTheUplink
     FlushQueuedBudgets(master, 2);
 
     Message   tx[8];
-    const int n = bus::DecodeTx(tx, 8);
-    uint8_t   p2, p3;
+    const int n  = bus::DecodeTx(tx, 8);
+    uint8_t   p2 = 0;
+    uint8_t   p3 = 0;
     CC_CHECK(FindBudget(tx, n, 2, p2));
     CC_CHECK(FindBudget(tx, n, 3, p3));
     CC_CHECK_EQ(p2, 100);
@@ -550,10 +551,10 @@ CC_TEST(UplinkHandler, PushLogSendsAtMostTwoRingLinesPerPassOldestFirst)
     Tools::LogRing::Clear();
 
     FakeClock::Set(5000);
-    Tools::LogRing::Push("I", "one");
-    Tools::LogRing::Push("W", "two");
+    Tools::LogRing::Push('I', "one");
+    Tools::LogRing::Push('W', "two");
     FakeClock::Set(7000);
-    Tools::LogRing::Push("E", "three");
+    Tools::LogRing::Push('E', "three");
 
     Access::PushLog(uplink);
     CC_CHECK_EQ(Access::Queued(uplink), 2);
@@ -577,7 +578,7 @@ CC_TEST(UplinkHandler, PushLogWaitsWhileTheOutboundQueueIsHalfFull)
     InitAndClearDiscover(master);
     Tools::LogRing::Clear();
     FakeClock::Set(9000);
-    Tools::LogRing::Push("I", "held back");
+    Tools::LogRing::Push('I', "held back");
 
     for (uint8_t i = 0; i < 16; i++) // outboundQueueSize / 2
     {
@@ -604,7 +605,7 @@ CC_TEST(UplinkHandler, PushLogReportsLinesLostToAnOverflowFirst)
     FakeClock::Set(9000);
     for (uint8_t i = 0; i < Tools::LogRing::Lines + 3; i++)
     {
-        Tools::LogRing::Push("I", "x");
+        Tools::LogRing::Push('I', "x");
     }
 
     Access::PushLog(uplink);

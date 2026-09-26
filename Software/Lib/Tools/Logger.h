@@ -13,11 +13,11 @@ namespace Tools
         // Default implementation (Logger.cpp) is a no-op weak symbol -- override
         // elsewhere (e.g. to write to a debug UART) to keep Tools decoupled from
         // any particular Hal::Uart instance.
-        void Write(const char* const level, const char* const msg);
+        void Write(const char level, const char* const msg);
 
         // What the LOG_* macros call: records the line in the DiagLog ring
         // (LogRing.h) and then hands it to Write().
-        void Emit(const char* const level, const char* const msg);
+        void Emit(const char level, const char* const msg);
     } // namespace Logger
 } // namespace Tools
 
@@ -25,21 +25,21 @@ namespace Tools
     {                                              \
         std::stringstream logStream;               \
         logStream << message;                      \
-        Tools::Logger::Emit("E", logStream.str()); \
+        Tools::Logger::Emit('E', logStream.str()); \
     }
 
 #define LOG_WARN(message)                          \
     {                                              \
         std::stringstream logStream;               \
         logStream << message;                      \
-        Tools::Logger::Emit("W", logStream.str()); \
+        Tools::Logger::Emit('W', logStream.str()); \
     }
 
 #define LOG_INFO(message)                          \
     {                                              \
         std::stringstream logStream;               \
         logStream << message;                      \
-        Tools::Logger::Emit("I", logStream.str()); \
+        Tools::Logger::Emit('I', logStream.str()); \
     }
 
 #ifdef DEBUG
@@ -47,7 +47,7 @@ namespace Tools
     {                                              \
         std::stringstream logStream;               \
         logStream << message;                      \
-        Tools::Logger::Emit("D", logStream.str()); \
+        Tools::Logger::Emit('D', logStream.str()); \
     }
 #else
 #define LOG_DEBUG(message) \

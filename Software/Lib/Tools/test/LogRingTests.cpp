@@ -29,8 +29,8 @@ namespace
 CC_TEST(LogRing, ReadsBackWhatWasPushedOldestFirst)
 {
     Tools::LogRing::Clear();
-    Tools::LogRing::Push("I", "first");
-    Tools::LogRing::Push("W", "second");
+    Tools::LogRing::Push('I', "first");
+    Tools::LogRing::Push('W', "second");
     CC_CHECK_EQ(Tools::LogRing::Buffered(), 2);
 
     char line[LineSize + 1];
@@ -53,7 +53,7 @@ CC_TEST(LogRing, EmptyRingReturnsNothing)
 CC_TEST(LogRing, LinesAreTruncatedToOneBusMessage)
 {
     Tools::LogRing::Clear();
-    Tools::LogRing::Push("E", "0123456789012345678901234567890123456789012345678901234567890123456789");
+    Tools::LogRing::Push('E', "0123456789012345678901234567890123456789012345678901234567890123456789");
 
     char line[LineSize + 8];
     CC_CHECK(NextLine(line));
@@ -66,7 +66,7 @@ CC_TEST(LogRing, LinesAreTruncatedToOneBusMessage)
 CC_TEST(LogRing, PopRespectsTheCallersBuffer)
 {
     Tools::LogRing::Clear();
-    Tools::LogRing::Push("I", "hello world");
+    Tools::LogRing::Push('I', "hello world");
     uint8_t      buf[4];
     uint32_t     at;
     const size_t n = Tools::LogRing::Pop(buf, sizeof(buf), at);
@@ -82,7 +82,7 @@ CC_TEST(LogRing, OverflowOverwritesTheOldestAndReportsHowManyWereLost)
     {
         msg[0] = static_cast<char>('a' + i);
         msg[1] = '\0';
-        Tools::LogRing::Push("I", msg);
+        Tools::LogRing::Push('I', msg);
     }
     CC_CHECK_EQ(Tools::LogRing::Buffered(), Lines);
 
@@ -100,7 +100,7 @@ CC_TEST(LogRing, OverflowOverwritesTheOldestAndReportsHowManyWereLost)
     CC_CHECK(!NextLine(line));
 
     // The marker is only reported once.
-    Tools::LogRing::Push("I", "x");
+    Tools::LogRing::Push('I', "x");
     CC_CHECK(NextLine(line));
     CC_CHECK(strcmp(line, "I: x") == 0);
 }
@@ -110,7 +110,7 @@ CC_TEST(LogRing, LostMarkerIsNotCountedAsBuffered)
     Tools::LogRing::Clear();
     for (int i = 0; i < Lines + 1; i++)
     {
-        Tools::LogRing::Push("I", "z");
+        Tools::LogRing::Push('I', "z");
     }
     CC_CHECK_EQ(Tools::LogRing::Buffered(), Lines);
 }
@@ -137,9 +137,9 @@ CC_TEST(LogRing, LinesCarryTheUptimeTheyWereLoggedAtAndAnEmptyPopReportsNow)
     Tools::LogRing::Clear();
 
     FakeClock::Advance(3000);
-    Tools::LogRing::Push("I", "early"); // 3 s
+    Tools::LogRing::Push('I', "early"); // 3 s
     FakeClock::Advance(12000);
-    Tools::LogRing::Push("I", "later"); // 15 s
+    Tools::LogRing::Push('I', "later"); // 15 s
     FakeClock::Advance(20500); // now 35.5 s
 
     uint8_t  buf[LineSize];

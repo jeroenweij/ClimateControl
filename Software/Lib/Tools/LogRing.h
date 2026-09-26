@@ -25,7 +25,7 @@ namespace Tools
 
         // Appends "<level>: <msg>". When the ring is full the oldest line is
         // overwritten and counted as lost.
-        void Push(const char* const level, const char* const msg);
+        void Push(const char level, const char* const msg);
 
         // Copies the oldest unread line into 'out' (at most 'cap' bytes, no
         // terminator), sets 'uptimeSec' to when it was logged, and returns its

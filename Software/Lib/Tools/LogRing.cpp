@@ -38,7 +38,7 @@ namespace
     }
 } // namespace
 
-void Tools::LogRing::Push(const char* const level, const char* const msg)
+void Tools::LogRing::Push(const char level, const char* const msg)
 {
     if (count == Lines)
     {
@@ -52,10 +52,8 @@ void Tools::LogRing::Push(const char* const level, const char* const msg)
 
     const uint8_t slot = static_cast<uint8_t>((head + count) % Lines);
     size_t        n    = 0;
-    for (const char* p = level; *p != '\0' && n < LineSize; p++)
-    {
-        lines[slot][n++] = *p;
-    }
+    lines[slot][n++]   = level;
+
     static const char sep[] = ": ";
     for (size_t s = 0; sep[s] != '\0' && n < LineSize; s++)
     {
