@@ -19,6 +19,7 @@ using NodeLib::ConfigStore;
 using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::Node;
 using NodeLib::Operation;
 
@@ -53,7 +54,7 @@ namespace
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(nodeId);
-        FakeConfig::SetModule(ConfigStore::Module::Thermostat);
+        FakeConfig::SetModule(ModuleType::Thermostat);
         FakeI2c::ResetAll();
         ReleaseBothButtons();
     }

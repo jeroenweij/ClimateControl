@@ -10,6 +10,7 @@
 #include "Id.h" // NodeLib::MAX_NODES
 
 using NodeLib::ConfigStore;
+using NodeLib::ModuleType;
 
 namespace
 {
@@ -19,13 +20,13 @@ namespace
     // Spec/Node-Flash-Layout-and-Bootloader-Spec.md Sec6.3.
     struct __attribute__((packed)) ConfigRecord
     {
-        uint32_t magic;
-        uint16_t schemaVersion;
-        uint8_t  nodeId;
-        uint8_t  module;
-        uint8_t  settings[16];
-        uint8_t  reserved[4];
-        uint32_t crc32;
+        uint32_t   magic;
+        uint16_t   schemaVersion;
+        uint8_t    nodeId;
+        ModuleType module;
+        uint8_t    settings[16];
+        uint8_t    reserved[4];
+        uint32_t   crc32;
     };
     static_assert(sizeof(ConfigRecord) == 32, "ConfigRecord must be 32 bytes");
 
@@ -83,9 +84,9 @@ uint8_t ConfigStore::NodeId()
     return Record().nodeId;
 }
 
-ConfigStore::Module ConfigStore::GetModule()
+NodeLib::ModuleType ConfigStore::GetModule()
 {
-    return static_cast<Module>(Record().module);
+    return Record().module;
 }
 
 const uint8_t* ConfigStore::Settings()

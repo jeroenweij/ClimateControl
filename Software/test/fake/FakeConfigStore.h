@@ -16,5 +16,5 @@ namespace FakeConfig
     void Reset();
     void SetValid(bool valid);
     void SetNodeId(uint8_t nodeId);
-    void SetModule(NodeLib::ConfigStore::Module module);
+    void SetModule(NodeLib::ModuleType module);
 } // namespace FakeConfig

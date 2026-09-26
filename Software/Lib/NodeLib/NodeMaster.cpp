@@ -10,6 +10,7 @@
 
 using NodeLib::Endpoint;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
@@ -29,17 +30,17 @@ NodeMaster::NodeMaster() :
 
 NodeMaster::SNode::SNode() :
     active(false),
-    moduleType(0),
+    moduleType(ModuleType::Unknown),
     inBootloader(0),
     lastContactMs(0)
 {
 }
 
-uint8_t NodeMaster::NodeModule(const uint8_t nodeId) const
+ModuleType NodeMaster::NodeModule(const uint8_t nodeId) const
 {
     if (nodeId < 1 || nodeId > maxNodes)
     {
-        return 0;
+        return ModuleType::Unknown;
     }
     return slaveNodes[nodeId - 1].moduleType;
 }
@@ -91,7 +92,7 @@ void NodeMaster::Loop()
             if (timeoutTimer.Finished())
             {
                 state = EMasterState::Flush;
-                LOG_INFO("Done Detecting Nodes " << ActiveNodeCount());
+                LOG_INFO("Done Detected " << ActiveNodeCount() << " Nodes");
             }
             break;
 
@@ -202,7 +203,8 @@ void NodeMaster::HandleInternalOperation(const Message& m)
     {
         case Operation::Announce:
         {
-            NodeHello(m.id.node, m.len >= 1 ? m.data[0] : 0, m.len >= 2 ? m.data[1] > 0 : false);
+            ModuleType type = m.len >= 1 ? static_cast<ModuleType>(m.data[0]) : ModuleType::Unknown;
+            NodeHello(m.id.node, type, m.len >= 2 ? m.data[1] > 0 : false);
             break;
         }
         case Operation::Done:
@@ -235,11 +237,11 @@ void NodeMaster::HandleMasterMessage(const Message& m)
     }
 }
 
-void NodeMaster::NodeHello(int nodeId, uint8_t module, bool bootloader)
+void NodeMaster::NodeHello(int nodeId, ModuleType module, bool bootloader)
 {
     if (nodeId > 0 && nodeId <= maxNodes)
     {
-        LOG_INFO("Hello Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? 'B' : 'A'));
+        LOG_INFO("Found Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? "Bootloader" : ""));
         slaveNodes[nodeId - 1].active        = true;
         slaveNodes[nodeId - 1].moduleType    = module;
         slaveNodes[nodeId - 1].inBootloader  = bootloader ? 200 : 0;

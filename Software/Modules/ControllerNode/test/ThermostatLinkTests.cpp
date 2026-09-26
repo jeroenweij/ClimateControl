@@ -22,6 +22,7 @@ using NodeLib::FirmwareOp;
 using NodeLib::Id;
 using NodeLib::LinkMaster;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::Operation;
 
 // ThermostatLink's own OTA-relay state machine (ControllerNode-Thermostat-
@@ -44,7 +45,7 @@ namespace
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(peerId);
-        FakeConfig::SetModule(ConfigStore::Module::ControllerNode);
+        FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 
     void PackI16(uint8_t* const out, const int16_t v)
@@ -58,7 +59,7 @@ namespace
     void AnnouncePeer(const bool bootloader)
     {
         Message m(peerId, Operation::Announce);
-        m.data[0] = static_cast<uint8_t>(ConfigStore::Module::Thermostat);
+        m.data[0] = static_cast<uint8_t>(ModuleType::Thermostat);
         m.data[1] = bootloader ? 1 : 0;
         m.len     = 2;
         bus::InjectFrame(m);
@@ -194,7 +195,7 @@ CC_TEST(ThermostatLink, OtaBeginSkipsAnAlreadyCurrentVersionUnlessForced)
     // Seed thermostatFw via the peer's own SystemInfo Report -- ReceivedMessage()
     // is a pure cache update, no need to go through a live poll for this.
     Message info(Id(peerId, Endpoint::SystemInfo, Operation::Report));
-    info.data[0] = static_cast<uint8_t>(ConfigStore::Module::Thermostat);
+    info.data[0] = static_cast<uint8_t>(ModuleType::Thermostat);
     info.data[1] = 0; // hwRev
     info.data[2] = 1; // fwVersionMajor lo
     info.data[3] = 0;

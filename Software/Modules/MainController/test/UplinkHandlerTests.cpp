@@ -23,6 +23,7 @@ using NodeLib::ConfigStore;
 using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
@@ -94,7 +95,7 @@ namespace
         FakeConfig::Reset();
     }
 
-    void Announce(const uint8_t nodeId, const ConfigStore::Module module)
+    void Announce(const uint8_t nodeId, const ModuleType module)
     {
         Message m(nodeId, Operation::Announce);
         m.data[0] = static_cast<uint8_t>(module);
@@ -163,8 +164,8 @@ CC_TEST(UplinkHandler, ObservesBusTrafficThroughReceivedMessageEvenWithTheUplink
     // i.e. exactly "uplink down" (NinaAt::InDataMode() defaults to false).
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
     StartPolling(master); // polls node 2 first (lowest id)
 
     // Two nodes with deliberately different demand: if Observe() were a
@@ -200,9 +201,9 @@ namespace
     void TwoNodesUp(NodeMaster& master)
     {
         InitAndClearDiscover(master);
-        Announce(2, ConfigStore::Module::ControllerNode);
+        Announce(2, ModuleType::ControllerNode);
         Message b(5, Operation::Announce);
-        b.data[0] = static_cast<uint8_t>(ConfigStore::Module::TemperatureNode);
+        b.data[0] = static_cast<uint8_t>(ModuleType::TemperatureNode);
         b.data[1] = 1; // bl-idle
         b.len     = 2;
         bus::InjectFrame(b);
@@ -363,8 +364,8 @@ CC_TEST(UplinkHandler, PresenceReportsANodeJoiningAndABootloaderTransition)
     Access::ClearQueue(uplink);
 
     // Node 5 comes back up in its app, and a brand-new node 7 appears.
-    Announce(5, ConfigStore::Module::TemperatureNode);
-    Announce(7, ConfigStore::Module::ControllerNode);
+    Announce(5, ModuleType::TemperatureNode);
+    Announce(7, ModuleType::ControllerNode);
     master.Loop();
     Access::CheckNodePresence(uplink);
 

@@ -4,6 +4,7 @@
 
 #include "ConfigStore.h"
 #include "EEndpoint.h"
+#include "EModuleType.h"
 #include "EOperation.h"
 #include "RoomDemand.h"
 
@@ -13,6 +14,7 @@ using NodeLib::ConfigStore;
 using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
@@ -113,7 +115,7 @@ void BudgetAllocator::Recompute()
 
     for (uint8_t id = 1; id < NodeLib::MAX_NODES; id++)
     {
-        if (master.NodeModule(id) != static_cast<uint8_t>(ConfigStore::Module::ControllerNode))
+        if (master.NodeModule(id) != ModuleType::ControllerNode)
         {
             continue;
         }

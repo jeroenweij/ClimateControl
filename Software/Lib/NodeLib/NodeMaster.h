@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "EModuleType.h"
 #include "Node.h"
 
 namespace NodeLib
@@ -17,8 +18,8 @@ namespace NodeLib
         void Loop();
 
         // Module type reported in the node's Announce (0 = not seen / unknown;
-        // values match NodeLib::ConfigStore::Module). nodeId is 1..maxNodes.
-        uint8_t NodeModule(const uint8_t nodeId) const;
+        // see NodeLib::ModuleType). nodeId is 1..maxNodes.
+        ModuleType NodeModule(const uint8_t nodeId) const;
 
         // Nodes currently believed active (seen an Announce). Used e.g. for the
         // uplink's UplinkHello.nodeCount (MainController-Server-Link-Spec.md §5).
@@ -54,8 +55,8 @@ namespace NodeLib
         {
             SNode();
 
-            bool    active;
-            uint8_t moduleType;
+            bool       active;
+            ModuleType moduleType;
 
             // Countdown of consecutive missed polls still forgiven while this
             // node last announced itself as being in the bootloader (Loop()'s
@@ -82,7 +83,7 @@ namespace NodeLib
         void DetectNodes();
         void PollNextNode(const int prevNodeId);
         void HandleMasterMessage(const Message& m) override;
-        void NodeHello(int nodeId, uint8_t module, bool bootloader);
+        void NodeHello(int nodeId, ModuleType module, bool bootloader);
         void HandleInternalOperation(const Message& m);
 
         EMasterState state;

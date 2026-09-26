@@ -16,6 +16,7 @@ using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::LinkMaster;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::Operation;
 
 namespace
@@ -46,7 +47,7 @@ namespace
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(peerId);
-        FakeConfig::SetModule(NodeLib::ConfigStore::Module::ControllerNode);
+        FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 
     int LastTx(Message* out, int maxOut)

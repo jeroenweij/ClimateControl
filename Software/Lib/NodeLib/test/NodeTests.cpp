@@ -22,6 +22,7 @@ using NodeLib::FirmwareOp;
 using NodeLib::Id;
 using NodeLib::INodeHandler;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::Node;
 using NodeLib::Operation;
 using NodeLib::SystemStatus;
@@ -48,7 +49,7 @@ namespace
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(kNodeId);
-        FakeConfig::SetModule(ConfigStore::Module::ControllerNode);
+        FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 
     // Same Poll/flush rationale as ControllerHandlerTests.cpp -- a slave
@@ -198,7 +199,7 @@ CC_TEST(Node, SystemInfoReportsModuleAndFirmwareVersion)
     int       idx;
     CC_CHECK(FindMessage(tx, n, Endpoint::SystemInfo, Operation::Report, &idx));
     CC_CHECK_EQ(tx[idx].len, 6);
-    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(ConfigStore::Module::ControllerNode));
+    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(ModuleType::ControllerNode));
     // FakeImageDescriptor.cpp bakes in fwVersionMajor=0, fwVersionMinor=1.
     CC_CHECK_EQ(tx[idx].data[2], 0);
     CC_CHECK_EQ(tx[idx].data[3], 0);

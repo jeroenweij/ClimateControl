@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "EModuleType.h"
+
 #include <stdint.h>
 
 namespace NodeLib
@@ -18,15 +20,6 @@ namespace NodeLib
     class ConfigStore
     {
       public:
-        enum class Module : uint8_t
-        {
-            Unknown         = 0,
-            ControllerNode  = 1,
-            TemperatureNode = 2,
-            MainController  = 3,
-            Thermostat      = 4,
-        };
-
         // magic + CRC32 + NodeId-range check on the flash record. A node whose
         // record does not pass this reached the field un-provisioned (a factory
         // escape) and must not join the bus.
@@ -34,7 +27,7 @@ namespace NodeLib
 
         // Only meaningful when Valid() is true.
         static uint8_t        NodeId();
-        static Module         GetModule();
+        static ModuleType     GetModule();
         static const uint8_t* Settings(); // 16 bytes, interpreted per GetModule()
     };
 } // namespace NodeLib

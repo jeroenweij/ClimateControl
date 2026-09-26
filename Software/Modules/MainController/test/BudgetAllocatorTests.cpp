@@ -19,6 +19,7 @@ using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::MAX_NODES;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
@@ -34,7 +35,7 @@ namespace
         FakeConfig::Reset();
     }
 
-    void Announce(const uint8_t nodeId, const ConfigStore::Module module)
+    void Announce(const uint8_t nodeId, const ModuleType module)
     {
         Message m(nodeId, Operation::Announce);
         m.data[0] = static_cast<uint8_t>(module);
@@ -137,8 +138,8 @@ CC_TEST(BudgetAllocator, SplitsThePoolEvenlyWithNoDemandData)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
     StartPolling(master); // polls node 2 first (lowest id)
 
     allocator.Loop(); // no Observe() calls yet -> weightSum == 0 -> even split
@@ -160,8 +161,8 @@ CC_TEST(BudgetAllocator, WeightsByEachRoomsDemand)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
     StartPolling(master);
 
     ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
@@ -189,8 +190,8 @@ CC_TEST(BudgetAllocator, SplitRoundsToNearestRatherThanFlooring)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
     StartPolling(master);
 
     // Weights land at 1 and 2 (RoomDemandPercent's own default deadband/full-
@@ -224,9 +225,9 @@ CC_TEST(BudgetAllocator, WaterFillsOverflowFromAClampedNodeIntoTheRest)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
-    Announce(4, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    Announce(4, ModuleType::ControllerNode);
     StartPolling(master);
 
     ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500);
@@ -259,8 +260,8 @@ CC_TEST(BudgetAllocator, IgnoresNonControllerNodeModules)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(7, ConfigStore::Module::TemperatureNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(7, ModuleType::TemperatureNode);
     StartPolling(master);
 
     allocator.Loop();
@@ -281,8 +282,8 @@ CC_TEST(BudgetAllocator, RecomputeDebouncesWithinTheInterval)
     BudgetAllocator allocator(master);
 
     InitAndClearDiscover(master);
-    Announce(2, ConfigStore::Module::ControllerNode);
-    Announce(3, ConfigStore::Module::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
     StartPolling(master);
 
     allocator.Loop(); // first call recomputes immediately

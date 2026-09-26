@@ -21,6 +21,7 @@ using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::LinkMaster;
 using NodeLib::Message;
+using NodeLib::ModuleType;
 using NodeLib::Node;
 using NodeLib::Operation;
 using NodeLib::SystemStatus;
@@ -37,7 +38,7 @@ namespace
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(kNodeId);
-        FakeConfig::SetModule(ConfigStore::Module::ControllerNode);
+        FakeConfig::SetModule(ModuleType::ControllerNode);
     }
 
     void PackI16(uint8_t* const out, const int16_t v)

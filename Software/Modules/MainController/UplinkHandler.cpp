@@ -211,7 +211,7 @@ void UplinkHandler::SendRoster()
 
         uint8_t payload[7];
         payload[0] = nodeId;
-        payload[1] = master.NodeModule(nodeId);
+        payload[1] = static_cast<uint8_t>(master.NodeModule(nodeId));
         payload[2] = bootloader ? 1 : 0;
         PackU32(&payload[3], master.NodeLastContactMs(nodeId));
 
@@ -243,7 +243,7 @@ void UplinkHandler::CheckNodePresence()
 
         const uint8_t payload[4] = {
             nodeId,
-            master.NodeModule(nodeId),
+            static_cast<uint8_t>(master.NodeModule(nodeId)),
             static_cast<uint8_t>(active ? 1 : 0),
             static_cast<uint8_t>(bootloader ? 1 : 0),
         };

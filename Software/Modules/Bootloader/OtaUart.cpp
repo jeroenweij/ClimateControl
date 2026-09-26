@@ -91,8 +91,8 @@ extern "C" void USART2_IRQHandler()
 
 void OtaUart::Init(const uint32_t baudRate, const uint8_t module)
 {
-    bus = (module == static_cast<uint8_t>(NodeLib::ConfigStore::Module::Thermostat)) ? Bus::Usart2
-                                                                                     : Bus::Usart1;
+    bus = (module == static_cast<uint8_t>(NodeLib::ModuleType::Thermostat)) ? Bus::Usart2
+                                                                            : Bus::Usart1;
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
 

@@ -5,13 +5,14 @@
 #include "FakeConfigStore.h"
 
 using NodeLib::ConfigStore;
+using NodeLib::ModuleType;
 
 namespace
 {
-    bool                valid        = true;
-    uint8_t             nodeId       = 1;
-    ConfigStore::Module module       = ConfigStore::Module::TemperatureNode;
-    uint8_t             settings[16] = {};
+    bool       valid        = true;
+    uint8_t    nodeId       = 1;
+    ModuleType module       = ModuleType::TemperatureNode;
+    uint8_t    settings[16] = {};
 } // namespace
 
 namespace FakeConfig
@@ -20,7 +21,7 @@ namespace FakeConfig
     {
         valid  = true;
         nodeId = 1;
-        module = ConfigStore::Module::TemperatureNode;
+        module = ModuleType::TemperatureNode;
         for (uint8_t i = 0; i < 16; i++)
         {
             settings[i] = 0;
@@ -37,7 +38,7 @@ namespace FakeConfig
         nodeId = id;
     }
 
-    void SetModule(const ConfigStore::Module mod)
+    void SetModule(const ModuleType mod)
     {
         module = mod;
     }
@@ -53,7 +54,7 @@ uint8_t ConfigStore::NodeId()
     return nodeId;
 }
 
-ConfigStore::Module ConfigStore::GetModule()
+ModuleType ConfigStore::GetModule()
 {
     return module;
 }
