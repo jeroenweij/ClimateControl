@@ -97,7 +97,11 @@ function(add_stm32_executable NAME)
             -DJLINK_HEX=${_hex}
             -DJLINK_OUT=${_jlink_script}
             -P ${_STM32_CMAKE_DIR}/gen_jlink_script.cmake
-        COMMAND ${JLINK_EXE} -device STM32G031F8 -if SWD -speed 4000 -autoconnect 1 -NoGui 1 -CommanderScript ${_jlink_script}
+        COMMAND ${CMAKE_COMMAND}
+            -DJLINK_EXE=${JLINK_EXE}
+            -DJLINK_SCRIPT=${_jlink_script}
+            -DJLINK_WHAT=${NAME}
+            -P ${_STM32_CMAKE_DIR}/run_jlink.cmake
         DEPENDS ${NAME}
         USES_TERMINAL
         VERBATIM
@@ -140,7 +144,11 @@ function(add_stm32_executable NAME)
                 -DJLINK_HEX=${_full_hex}
                 -DJLINK_OUT=${_jlink_full}
                 -P ${_STM32_CMAKE_DIR}/gen_jlink_script.cmake
-            COMMAND ${JLINK_EXE} -device STM32G031F8 -if SWD -speed 4000 -autoconnect 1 -NoGui 1 -CommanderScript ${_jlink_full}
+            COMMAND ${CMAKE_COMMAND}
+                -DJLINK_EXE=${JLINK_EXE}
+                -DJLINK_SCRIPT=${_jlink_full}
+                -DJLINK_WHAT=${NAME}-full
+                -P ${_STM32_CMAKE_DIR}/run_jlink.cmake
             DEPENDS ${NAME}-full
             USES_TERMINAL
             VERBATIM
