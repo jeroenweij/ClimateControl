@@ -52,6 +52,9 @@ class NinaAt
     // The most recently seen "+UDCP:<n>" peer handle (-1 if none yet).
     int LastPeerHandle() const;
 
+    // The Bluetooth mode from the most recent "+UBTMODE:<n>" (-1 if none).
+    int LastBtMode() const;
+
     using Event = NinaLineParser::Event;
     bool NextEvent(Event& event);
     void DiscardEvents();

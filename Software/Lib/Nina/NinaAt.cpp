@@ -106,6 +106,11 @@ int NinaAt::LastPeerHandle() const
     return parser.LastPeerHandle();
 }
 
+int NinaAt::LastBtMode() const
+{
+    return parser.LastBtMode();
+}
+
 bool NinaAt::NextEvent(Event& event)
 {
     return parser.NextEvent(event);

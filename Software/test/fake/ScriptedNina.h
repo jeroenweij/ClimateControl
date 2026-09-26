@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // A scripted stand-in for the on-board NINA-W152 running u-connectXpress, at
@@ -54,6 +55,10 @@ class ScriptedNina
         bootedAt       = 0;
         netReadyAt     = 0xFFFFFFFFu;
         udcpCount      = 0;
+        btMode         = 0;
+        storedBtMode   = 0;
+        pendingBtMode  = -1;
+        softRestarts   = 0;
         AddDefaults();
     }
 
@@ -224,6 +229,17 @@ class ScriptedNina
         return udcpCount;
     }
 
+    // Restarts by AT+CPWROFF (not the reset line -- Resets() doesn't count these).
+    int SoftRestarts() const
+    {
+        return softRestarts;
+    }
+
+    // Bluetooth mode (AT+UBTMODE) currently in effect / stored for next start.
+    // Starts at 0; set both to model a module whose stored settings have it on.
+    int btMode;
+    int storedBtMode;
+
     // Knobs.
     bool     echo;
     uint32_t bootDelayMs;
@@ -283,6 +299,46 @@ class ScriptedNina
         }
     }
 
+    // AT+UBTMODE?/=, AT&W and AT+CPWROFF, modelled on the real module: the
+    // write only lands in the stored settings on AT&W, and only takes effect
+    // after the restart AT+CPWROFF performs (silent for bootDelayMs, like a
+    // reset). Returns true if the line was one of these.
+    bool HandleBluetoothSetting(const uint32_t now)
+    {
+        if (strcmp(line, "AT+UBTMODE?") == 0)
+        {
+            char r[32];
+            snprintf(r, sizeof(r), "+UBTMODE:%d\r\nOK\r\n", btMode);
+            Schedule(now + 5, r);
+            return true;
+        }
+        if (strncmp(line, "AT+UBTMODE=", 11) == 0)
+        {
+            pendingBtMode = atoi(&line[11]);
+            Schedule(now + 5, "OK\r\n");
+            return true;
+        }
+        if (strcmp(line, "AT&W") == 0)
+        {
+            if (pendingBtMode >= 0)
+            {
+                storedBtMode = pendingBtMode;
+            }
+            Schedule(now + 20, "OK\r\n");
+            return true;
+        }
+        if (strcmp(line, "AT+CPWROFF") == 0)
+        {
+            Schedule(now + 5, "OK\r\n");
+            btMode        = storedBtMode;
+            pendingBtMode = -1;
+            bootedAt      = now + 10 + bootDelayMs; // restarts right after the OK
+            softRestarts++;
+            return true;
+        }
+        return false;
+    }
+
     void HandleLine(const uint32_t now)
     {
         if (echo)
@@ -290,6 +346,11 @@ class ScriptedNina
             char e[sizeof(line) + 3];
             snprintf(e, sizeof(e), "%s\r\n", line);
             Schedule(now, e);
+        }
+
+        if (HandleBluetoothSetting(now))
+        {
+            return;
         }
 
         const bool isUdcp = strncmp(line, "AT+UDCP=", 8) == 0;
@@ -359,4 +420,6 @@ class ScriptedNina
     int      resets = 0;
     uint32_t netReadyAt;
     int      udcpCount;
+    int      pendingBtMode; // written by AT+UBTMODE=, not yet stored
+    int      softRestarts;
 };

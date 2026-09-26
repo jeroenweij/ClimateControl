@@ -81,6 +81,10 @@ class NinaLink
     {
         Booting, // just (re)reset -- give the module a moment before probing
         ProbingAt,
+        CheckingBluetooth, // AT+UBTMODE? -- Bluetooth off, or turn it off (below)
+        DisablingBluetooth,
+        StoringSettings,
+        RestartingModule,
         ConfiguringSsid,
         ConfiguringAuth,
         ConfiguringPsk,

@@ -44,6 +44,10 @@ class NinaLineParser
     // handle). -1 if none seen yet.
     int LastPeerHandle() const;
 
+    // Value from the most recently seen "+UBTMODE:<n>" line (AT+UBTMODE?'s
+    // Bluetooth mode bit field). -1 if none seen since the last Reset().
+    int LastBtMode() const;
+
     enum class Event
     {
         LinkUp, // +UUWLE
@@ -69,6 +73,7 @@ class NinaLineParser
     size_t lineLength;
 
     int lastPeerHandle;
+    int lastBtMode;
 
     Event  eventQueue[eventQueueSize];
     size_t eventHead;

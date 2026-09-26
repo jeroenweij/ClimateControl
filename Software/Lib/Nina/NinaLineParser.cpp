@@ -50,6 +50,7 @@ NinaLineParser::NinaLineParser() :
     lineBuffer{},
     lineLength(0),
     lastPeerHandle(-1),
+    lastBtMode(-1),
     eventQueue{},
     eventHead(0),
     eventCount(0)
@@ -59,6 +60,7 @@ NinaLineParser::NinaLineParser() :
 void NinaLineParser::Reset()
 {
     lineLength = 0;
+    lastBtMode = -1;
     eventHead  = 0;
     eventCount = 0;
 }
@@ -72,6 +74,11 @@ void NinaLineParser::ClearEvents()
 int NinaLineParser::LastPeerHandle() const
 {
     return lastPeerHandle;
+}
+
+int NinaLineParser::LastBtMode() const
+{
+    return lastBtMode;
 }
 
 void NinaLineParser::QueueEvent(const Event event)
@@ -117,6 +124,11 @@ void NinaLineParser::ClassifyLine(const char* const line, const size_t length, L
     if (StartsWith(line, length, "+UDCP:"))
     {
         lastPeerHandle = ParseInt(line, length, 6);
+        return;
+    }
+    if (StartsWith(line, length, "+UBTMODE:"))
+    {
+        lastBtMode = ParseInt(line, length, 9);
         return;
     }
     if (!StartsWith(line, length, "+UU"))

@@ -66,6 +66,9 @@ namespace
     // at all, and only another reset brings it back. A normal boot answers
     // within ~2 s; this is ~20 s of probing (ProbeTimeoutMs each).
     const uint8_t MaxProbeAttempts = 10;
+    // AT+CPWROFF answers OK and then restarts; give it a moment before the
+    // AT probe (which itself waits out a slow boot).
+    const uint32_t ModuleRestartMs = 1000;
     // Backstop behind the keepalive deadline: a very long silence with no
     // valid frame received forces a reset and full re-join even if the
     // keepalive bookkeeping itself were ever wedged. Well above the server's
@@ -359,7 +362,7 @@ void NinaLink::Loop()
             const NinaAt::Result result = RunCommand("AT", ProbeTimeoutMs);
             if (result == NinaAt::Result::Ok)
             {
-                TransitionTo(State::ConfiguringSsid);
+                TransitionTo(State::CheckingBluetooth);
             }
             else if (result != NinaAt::Result::Pending && ++attemptsInState >= MaxProbeAttempts)
             {
@@ -370,6 +373,47 @@ void NinaLink::Loop()
             // just try again.
             break;
         }
+
+        // Bluetooth off. u-connectXpress lists Wi-Fi + Bluetooth running
+        // together as a known cause of "unexpected disconnections,
+        // difficulties to establish connections and increased latency"
+        // (NINA-W15 v6.0.1 release notes, UCS_DEV-3483), and a module first
+        // set up by older firmware keeps Bluetooth on in its stored settings
+        // (AT+UBTMODE factory default 3). Changing it needs a store and a
+        // restart, so it is done once, here, before Wi-Fi is active (storing
+        // while the station is up can crash the module, UCS_DEV-2228); every
+        // later bring-up just reads 0 and moves on.
+        case State::CheckingBluetooth:
+        {
+            const NinaAt::Result result = RunCommand("AT+UBTMODE?", ConfigTimeoutMs);
+            if (result == NinaAt::Result::Ok)
+            {
+                TransitionTo(nina.LastBtMode() == 0 ? State::ConfiguringSsid : State::DisablingBluetooth);
+            }
+            else if (result != NinaAt::Result::Pending)
+            {
+                // Can't tell (a firmware without the command) -- never let
+                // this check cost the uplink.
+                TransitionTo(State::ConfiguringSsid);
+            }
+            break;
+        }
+
+        case State::DisablingBluetooth:
+            AdvanceOnOk(RunCommand("AT+UBTMODE=0", ConfigTimeoutMs), State::StoringSettings);
+            break;
+
+        case State::StoringSettings:
+            AdvanceOnOk(RunCommand("AT&W", ConfigTimeoutMs), State::RestartingModule);
+            break;
+
+        case State::RestartingModule:
+            if (AdvanceOnOk(RunCommand("AT+CPWROFF", ConfigTimeoutMs), State::Booting))
+            {
+                NINA_LOG_INFO("Uplink: Bluetooth disabled, module restarting");
+                stateTimeout.Start(ModuleRestartMs);
+            }
+            break;
 
         case State::ConfiguringSsid:
         {

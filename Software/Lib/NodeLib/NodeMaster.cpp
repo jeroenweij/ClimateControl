@@ -92,7 +92,7 @@ void NodeMaster::Loop()
             if (timeoutTimer.Finished())
             {
                 state = EMasterState::Flush;
-                LOG_INFO("Done Detected " << ActiveNodeCount() << " Nodes");
+                LOG_INFO("Detected " << ActiveNodeCount() << " Nodes");
             }
             break;
 
@@ -241,7 +241,7 @@ void NodeMaster::NodeHello(int nodeId, ModuleType module, bool bootloader)
 {
     if (nodeId > 0 && nodeId <= maxNodes)
     {
-        LOG_INFO("Found Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? "Bootloader" : ""));
+        LOG_DEBUG("Found Node " << static_cast<uint8_t>(nodeId) << " m " << module << " " << (bootloader ? "Bootloader" : ""));
         slaveNodes[nodeId - 1].active        = true;
         slaveNodes[nodeId - 1].moduleType    = module;
         slaveNodes[nodeId - 1].inBootloader  = bootloader ? 200 : 0;
