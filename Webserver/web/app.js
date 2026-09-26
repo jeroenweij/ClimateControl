@@ -44,14 +44,31 @@ function api(path, opts) {
 // ---- websocket ----------------------------------------------------------
 
 let ws;
+// The page's own socket to the server dropping says nothing about the
+// MainController's uplink. A blip (reconnected within this long) is not shown
+// at all; past it the pill says the server connection is lost, until the
+// reconnect's snapshot puts the real uplink state back.
+const SERVER_LOST_AFTER_MS = 3000;
+let serverLostTimer = null;
+
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => {
+    clearTimeout(serverLostTimer);
+    serverLostTimer = null;
+  };
   ws.onmessage = (ev) => handleEvent(JSON.parse(ev.data));
   ws.onclose = () => {
-    setLinkState(false);
+    if (serverLostTimer === null) serverLostTimer = setTimeout(showServerLost, SERVER_LOST_AFTER_MS);
     setTimeout(connectWS, 2000);
   };
+}
+
+function showServerLost() {
+  const el = $("#link-state");
+  el.textContent = "server connection lost";
+  el.className = "pill down";
 }
 
 function handleEvent(msg) {

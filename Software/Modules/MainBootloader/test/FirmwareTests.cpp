@@ -322,25 +322,28 @@ namespace
     }
 } // namespace
 
-CC_TEST(Firmware, HeartbeatBlinksTheActivityLedSoTheBootloaderIsRecognisable)
+CC_TEST(Firmware, HeartbeatAlternatesTheLedsSoTheBootloaderIsRecognisable)
 {
     ResetWorld();
     FakeClock::Reset();
     Firmware fw;
     fw.Init();
     CC_CHECK(!LedOn(Board::ActivityLed));
+    CC_CHECK(!LedOn(Board::ErrorLed));
 
     fw.Loop(); // heartbeat period not elapsed yet
     CC_CHECK(!LedOn(Board::ActivityLed));
-
-    FakeClock::Advance(500);
-    fw.Loop();
-    CC_CHECK(LedOn(Board::ActivityLed));
-
-    FakeClock::Advance(500);
-    fw.Loop();
-    CC_CHECK(!LedOn(Board::ActivityLed));
     CC_CHECK(!LedOn(Board::ErrorLed));
+
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(LedOn(Board::ErrorLed));
+    CC_CHECK(!LedOn(Board::ActivityLed));
+
+    FakeClock::Advance(500);
+    fw.Loop();
+    CC_CHECK(!LedOn(Board::ErrorLed));
+    CC_CHECK(LedOn(Board::ActivityLed));
 }
 
 CC_TEST(Firmware, HeartbeatBlinksFasterWhileAnImageIsBeingReceived)

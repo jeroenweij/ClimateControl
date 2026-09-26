@@ -557,8 +557,33 @@ void FirmwareSlave::Heartbeat()
 {
     if (heartbeatTimer.Finished())
     {
-        errorLed.Write(state == State::Error ? !errorLed.Read() : false);
-        activityLed.Write(state == State::Error ? false : !activityLed.Read());
+        switch (state)
+        {
+            case State::Error: // error LED blinks
+                errorLed.Write(!errorLed.Read());
+                activityLed.Write(false);
+                break;
+            case State::Erasing: // error LED solid (erase is synchronous, so rarely seen)
+                errorLed.Write(true);
+                activityLed.Write(false);
+                break;
+            case State::Receiving: // activity LED blinks fast
+                activityLed.Write(!activityLed.Read());
+                errorLed.Write(false);
+                break;
+            case State::Valid: // activity LED solid
+                activityLed.Write(true);
+                errorLed.Write(false);
+                break;
+            default: // Idle: the two LEDs alternate -- a resident bootloader, recognisable at a glance
+            {
+                const bool errorOn = !errorLed.Read();
+                errorLed.Write(errorOn);
+                activityLed.Write(!errorOn);
+                break;
+            }
+        }
+
         heartbeatTimer.Start(state == State::Receiving ? 80 : HeartbeatMs);
     }
 }
