@@ -95,10 +95,13 @@ namespace
 
         // A ThermostatHandler only queues -- it never writes the bus directly.
         // Real traffic goes out when the paired ControllerNode's LinkMaster
-        // polls it (Node::HandleInternalMessage flushes on Operation::Poll);
-        // simulate that one round trip.
+        // polls it (Node::HandleInternalMessage flushes on Operation::Poll),
+        // and published values are only queued while those polls arrive:
+        // the first poll connects and queues them, the second carries them.
         void FlushToPeer()
         {
+            bus::InjectFrame(Message(nodeId, Operation::Poll));
+            node.Loop();
             bus::InjectFrame(Message(nodeId, Operation::Poll));
             node.Loop();
         }
@@ -198,8 +201,7 @@ namespace
         }
         w.FlushToPeer();
 
-        // Every intermediate step gets its own Report (report-on-change), so
-        // find the LAST RoomSetpoint Report, not just any one of them.
+        // Find the LAST RoomSetpoint Report -- the one carrying the final value.
         Message   tx[16];
         const int n   = bus::DecodeTx(tx, 16);
         int       idx = -1;

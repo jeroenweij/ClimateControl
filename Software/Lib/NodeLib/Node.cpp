@@ -69,6 +69,7 @@ Node::Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const 
     reportedErrorFlags(0),
     busShown(false),
     busUp(false),
+    publisher(),
     uart(),
     crc(),
     frame(crc),
@@ -150,7 +151,28 @@ void Node::Loop()
         // window (Finished() stops it) -- i.e. exactly "the master is talking
         // to us".
         ShowBusState(hearthBeatTimer.IsRunning());
+
+        Message report;
+        while (publisher.Next(hearthBeatTimer.IsRunning(), nodeId, report))
+        {
+            QueueMessage(report);
+        }
     }
+}
+
+bool Node::AddPublished(const Endpoint endpoint, const uint8_t size, const uint16_t minChange)
+{
+    return publisher.Add(endpoint, size, minChange);
+}
+
+void Node::PublishIfChanged(const Endpoint endpoint, const int32_t value)
+{
+    publisher.Update(endpoint, value);
+}
+
+void Node::ClearPublished(const Endpoint endpoint)
+{
+    publisher.Clear(endpoint);
 }
 
 void Node::ShowBusState(const bool up)

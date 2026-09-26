@@ -14,6 +14,7 @@ add_library(NodeLib STATIC
     ErrorHandler.cpp
     Node.h
     Node.cpp
+    Publisher.cpp
     NodeMaster.h
     NodeMaster.cpp
     LinkMaster.h

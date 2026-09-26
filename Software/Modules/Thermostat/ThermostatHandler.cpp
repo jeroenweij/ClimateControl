@@ -21,12 +21,7 @@ namespace
     constexpr uint8_t NackReadOnly   = 0x01;
     constexpr uint8_t NackBadRequest = 0x02;
 
-    // Deadbands for on-change publishing (Node-Message-Model-Spec.md §6.1).
-    constexpr int16_t  TempDeadband     = 10; // 0.1 degC
-    constexpr uint16_t HumidityDeadband = 100; // 1 %RH
-
-    constexpr uint32_t sampleIntervalMs    = 2000;
-    constexpr uint32_t keepaliveIntervalMs = 60000;
+    constexpr uint32_t sampleIntervalMs = 2000;
 
     // Setpoint adjust (§4.3's touch buttons): each press steps 0.5 degC,
     // clamped to a fixed comfort range -- no adjust-mode/timeout state, one
@@ -49,11 +44,6 @@ namespace
     {
         return static_cast<uint16_t>(p[0] | (p[1] << 8));
     }
-
-    int16_t Abs16(const int16_t v)
-    {
-        return v < 0 ? static_cast<int16_t>(-v) : v;
-    }
 } // namespace
 
 ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
@@ -69,11 +59,6 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     roomTemp(2100),
     humidity(4500),
     roomMode(2), // Auto
-    reportedSetpoint(0),
-    reportedTemp(0),
-    reportedHumidity(0),
-    reportedMode(0),
-    everReported(false),
     damperActual(0),
     damperMode(0),
     downWasPressed(false),
@@ -81,9 +66,14 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     linkUp(false),
     displayOn(false),
     sampleTimer(),
-    keepaliveTimer(),
     displayTimer()
 {
+    // Reported to the ControllerNode on change + keepalive, and again after
+    // the link was lost (Node's publisher, Node-Message-Model-Spec.md §6.1).
+    node.AddPublished(Endpoint::RoomSetpoint, 2);
+    node.AddPublished(Endpoint::RoomTemp, 2, NodeLib::TempMinChange);
+    node.AddPublished(Endpoint::RoomHumidity, 2, NodeLib::HumidityMinChange);
+    node.AddPublished(Endpoint::RoomMode, 1);
 }
 
 void ThermostatHandler::Init()
@@ -102,7 +92,6 @@ void ThermostatHandler::Init()
     display.Off(); // starts asleep; a button press wakes it (§4.2)
 
     sampleTimer.Start(sampleIntervalMs);
-    keepaliveTimer.Start(keepaliveIntervalMs);
     SampleRoom(); // a real first reading now, rather than waiting sampleIntervalMs
 }
 
@@ -116,12 +105,7 @@ void ThermostatHandler::Loop()
         sampleTimer.Start(sampleIntervalMs);
     }
 
-    const bool keepalive = keepaliveTimer.Finished();
-    if (keepalive)
-    {
-        keepaliveTimer.Start(keepaliveIntervalMs);
-    }
-    PublishRoom(keepalive);
+    PublishRoom();
 
     RenderDisplay();
 }
@@ -218,37 +202,33 @@ void ThermostatHandler::RenderDisplay()
     display.Flush();
 }
 
-void ThermostatHandler::PublishRoom(const bool force)
+void ThermostatHandler::PublishRoom()
 {
-    if (force || !everReported || setpoint != reportedSetpoint)
+    node.PublishIfChanged(Endpoint::RoomSetpoint, setpoint);
+    node.PublishIfChanged(Endpoint::RoomTemp, roomTemp);
+    node.PublishIfChanged(Endpoint::RoomHumidity, humidity);
+    node.PublishIfChanged(Endpoint::RoomMode, roomMode);
+}
+
+void ThermostatHandler::ReportRoom(const Endpoint endpoint)
+{
+    uint8_t p[2];
+    switch (endpoint)
     {
-        uint8_t p[2];
-        PackU16(p, static_cast<uint16_t>(setpoint));
-        node.QueueMessage(Id(node.GetId(), Endpoint::RoomSetpoint, Operation::Report), p, 2);
-        reportedSetpoint = setpoint;
+        case Endpoint::RoomTemp:
+            PackU16(p, static_cast<uint16_t>(roomTemp));
+            node.QueueMessage(Id(node.GetId(), endpoint, Operation::Report), p, 2);
+            break;
+        case Endpoint::RoomHumidity:
+            PackU16(p, humidity);
+            node.QueueMessage(Id(node.GetId(), endpoint, Operation::Report), p, 2);
+            break;
+        case Endpoint::RoomMode:
+            node.QueueMessage(Id(node.GetId(), endpoint, Operation::Report), roomMode);
+            break;
+        default:
+            break;
     }
-    if (force || !everReported || Abs16(roomTemp - reportedTemp) >= TempDeadband)
-    {
-        uint8_t p[2];
-        PackU16(p, static_cast<uint16_t>(roomTemp));
-        node.QueueMessage(Id(node.GetId(), Endpoint::RoomTemp, Operation::Report), p, 2);
-        reportedTemp = roomTemp;
-    }
-    if (force || !everReported ||
-        (humidity > reportedHumidity ? humidity - reportedHumidity : reportedHumidity - humidity) >=
-            HumidityDeadband)
-    {
-        uint8_t p[2];
-        PackU16(p, humidity);
-        node.QueueMessage(Id(node.GetId(), Endpoint::RoomHumidity, Operation::Report), p, 2);
-        reportedHumidity = humidity;
-    }
-    if (force || !everReported || roomMode != reportedMode)
-    {
-        node.QueueMessage(Id(node.GetId(), Endpoint::RoomMode, Operation::Report), roomMode);
-        reportedMode = roomMode;
-    }
-    everReported = true;
 }
 
 void ThermostatHandler::ReceivedMessage(const Message& m)
@@ -278,7 +258,7 @@ void ThermostatHandler::ReceivedMessage(const Message& m)
         case Endpoint::RoomMode:
             if (m.id.operation == Operation::Get)
             {
-                PublishRoom(true);
+                ReportRoom(m.id.endpoint);
             }
             else
             {

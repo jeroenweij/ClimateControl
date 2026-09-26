@@ -132,7 +132,8 @@ On-change push + slow keepalive + `Get` on demand:
 - **Keepalive:** each node re-`Report`s its key endpoints on a periodic cadence (~60 s) even if unchanged, so a dropped on-change `Report` self-heals and the master can bound staleness. Staggered across endpoints so one poll isn't oversized.
 - The master may `Set`/`Get` any endpoint at any time — `Get` covers cold-start sync and forced refresh; the node answers with a `Report` in its next poll window.
 - **Faults:** `NodeLib` pushes `SystemStatus` itself whenever the app's `FillStatus()` `state` / `errorFlags` change (and once at start and after a lost connection), so a fault is visible upstream when it happens, not on the next `Get`. The `errorFlags` bit meanings are per module (`ControllerHandler.h`: bit 0 Thermostat link down, bit 1 damper stalled; `TemperatureHandler.h`: bit 0 return sensor, bit 1 supply sensor), mirrored by the server's `nodelib.FaultNames`.
-- `NodeLib` provides the plumbing: a small per-endpoint "dirty" flag + deadband compare the app calls (`Node::PublishIfChanged(endpoint, value)`), the keepalive timer, and the queue.
+- `NodeLib` provides the plumbing (`Lib/NodeLib/Publisher`, owned by `Node`): the app declares each self-reported endpoint once — `Node::AddPublished(endpoint, size, minChange)`, 1- or 2-byte values — and hands in its current value every loop with `Node::PublishIfChanged(endpoint, value)`. `Node::Loop()` sends what is due: when first known, on a change of at least `minChange` from what was last reported (`TempMinChange` 0.1 °C, `HumidityMinChange` 1 %RH; 1 = any change for enums, setpoints and percentages), a keepalive every 60 s per value — staggered, one value per `60 s / count` — and everything again after the master was lost. Nothing is queued while the master isn't polling the node. `Node::ClearPublished(endpoint)` stops reporting a value that is no longer known (e.g. a missing probe), keepalives included. Composite payloads (`SystemStatus`, `ThermostatFirmware` status) are sent by their own code.
+- What each module publishes: **ControllerNode** — `DamperTarget`/`DamperActual`/`DamperMode`/`DamperBudget`, `RoomLink`, and the paired Thermostat's `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode` once the Thermostat has supplied them (the MainController's `BudgetAllocator` and the server rely on these arriving unasked). **TemperatureNode** — `SupplyTemp`/`ReturnTemp` while their probe is present, `SensorStatus`. **Thermostat** (on its link) — `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`.
 
 ### 6.2 Dispatch
 
@@ -183,4 +184,4 @@ This resolves which endpoint values apply on the link: the named-endpoint ones (
 
 ## 8. Open items
 
-1. **Keepalive interval and per-endpoint deadbands** — ~60 s assumed in §6.1; the exact value and the per-endpoint deadbands need confirming once real sensors are on a bench. Not yet built (`Node::PublishIfChanged` and the keepalive timer are still to come).
+1. **Keepalive interval and per-endpoint deadbands** — 60 s and the §6.1 values are defaults; confirm them once real sensors and dampers are on a bench (bus load at 20 ControllerNodes is ~3 keepalive Reports/s).

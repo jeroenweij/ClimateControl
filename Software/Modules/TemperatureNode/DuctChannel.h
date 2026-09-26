@@ -15,12 +15,11 @@
 // One duct temperature probe (a DS18B20 on its own single-drop 1-Wire line --
 // TemperatureNode-Spec.md §4.1) mapped onto one bus endpoint.
 //
-// Mirrors the auto-reporting ANALOG_IN channel from the AVR predecessor
-// (~/git/node Channel::Loop): sample on an interval, and push a Report only when
-// the reading has moved past a threshold or a minimum refresh interval has
-// elapsed -- so MainController still sees fresh values during a long stretch of
-// unchanging duct air (TemperatureNode-Spec.md §5 item 3). Solicited Get is
-// answered immediately via Report().
+// Samples on an interval and hands each reading to Node's change-driven
+// publisher (Node-Message-Model-Spec.md §6.1): reported when it moves by
+// 0.1 degC, as a keepalive during a long stretch of unchanging duct air
+// (TemperatureNode-Spec.md §5 item 3), and not at all while the probe is
+// missing. Solicited Get is answered immediately via Report().
 //
 // The DS18B20 conversion (~750 ms) is not blocked on: the channel kicks it off,
 // returns to the caller, and reads the result on a later Loop(). The 1-Wire
@@ -35,12 +34,8 @@ class DuctChannel
     void Init();
     void Loop();
 
-    // Emit a Report with the current value (reply to a Get, or on reconnect).
+    // Emit a Report with the current value (reply to a Get).
     void Report();
-
-    // Drop the "already reported" latch so the next Loop() re-sends the value --
-    // used when the bus link has been re-established.
-    void Invalidate();
 
     bool    Present() const;
     int16_t Value() const;
@@ -53,7 +48,6 @@ class DuctChannel
     };
 
     void SetPresent(const bool present);
-    void PublishIfDue();
 
     NodeLib::Node&    node;
     NodeLib::Endpoint endpoint;
@@ -61,11 +55,8 @@ class DuctChannel
 
     State   state;
     int16_t value;
-    int16_t lastReported;
-    bool    everReported;
     bool    present;
 
     Tools::DelayTimer sampleTimer;
     Tools::DelayTimer conversionTimer;
-    Tools::DelayTimer minReportTimer;
 };

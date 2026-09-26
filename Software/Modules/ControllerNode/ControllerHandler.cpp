@@ -48,14 +48,21 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     damper(damper),
     thermostatLink(link),
     supplyTemp(),
-    roomControlLoop(link, supplyTemp, damper),
-    reportedTarget(0),
-    reportedTargetValid(false),
-    reportedActual(0),
-    reportedActualValid(false),
-    reportedMode(0),
-    reportedModeValid(false)
+    roomControlLoop(link, supplyTemp, damper)
 {
+    // Target as well as actual, so a commanded move that hasn't landed yet
+    // (still moving, or cut short by a stall) is visible upstream. The room
+    // values relay the paired Thermostat's (ThermostatLink's cache) -- the
+    // MainController's BudgetAllocator and the server both live on them.
+    node.AddPublished(Endpoint::DamperTarget, 1);
+    node.AddPublished(Endpoint::DamperActual, 1);
+    node.AddPublished(Endpoint::DamperMode, 1);
+    node.AddPublished(Endpoint::DamperBudget, 1);
+    node.AddPublished(Endpoint::RoomSetpoint, 2);
+    node.AddPublished(Endpoint::RoomTemp, 2, NodeLib::TempMinChange);
+    node.AddPublished(Endpoint::RoomHumidity, 2, NodeLib::HumidityMinChange);
+    node.AddPublished(Endpoint::RoomMode, 1);
+    node.AddPublished(Endpoint::RoomLink, 1);
 }
 
 void ControllerHandler::Loop()
@@ -63,32 +70,7 @@ void ControllerHandler::Loop()
     supplyTemp.Loop();
     roomControlLoop.Loop();
     damper.Loop();
-
-    // Target as well as actual, so a commanded move that hasn't landed yet
-    // (still moving, or cut short by a stall) is visible upstream.
-    const uint8_t target = damper.Target();
-    if (!reportedTargetValid || target != reportedTarget)
-    {
-        reportedTarget      = target;
-        reportedTargetValid = true;
-        Report(Endpoint::DamperTarget, &target, 1);
-    }
-
-    const uint8_t actual = damper.Actual();
-    if (!reportedActualValid || actual != reportedActual)
-    {
-        reportedActual      = actual;
-        reportedActualValid = true;
-        Report(Endpoint::DamperActual, &actual, 1);
-    }
-
-    const uint8_t mode = damper.ReportedMode();
-    if (!reportedModeValid || mode != reportedMode)
-    {
-        reportedMode      = mode;
-        reportedModeValid = true;
-        Report(Endpoint::DamperMode, &mode, 1);
-    }
+    Publish();
 
     bool     nack;
     uint16_t offset;
@@ -296,13 +278,37 @@ void ControllerHandler::ReportThermostatFirmwareStatus()
     Report(Endpoint::ThermostatFirmware, status, sizeof(status));
 }
 
+void ControllerHandler::Publish()
+{
+    node.PublishIfChanged(Endpoint::DamperTarget, damper.Target());
+    node.PublishIfChanged(Endpoint::DamperActual, damper.Actual());
+    node.PublishIfChanged(Endpoint::DamperMode, damper.ReportedMode());
+    node.PublishIfChanged(Endpoint::DamperBudget, roomControlLoop.Budget());
+    node.PublishIfChanged(Endpoint::RoomLink, thermostatLink.LinkUp() ? 1 : 0);
+
+    const ThermostatLink::RoomState& room = thermostatLink.Room();
+    if (room.valid)
+    {
+        node.PublishIfChanged(Endpoint::RoomSetpoint, room.setpoint);
+        node.PublishIfChanged(Endpoint::RoomTemp, room.temp);
+        node.PublishIfChanged(Endpoint::RoomHumidity, room.humidity);
+        node.PublishIfChanged(Endpoint::RoomMode, room.mode);
+    }
+    else
+    {
+        // Nothing from the Thermostat yet (or its cache was dropped) -- don't
+        // report placeholder room values.
+        node.ClearPublished(Endpoint::RoomSetpoint);
+        node.ClearPublished(Endpoint::RoomTemp);
+        node.ClearPublished(Endpoint::RoomHumidity);
+        node.ClearPublished(Endpoint::RoomMode);
+    }
+}
+
 void ControllerHandler::ConnectionLost()
 {
     LOG_WARN("Main bus connection lost");
-    reportedTargetValid = false;
-    reportedActualValid = false;
-    reportedModeValid   = false;
-    roomControlLoop.ConnectionLost();
+    roomControlLoop.ConnectionLost(); // re-sending our values on return is Node's job
 }
 
 void ControllerHandler::Snoop(const Message& m)

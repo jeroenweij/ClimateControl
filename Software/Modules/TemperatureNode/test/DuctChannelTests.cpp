@@ -48,26 +48,41 @@ namespace
         FakeOneWire::ResetAll();
     }
 
-    // Run one full sample cycle: Idle -> start conversion -> wait it out -> read.
-    void RunSampleCycle(DuctChannel& channel)
+    // The master's Poll -- a slave only transmits in its own polled window,
+    // and only counts as connected (its values get published) while polls
+    // keep arriving less than the 1 s heartbeat apart.
+    void Poll(Node& node)
     {
-        channel.Loop(); // Idle -> Converting
-        channel.Loop(); // still converting
-        FakeClock::Advance(Ds18b20::ConversionTimeMs + 100);
-        channel.Loop(); // Converting -> read + publish
-        FakeClock::Advance(1100); // let the sample timer expire for the next cycle
-    }
-
-    // Poll the node so its queue flushes onto the bus, then count Reports on
-    // 'endpoint' and return the last one's decoded int16 value.
-    int ReportsOn(Node& node, const Endpoint endpoint, int16_t& lastValue)
-    {
-        FakeBus::Reset();
         bus::InjectFrame(Message(nodeId, Operation::Poll));
         node.Loop();
+    }
 
-        Message   tx[8];
-        const int n     = bus::DecodeTx(tx, 8);
+    // Run one full sample cycle: Idle -> start conversion -> wait it out ->
+    // read, polling the node throughout as a live bus would.
+    void RunSampleCycle(DuctChannel& channel, Node& node)
+    {
+        channel.Loop(); // Idle -> Converting
+        Poll(node);
+        FakeClock::Advance(Ds18b20::ConversionTimeMs + 100);
+        Poll(node);
+        channel.Loop(); // Converting -> read + publish
+        Poll(node);
+        FakeClock::Advance(550); // let the sample timer expire for the next cycle
+        Poll(node);
+        FakeClock::Advance(550);
+        Poll(node);
+    }
+
+    // Count the Reports on 'endpoint' sent since the last call (two more
+    // polls first, so anything still queued goes out), returning the last
+    // one's decoded int16 value.
+    int ReportsOn(Node& node, const Endpoint endpoint, int16_t& lastValue)
+    {
+        Poll(node);
+        Poll(node);
+
+        Message   tx[32];
+        const int n     = bus::DecodeTx(tx, 32);
         int       count = 0;
         for (int i = 0; i < n; i++)
         {
@@ -77,6 +92,7 @@ namespace
                 lastValue = static_cast<int16_t>(tx[i].data[0] | (tx[i].data[1] << 8));
             }
         }
+        FakeBus::TruncateTx(0);
         return count;
     }
 } // namespace
@@ -95,7 +111,7 @@ CC_TEST(DuctChannel, BecomesPresentWithTheDecodedValue)
     FakeOneWire::SetPresent(line, true);
     FakeOneWire::QueueRead(line, scratchpad, 9);
 
-    RunSampleCycle(channel);
+    RunSampleCycle(channel, node);
 
     CC_CHECK(channel.Present());
     CC_CHECK_EQ(channel.Value(), 2500);
@@ -115,7 +131,7 @@ CC_TEST(DuctChannel, EmitsAReportAfterTheFirstSample)
     FakeOneWire::SetPresent(line, true);
     FakeOneWire::QueueRead(line, scratchpad, 9);
 
-    RunSampleCycle(channel);
+    RunSampleCycle(channel, node);
 
     int16_t reported = 0;
     CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
@@ -143,7 +159,7 @@ CC_TEST(DuctChannel, AbsentSensorStaysNotPresent)
     CC_CHECK_EQ(ReportsOn(node, Endpoint::ReturnTemp, reported), 0);
 }
 
-CC_TEST(DuctChannel, InvalidateForcesAFreshReportOfAnUnchangedValue)
+CC_TEST(DuctChannel, AnUnchangedValueIsResentAfterTheMasterWasLost)
 {
     ResetWorld();
     Node node;
@@ -157,20 +173,46 @@ CC_TEST(DuctChannel, InvalidateForcesAFreshReportOfAnUnchangedValue)
     uint8_t scratchpad[9];
     MakeScratchpad(0x0190, scratchpad);
     FakeOneWire::QueueRead(line, scratchpad, 9);
-    RunSampleCycle(channel);
+    RunSampleCycle(channel, node);
 
     int16_t reported = 0;
     CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
 
-    // Same reading again -> no Report (below threshold, refresh not due).
+    // Same reading again -> no Report (below the 0.1 degC step).
     FakeOneWire::QueueRead(line, scratchpad, 9);
-    RunSampleCycle(channel);
+    RunSampleCycle(channel, node);
     CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 0);
 
-    // After a bus reconnect the channel re-sends the current value.
-    channel.Invalidate();
-    FakeOneWire::QueueRead(line, scratchpad, 9);
-    RunSampleCycle(channel);
+    // The master goes quiet past the heartbeat, then comes back: the
+    // unchanged reading is sent again.
+    FakeClock::Advance(1500);
+    node.Loop();
     CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
     CC_CHECK_EQ(reported, 2500);
+}
+
+CC_TEST(DuctChannel, AMissingProbeStopsBeingReportedEvenAsAKeepalive)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+
+    DuctChannel channel(node, Endpoint::SupplyTemp, line);
+    channel.Init();
+
+    FakeOneWire::SetPresent(line, true);
+    uint8_t scratchpad[9];
+    MakeScratchpad(0x0190, scratchpad);
+    FakeOneWire::QueueRead(line, scratchpad, 9);
+    RunSampleCycle(channel, node);
+    int16_t reported = 0;
+    CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
+
+    FakeOneWire::SetPresent(line, false); // probe unplugged
+    for (int i = 0; i < 40; i++) // ~70 s -- past a whole keepalive round
+    {
+        RunSampleCycle(channel, node);
+    }
+    CC_CHECK(!channel.Present());
+    CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 0);
 }

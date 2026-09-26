@@ -23,10 +23,9 @@ namespace
 TemperatureHandler::TemperatureHandler(NodeLib::Node& node) :
     node(node),
     returnChannel(node, Endpoint::ReturnTemp, Board::OneWire1),
-    supplyChannel(node, Endpoint::SupplyTemp, Board::OneWire2),
-    reportedSensorStatus(0),
-    sensorStatusReported(false)
+    supplyChannel(node, Endpoint::SupplyTemp, Board::OneWire2)
 {
+    node.AddPublished(Endpoint::SensorStatus, 1);
 }
 
 void TemperatureHandler::Init()
@@ -40,11 +39,7 @@ void TemperatureHandler::Loop()
     returnChannel.Loop();
     supplyChannel.Loop();
 
-    const uint8_t status = SensorStatus();
-    if (!sensorStatusReported || status != reportedSensorStatus)
-    {
-        ReportSensorStatus();
-    }
+    node.PublishIfChanged(Endpoint::SensorStatus, SensorStatus());
 }
 
 void TemperatureHandler::ReceivedMessage(const Message& m)
@@ -86,12 +81,9 @@ void TemperatureHandler::ReceivedMessage(const Message& m)
 void TemperatureHandler::ConnectionLost()
 {
     // Nothing to drive to a safe state -- TemperatureNode only measures
-    // (TemperatureNode-Spec.md §2). Re-arm the channels so the current readings
-    // are re-sent once the master resumes polling.
+    // (TemperatureNode-Spec.md §2). Node's publisher re-sends the current
+    // readings once the master resumes polling.
     LOG_WARN("Bus connection lost");
-    returnChannel.Invalidate();
-    supplyChannel.Invalidate();
-    sensorStatusReported = false;
 }
 
 void TemperatureHandler::FillStatus(SystemStatus& status)
@@ -118,11 +110,4 @@ uint8_t TemperatureHandler::SensorStatus() const
         status |= SupplySensorValid;
     }
     return status;
-}
-
-void TemperatureHandler::ReportSensorStatus()
-{
-    reportedSensorStatus = SensorStatus();
-    sensorStatusReported = true;
-    node.QueueMessage(Id(node.GetId(), Endpoint::SensorStatus, Operation::Report), reportedSensorStatus);
 }

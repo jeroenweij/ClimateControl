@@ -38,7 +38,8 @@ class ThermostatHandler : public NodeLib::INodeHandler
     void RenderDisplay();
     void WakeDisplay(); // turns the panel on (if asleep) and restarts its inactivity timer
 
-    void PublishRoom(const bool force);
+    void PublishRoom(); // current room values to Node's change-driven publisher
+    void ReportRoom(const NodeLib::Endpoint endpoint); // reply to a Get
 
     NodeLib::Node& node;
 
@@ -56,13 +57,6 @@ class ThermostatHandler : public NodeLib::INodeHandler
     uint16_t humidity; // centi-%RH
     uint8_t  roomMode; // DamperMode coding
 
-    // last values reported, for on-change publishing
-    int16_t  reportedSetpoint;
-    int16_t  reportedTemp;
-    uint16_t reportedHumidity;
-    uint8_t  reportedMode;
-    bool     everReported;
-
     // display cache from the ControllerNode
     uint8_t damperActual;
     uint8_t damperMode;
@@ -73,6 +67,5 @@ class ThermostatHandler : public NodeLib::INodeHandler
     bool displayOn;
 
     Tools::DelayTimer sampleTimer;
-    Tools::DelayTimer keepaliveTimer;
     Tools::DelayTimer displayTimer; // panel sleeps when this elapses (§4.2)
 };

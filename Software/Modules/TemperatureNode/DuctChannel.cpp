@@ -18,14 +18,6 @@ namespace
 
     // Small margin on top of the datasheet worst-case conversion time.
     constexpr Tools::time_a ConversionGuardMs = 20;
-
-    // Force a Report at least this often even when the reading has not moved, so
-    // MainController's view of the value does not go stale (TemperatureNode-Spec.md
-    // §5 item 3 -- final rate still open).
-    constexpr Tools::time_a MinReportIntervalMs = 30000;
-
-    // Report early when the reading moves by at least this much (centi-degC).
-    constexpr int16_t ReportThresholdCentiDeg = 10; // 0.1 degC
 } // namespace
 
 DuctChannel::DuctChannel(NodeLib::Node& node, const Endpoint endpoint, const Hal::Pin oneWirePin) :
@@ -34,13 +26,13 @@ DuctChannel::DuctChannel(NodeLib::Node& node, const Endpoint endpoint, const Hal
     sensor(oneWirePin),
     state(State::Idle),
     value(0),
-    lastReported(0),
-    everReported(false),
     present(false),
     sampleTimer(),
-    conversionTimer(),
-    minReportTimer()
+    conversionTimer()
 {
+    // On change by 0.1 degC + keepalive, re-sent after a lost master
+    // (Node's publisher, Node-Message-Model-Spec.md §6.1).
+    node.AddPublished(endpoint, 2, NodeLib::TempMinChange);
 }
 
 void DuctChannel::Init()
@@ -87,7 +79,7 @@ void DuctChannel::Loop()
             {
                 SetPresent(true);
                 value = sample;
-                PublishIfDue();
+                node.PublishIfChanged(endpoint, value);
             }
             else
             {
@@ -101,18 +93,6 @@ void DuctChannel::Loop()
     }
 }
 
-void DuctChannel::PublishIfDue()
-{
-    const int16_t delta      = static_cast<int16_t>(value - lastReported);
-    const bool    moved      = delta >= ReportThresholdCentiDeg || delta <= -ReportThresholdCentiDeg;
-    const bool    refreshDue = !minReportTimer.IsRunning() || minReportTimer.Finished();
-
-    if (!everReported || moved || refreshDue)
-    {
-        Report();
-    }
-}
-
 void DuctChannel::Report()
 {
     // int16 centi-degC, little-endian (Node-Message-Model-Spec.md §5).
@@ -121,15 +101,6 @@ void DuctChannel::Report()
         static_cast<uint8_t>((value >> 8) & 0xFF),
     };
     node.QueueMessage(Id(node.GetId(), endpoint, Operation::Report), payload, sizeof(payload));
-
-    lastReported = value;
-    everReported = true;
-    minReportTimer.Start(MinReportIntervalMs);
-}
-
-void DuctChannel::Invalidate()
-{
-    everReported = false;
 }
 
 void DuctChannel::SetPresent(const bool nowPresent)
@@ -138,6 +109,10 @@ void DuctChannel::SetPresent(const bool nowPresent)
     {
         LOG_INFO("Duct probe " << endpoint << (nowPresent ? " present" : " lost"));
         present = nowPresent;
+        if (!present)
+        {
+            node.ClearPublished(endpoint); // no reading -- don't keep reporting the last one
+        }
     }
 }
 

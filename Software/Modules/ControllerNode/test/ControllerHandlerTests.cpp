@@ -132,6 +132,26 @@ namespace
             node.Init();
         }
     };
+
+    // A node reports its published values (Node::PublishIfChanged) only while
+    // the master polls it. Connect: the first poll connects it, the next
+    // carries the initial values out -- then clear the wire. Publish: one
+    // handler pass, then the poll that notices the change and the poll that
+    // carries it.
+    void Connect(World& w)
+    {
+        w.handler.Loop();
+        Flush(w.node);
+        Flush(w.node);
+        FakeBus::TruncateTx(0);
+    }
+
+    void Publish(World& w)
+    {
+        w.handler.Loop();
+        Flush(w.node);
+        Flush(w.node);
+    }
 } // namespace
 
 CC_TEST(ControllerHandler, SetDamperTargetMovesTheDamper)
@@ -322,11 +342,11 @@ CC_TEST(ControllerHandler, LoopReportsDamperActualOnceTheMoveSettles)
 {
     ResetWorld();
     World w;
+    Connect(w);
     w.damper.SetTarget(80);
 
     FakeClock::Advance(1500); // Damper's moveSettleMs
-    w.handler.Loop(); // damper.Loop() finishes the move, actual changes -> Report queued
-    Flush(w.node);
+    Publish(w); // damper.Loop() finishes the move, actual changes -> reported
 
     Message   tx[8];
     const int n = bus::DecodeTx(tx, 8);
@@ -339,13 +359,10 @@ CC_TEST(ControllerHandler, LoopReportsANewDamperTargetBeforeTheMoveSettles)
 {
     ResetWorld();
     World w;
-    w.handler.Loop(); // initial reports
-    Flush(w.node);
-    FakeBus::TruncateTx(0); // discard them
+    Connect(w);
 
     w.damper.SetTarget(77);
-    w.handler.Loop(); // target changed, move still running
-    Flush(w.node);
+    Publish(w); // target changed, move still running
 
     Message   tx[8];
     const int n = bus::DecodeTx(tx, 8);
@@ -353,6 +370,31 @@ CC_TEST(ControllerHandler, LoopReportsANewDamperTargetBeforeTheMoveSettles)
     CC_CHECK(FindReport(tx, n, Endpoint::DamperTarget, &value, 1));
     CC_CHECK_EQ(value, 77);
     CC_CHECK(!FindReport(tx, n, Endpoint::DamperActual, &value, 1)); // not landed yet
+}
+
+CC_TEST(ControllerHandler, RoomValuesAreOnlyPublishedOnceTheThermostatSuppliedThem)
+{
+    ResetWorld();
+    World w;
+    Connect(w);
+    Publish(w);
+
+    Message tx[16];
+    int     n = bus::DecodeTx(tx, 16);
+    uint8_t value[2];
+    CC_CHECK(!FindReport(tx, n, Endpoint::RoomTemp, value, 2)); // nothing from the Thermostat yet
+    FakeBus::TruncateTx(0);
+
+    Message fromThermostat(Id(NodeLib::THERMOSTAT_NODE_ID, Endpoint::RoomTemp, Operation::Report));
+    fromThermostat.data[0] = static_cast<uint8_t>(2150);
+    fromThermostat.data[1] = static_cast<uint8_t>(2150 >> 8);
+    fromThermostat.len     = 2;
+    w.thermostatLink.ReceivedMessage(fromThermostat);
+    Publish(w);
+
+    n = bus::DecodeTx(tx, 16);
+    CC_CHECK(FindReport(tx, n, Endpoint::RoomTemp, value, 2)); // relayed up the main bus unasked
+    CC_CHECK_EQ(value[0] | (value[1] << 8), 2150);
 }
 
 CC_TEST(ControllerHandler, SetDamperTargetSwitchesAnyModeToManual)

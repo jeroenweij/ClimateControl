@@ -48,6 +48,11 @@ class ControllerHandler : public NodeLib::INodeHandler
     // §6.2.1) once ThermostatLink has one waiting -- see Loop().
     void AckOrNackThermostatWrite(const bool nack, const uint16_t offset, const uint16_t chunkCrc16, const bool programFailed);
 
+    // Hands every value this node reports by itself to Node's change-driven
+    // publisher (Node-Message-Model-Spec.md §6.1) -- declared in the
+    // constructor, fed each Loop().
+    void Publish();
+
     void Report(const NodeLib::Endpoint endpoint, const uint8_t* const data, const uint8_t len);
     void Nack(const NodeLib::Message& m, const uint8_t reason);
 
@@ -56,11 +61,4 @@ class ControllerHandler : public NodeLib::INodeHandler
     ThermostatLink& thermostatLink;
     SupplyTemp      supplyTemp;
     RoomControlLoop roomControlLoop;
-
-    uint8_t reportedTarget;
-    bool    reportedTargetValid;
-    uint8_t reportedActual;
-    bool    reportedActualValid;
-    uint8_t reportedMode;
-    bool    reportedModeValid;
 };

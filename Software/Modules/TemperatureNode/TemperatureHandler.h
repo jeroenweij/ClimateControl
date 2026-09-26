@@ -45,13 +45,9 @@ class TemperatureHandler : public NodeLib::INodeHandler
     };
 
     uint8_t SensorStatus() const;
-    void    ReportSensorStatus();
 
     NodeLib::Node& node;
 
     DuctChannel returnChannel;
     DuctChannel supplyChannel;
-
-    uint8_t reportedSensorStatus;
-    bool    sensorStatusReported;
 };

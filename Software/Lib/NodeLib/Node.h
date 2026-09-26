@@ -10,6 +10,7 @@
 #include "Frame.h"
 #include "INodeHandler.h"
 #include "Id.h"
+#include "Publisher.h"
 
 namespace NodeLib
 {
@@ -53,6 +54,16 @@ namespace NodeLib
         void QueueMessage(const Message& m);
         void QueueMessage(const Id& id, const uint8_t* const data, const uint8_t len);
         void QueueMessage(const Id& id, const uint8_t value);
+
+        // Change-driven reporting (Node-Message-Model-Spec.md §6.1, see
+        // Publisher): declare each endpoint this node reports by itself once,
+        // then hand in its current value every loop. Loop() sends what's due
+        // -- on change, as a staggered keepalive, and again after a lost
+        // master -- and only while the master is polling. ClearPublished()
+        // stops reporting a value that is no longer known.
+        bool AddPublished(const Endpoint endpoint, const uint8_t size, const uint16_t minChange = 1);
+        void PublishIfChanged(const Endpoint endpoint, const int32_t value);
+        void ClearPublished(const Endpoint endpoint);
 
         // The node's bus address is fixed at factory provisioning and read from
         // flash in Init() (ControllerNode / TemperatureNode); it is not settable
@@ -134,6 +145,8 @@ namespace NodeLib
 
         bool busShown; // ShowBusState() has driven the LED at least once
         bool busUp;
+
+        Publisher publisher;
 
         Hal::Uart         uart;
         Hal::Crc          crc;
