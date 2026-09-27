@@ -235,11 +235,11 @@ class BudgetAllocator
 };
 ```
 
-`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`.
+`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0.
 
 ### 5.2 Allocation — `Recompute()`
 
-1. `pool = 50 * onlineCount` (`onlineCount` = active nodes with `NodeMaster::NodeModule(id) == ControllerNode`).
+1. `pool = 50 * onlineCount` (`onlineCount` = nodes with `NodeMaster::NodeModule(id) == ControllerNode` that are `NodeActive()` and not `NodeInBootloader()`). `NodeMaster` keeps a lost node's module type, so the active check is what drops it; a node in its bootloader is excluded because it can't act on a budget. A node leaves the allocation at the next recompute (§5.3) after it is lost.
 2. `weight[i] = RoomDemandPercent(supplyTemp, room[i].temp, room[i].setpoint)` per online node (§2) — 0 for a room the current supply air can't help, exactly matching *"if the supply air is warm but setpoint is asking for cooling, budget can be low."*
 3. `weightSum == 0` (nobody has any demand) → split the pool evenly: `pool / onlineCount == 50` each — lands exactly back on the default, no special-casing needed.
 4. Otherwise `raw[i] = pool * weight[i] / weightSum`.

@@ -115,14 +115,22 @@ void BudgetAllocator::Recompute()
 
     for (uint8_t id = 0; id < NodeLib::MAX_NODES; id++)
     {
-        if (master.NodeModule(id + 1) != ModuleType::ControllerNode)
+        // Only a ControllerNode that is on the bus and running its app takes
+        // part: a lost node keeps its moduleType in NodeMaster, and one in
+        // the bootloader can't use a budget. Its cached room data is dropped
+        // so a rejoin starts from fresh reports, not whatever was last seen
+        // (Damper-Budget-Spec.md §5.1).
+        const uint8_t nodeId = id + 1;
+        if (!master.NodeActive(nodeId) || master.NodeInBootloader(nodeId) ||
+            master.NodeModule(nodeId) != ModuleType::ControllerNode)
         {
+            room[id] = SRoom();
             continue;
         }
         const uint8_t w        = (supplyValid && room[id].Known())
             ? NodeLib::RoomDemandPercent(supplyTemp, room[id].temp, room[id].setpoint)
             : 0;
-        onlineIds[onlineCount] = id + 1;
+        onlineIds[onlineCount] = nodeId;
         weight[onlineCount]    = w;
         weightSum += w;
         onlineCount++;

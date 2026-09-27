@@ -48,6 +48,27 @@ namespace
         bus::InjectFrame(m);
     }
 
+    // Announce from a ControllerNode resident in its bootloader: data[1] is the
+    // (always-nonzero) bootloader state, as in NodeMasterTests.cpp.
+    void AnnounceFromBootloader(const uint8_t nodeId)
+    {
+        Message m(nodeId, Operation::Announce);
+        m.data[0] = static_cast<uint8_t>(ModuleType::ControllerNode);
+        m.data[1] = 1; // bl-idle
+        m.len     = 2;
+        bus::InjectFrame(m);
+    }
+
+    // The node being polled never answers: after NodeMaster.h's pollTimeoutMs
+    // it is declared lost (an app node gets no grace) and the master moves on
+    // to Flush.
+    void MissPoll(NodeMaster& master)
+    {
+        master.Loop(); // make sure the Poll is out -- StartPolling() may leave it in Flush
+        FakeClock::Advance(200);
+        master.Loop();
+    }
+
     void PackI16(uint8_t* const out, const int16_t v)
     {
         out[0] = static_cast<uint8_t>(v);
@@ -374,6 +395,115 @@ CC_TEST(BudgetAllocator, IgnoresRoomReportsFromTheMasterNodeId)
     CC_CHECK(FindBudget(tx, n, 2, p2));
     CC_CHECK_EQ(p1, 50);
     CC_CHECK_EQ(p2, 50);
+}
+
+CC_TEST(BudgetAllocator, DropsALostNodeFromTheAllocation)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    StartPolling(master); // polls node 2 first
+
+    // Node 2 has all the demand -- while it counted, it would take the pool.
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400);
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000);
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+
+    MissPoll(master); // node 2 lost; master now in Flush
+    CC_CHECK(!master.NodeActive(2));
+
+    allocator.Loop();
+    FakeBus::Reset();
+    master.Loop(); // Flush sends the queued budget
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK_EQ(CountBudgetMessages(tx, n), 1); // nothing for the lost node
+    uint8_t p3;
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK_EQ(p3, 50); // the pool of the one node left
+}
+
+CC_TEST(BudgetAllocator, ExcludesANodeInItsBootloader)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    AnnounceFromBootloader(3);
+    StartPolling(master);
+    CC_CHECK(master.NodeInBootloader(3));
+
+    // Stale room data from before the node went into its bootloader.
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2400);
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 1800);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK_EQ(CountBudgetMessages(tx, n), 1);
+    uint8_t p2;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK_EQ(p2, 50);
+}
+
+CC_TEST(BudgetAllocator, ARejoiningNodeStartsWithoutItsOldRoomData)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400); // full demand, then lost
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000); // no demand
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+
+    MissPoll(master);
+    allocator.Loop(); // node 2 doesn't count -> its room data is dropped
+    FakeBus::Reset();
+    master.Loop(); // Flush
+
+    // Node 2 comes back but hasn't re-reported its room yet: no demand is
+    // known for it, so nobody has any and the pool splits evenly -- instead
+    // of node 2 taking all of it on its pre-loss demand.
+    Announce(2, ModuleType::ControllerNode);
+    master.Loop();
+    CC_CHECK(master.NodeActive(2));
+
+    FakeClock::Advance(30000); // recomputeIntervalMs
+    allocator.Loop();
+    FakeBus::Reset();
+    for (int i = 0; i < 4; i++) // through the next poll(s) to a Flush
+    {
+        bus::InjectFrame(Message(2, Operation::Done));
+        bus::InjectFrame(Message(3, Operation::Done));
+        master.Loop();
+    }
+
+    Message   tx[16];
+    const int n = bus::DecodeTx(tx, 16);
+    uint8_t   p2, p3;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK_EQ(p2, 50);
+    CC_CHECK_EQ(p3, 50);
 }
 
 CC_TEST(BudgetAllocator, RecomputeDebouncesWithinTheInterval)
