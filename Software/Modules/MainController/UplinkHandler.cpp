@@ -69,6 +69,7 @@ UplinkHandler::UplinkHandler(NodeMaster& master, BudgetAllocator& budgetAllocato
 
 void UplinkHandler::Init()
 {
+    LOG_INFO("Init Nina Link");
     link.Init();
 }
 

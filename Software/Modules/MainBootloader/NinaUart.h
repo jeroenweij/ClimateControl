@@ -32,7 +32,7 @@ namespace Boot
         bool    Available() const override;
         uint8_t ReadByte() override;
 
-        void WriteBytes(const uint8_t* const data, const size_t len) override;
+        bool WriteBytes(const uint8_t* const data, const size_t len) override;
 
         // WriteBytes() already waits for the last byte to leave the shifter.
         void Flush() override {}

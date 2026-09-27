@@ -22,8 +22,10 @@ class NinaPort
     virtual bool    Available() const = 0;
     virtual uint8_t ReadByte()        = 0;
 
-    // Queues (or, on a blocking adapter, sends) 'len' bytes.
-    virtual void WriteBytes(const uint8_t* const data, const size_t len) = 0;
+    // Queues (or, on a blocking adapter, sends) 'len' bytes. False if they
+    // don't all fit right now -- then nothing was queued and the caller must
+    // try again later (a blocking adapter always returns true).
+    virtual bool WriteBytes(const uint8_t* const data, const size_t len) = 0;
 
     // Returns once everything written so far has left the UART -- needed
     // before a reset kills the peripheral. A no-op where WriteBytes() blocks.

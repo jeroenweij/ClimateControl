@@ -17,6 +17,7 @@
 class NinaLinkHandler
 {
   public:
+
     // Fills in the UplinkHello (endpoint, operation and payload); sent first
     // after every (re)connect.
     virtual void BuildHello(NodeLib::Message& hello) = 0;
@@ -53,6 +54,8 @@ struct NinaLinkConfig
 class NinaLink
 {
   public:
+    // Host tests reach the queue drain directly (Lib/Nina/test).
+    friend struct NinaLinkTestAccess;
     // 'queue' is the caller's storage for outbound frames (sized to taste:
     // the bootloader needs a handful, the application a whole bus's worth).
     NinaLink(NinaPort& port, const NinaLinkConfig& config, NinaLinkHandler& handler, NodeLib::Message* const queue, const uint8_t queueSize);

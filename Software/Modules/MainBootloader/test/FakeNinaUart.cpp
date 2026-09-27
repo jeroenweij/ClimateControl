@@ -68,10 +68,11 @@ uint8_t Boot::NinaUart::ReadByte()
     return rxBuf[rxHead++];
 }
 
-void Boot::NinaUart::WriteBytes(const uint8_t* const data, const size_t len)
+bool Boot::NinaUart::WriteBytes(const uint8_t* const data, const size_t len)
 {
     for (size_t i = 0; i < len && txLen < cap; i++)
     {
         txBuf[txLen++] = data[i];
     }
+    return true; // the real one blocks until sent
 }

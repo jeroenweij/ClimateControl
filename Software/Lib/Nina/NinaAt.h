@@ -63,7 +63,7 @@ class NinaAt
     bool    InDataMode() const;
     bool    Available() const;
     uint8_t ReadByte();
-    void    WriteBytes(const uint8_t* const data, const size_t len);
+    bool    WriteBytes(const uint8_t* const data, const size_t len); // see NinaPort::WriteBytes
     void    Flush();
 
     // Wedge recovery (MainController-Server-Link-Spec.md §10): pulses

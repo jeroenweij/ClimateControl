@@ -112,7 +112,7 @@ uint8_t NinaUart::ReadByte()
     return byte;
 }
 
-void NinaUart::WriteBytes(const uint8_t* const data, const size_t len)
+bool NinaUart::WriteBytes(const uint8_t* const data, const size_t len)
 {
     for (size_t i = 0; i < len; i++)
     {
@@ -124,4 +124,5 @@ void NinaUart::WriteBytes(const uint8_t* const data, const size_t len)
     while ((USART2->ISR & USART_ISR_TC) == 0)
     {
     }
+    return true; // blocking -- everything is sent
 }

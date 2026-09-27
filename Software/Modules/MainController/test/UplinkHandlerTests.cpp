@@ -541,7 +541,7 @@ namespace
     }
 } // namespace
 
-CC_TEST(UplinkHandler, PushLogSendsAtMostTwoRingLinesPerPassOldestFirst)
+CC_TEST(UplinkHandler, PushLogSendsAtMostFourRingLinesPerPassOldestFirst)
 {
     ResetWorld();
     NodeMaster      master;
@@ -553,20 +553,23 @@ CC_TEST(UplinkHandler, PushLogSendsAtMostTwoRingLinesPerPassOldestFirst)
     FakeClock::Set(5000);
     Tools::LogRing::Push('I', "one");
     Tools::LogRing::Push('W', "two");
+    Tools::LogRing::Push('I', "three");
+    Tools::LogRing::Push('I', "four");
     FakeClock::Set(7000);
-    Tools::LogRing::Push('E', "three");
+    Tools::LogRing::Push('E', "five");
 
     Access::PushLog(uplink);
-    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK_EQ(Access::Queued(uplink), 4);
     CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 5, "I: one"));
     CC_CHECK(IsMainLog(Access::Queue(uplink, 1), 5, "W: two"));
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 3), 5, "I: four"));
 
     Access::PushLog(uplink);
-    CC_CHECK_EQ(Access::Queued(uplink), 3);
-    CC_CHECK(IsMainLog(Access::Queue(uplink, 2), 7, "E: three"));
+    CC_CHECK_EQ(Access::Queued(uplink), 5);
+    CC_CHECK(IsMainLog(Access::Queue(uplink, 4), 7, "E: five"));
 
     Access::PushLog(uplink); // drained -- nothing more
-    CC_CHECK_EQ(Access::Queued(uplink), 3);
+    CC_CHECK_EQ(Access::Queued(uplink), 5);
 }
 
 CC_TEST(UplinkHandler, PushLogWaitsWhileTheOutboundQueueIsHalfFull)
@@ -609,7 +612,7 @@ CC_TEST(UplinkHandler, PushLogReportsLinesLostToAnOverflowFirst)
     }
 
     Access::PushLog(uplink);
-    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK_EQ(Access::Queued(uplink), 4); // the marker plus three lines
     CC_CHECK(IsMainLog(Access::Queue(uplink, 0), 9, "~ 3 lost"));
     CC_CHECK(IsMainLog(Access::Queue(uplink, 1), 9, "I: x"));
 }

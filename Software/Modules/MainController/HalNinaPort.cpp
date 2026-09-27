@@ -35,9 +35,9 @@ uint8_t HalNinaPort::ReadByte()
     return uart.ReadByte();
 }
 
-void HalNinaPort::WriteBytes(const uint8_t* const data, const size_t len)
+bool HalNinaPort::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    uart.WriteBytes(data, len);
+    return uart.WriteBytes(data, len); // false: the TX ring can't take all of it yet
 }
 
 void HalNinaPort::Flush()

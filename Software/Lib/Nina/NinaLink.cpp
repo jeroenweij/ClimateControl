@@ -178,13 +178,27 @@ void NinaLink::ClearQueue()
 
 void NinaLink::DrainOutboundQueue()
 {
-    for (uint8_t i = 0; i < queued; i++)
+    // Out in order, for as long as the port has room. The application's port
+    // is a 128-byte TX ring: a burst (hello + roster + log lines on a fresh
+    // connection, a window of OTA acks) is more than it holds, and a frame it
+    // can't take is refused whole -- so stop there and keep it, and everything
+    // behind it, for the next pass rather than lose it.
+    uint8_t sent = 0;
+    while (sent < queued)
     {
         uint8_t      wire[NodeLib::Frame::MaxFrameBytes];
-        const size_t length = uplinkFrame.Encode(queue[i], wire);
-        nina.WriteBytes(wire, length);
+        const size_t length = uplinkFrame.Encode(queue[sent], wire);
+        if (!nina.WriteBytes(wire, length))
+        {
+            break;
+        }
+        sent++;
     }
-    queued = 0;
+    for (uint8_t i = sent; i < queued; i++)
+    {
+        queue[i - sent] = queue[i];
+    }
+    queued = static_cast<uint8_t>(queued - sent);
 }
 
 void NinaLink::StartSession()

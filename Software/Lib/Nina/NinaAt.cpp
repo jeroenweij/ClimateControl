@@ -141,9 +141,9 @@ uint8_t NinaAt::ReadByte()
     return port.ReadByte();
 }
 
-void NinaAt::WriteBytes(const uint8_t* const data, const size_t len)
+bool NinaAt::WriteBytes(const uint8_t* const data, const size_t len)
 {
-    port.WriteBytes(data, len);
+    return port.WriteBytes(data, len);
 }
 
 void NinaAt::Flush()

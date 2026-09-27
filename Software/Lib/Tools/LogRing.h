@@ -20,7 +20,7 @@ namespace Tools
     // both called from the super-loop, never from an interrupt.
     namespace LogRing
     {
-        constexpr uint8_t Lines    = 10;
+        constexpr uint8_t Lines    = 24;
         constexpr uint8_t LineSize = 32; // "<level>: <message>", truncated
 
         // Appends "<level>: <msg>". When the ring is full the oldest line is

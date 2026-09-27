@@ -19,7 +19,7 @@ class HalNinaPort : public NinaPort
     void    Init(const uint32_t baudRate) override;
     bool    Available() const override;
     uint8_t ReadByte() override;
-    void    WriteBytes(const uint8_t* const data, const size_t len) override;
+    bool    WriteBytes(const uint8_t* const data, const size_t len) override;
     void    Flush() override;
 
   private:

@@ -18,8 +18,6 @@
  *   - MainController (no ConfigRecord) or an     -> passive wait on the error
  *     unprovisioned node                            LED; recovery is SWD / bench
  *
- * The RS485 OTA slave loop needs the NodeLib framing/bus split and is still
- * TODO -- for now both paths just blink and wait.
  *************************************************************/
 
 #include "Backup.h"

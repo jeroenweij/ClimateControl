@@ -144,7 +144,7 @@ One handler per node. `NodeLib` intercepts and fully handles three endpoint bloc
 | `Transport` | the master/slave state machine |
 | `System*` | `ConfigStore` (module, uid), the app image descriptor (fwVersion), a `Node` uptime/error tally; `SystemControl` reset via the backup-register handoff in `Node-Flash-Layout-and-Bootloader-Spec.md` §5 |
 | `Firmware` (`0x20` only) | the OTA path — app running: persist the enter-bootloader flag + reset; bootloader: the transfer. `ThermostatFirmware` (`0x22`) is **not** intercepted — it reaches the ControllerNode's handler, which relays it over the link (`ControllerNode-Thermostat-Link-Spec.md` §5.4). |
-| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains `Tools::LogRing` — 10 lines × 32 characters (320 B) that every `LOG_*` macro feeds, oldest overwritten first, one line per `Get`, each stamped with the node uptime it was logged at |
+| `Diagnostics*` | counters kept in `Frame`/`Node`, `DiagLastError` from `ErrorHandler`, `DiagLog` drains `Tools::LogRing` — 24 lines × 32 characters (768 B) that every `LOG_*` macro feeds, oldest overwritten first, one line per `Get`, each stamped with the node uptime it was logged at |
 
 The module's handler only ever receives its own application / `Room` endpoints (plus `ThermostatFirmware` on the ControllerNode):
 

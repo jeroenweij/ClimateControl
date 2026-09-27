@@ -102,8 +102,8 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     static const uint8_t outboundQueueSize = 32;
     NodeLib::Message     outboundQueue[outboundQueueSize];
 
-    static const uint8_t maxLogLinesPerPass         = 2;
-    static const uint8_t maxThermostatStatusPerPass = 2;
+    static const uint8_t maxLogLinesPerPass         = 4;
+    static const uint8_t maxThermostatStatusPerPass = 4;
 
     // Last active/bootloader state CheckNodePresence() has told the server
     // about, indexed nodeId-1. Seeded by SendRoster() itself (so the roster
