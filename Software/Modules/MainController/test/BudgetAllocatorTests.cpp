@@ -127,6 +127,30 @@ namespace
         return false;
     }
 
+    // Every DamperBudget Set to nodeId, in the order sent -- for tests that
+    // queue several recompute rounds and flush them together.
+    int FindBudgets(Message* const tx, const int n, const uint8_t nodeId, uint8_t* const out, const int max)
+    {
+        int count = 0;
+        for (int i = 0; i < n && count < max; i++)
+        {
+            if (tx[i].id.node == nodeId && tx[i].id.endpoint == Endpoint::DamperBudget &&
+                tx[i].id.operation == Operation::Set && tx[i].len >= 1)
+            {
+                out[count++] = tx[i].data[0];
+            }
+        }
+        return count;
+    }
+
+    void ObserveBudget(BudgetAllocator& allocator, const uint8_t nodeId, const uint8_t percent)
+    {
+        Message m(Id(nodeId, Endpoint::DamperBudget, Operation::Report));
+        m.data[0] = percent;
+        m.len     = 1;
+        allocator.Observe(m);
+    }
+
     int CountBudgetMessages(Message* const tx, const int n)
     {
         int count = 0;
@@ -504,6 +528,78 @@ CC_TEST(BudgetAllocator, ARejoiningNodeStartsWithoutItsOldRoomData)
     CC_CHECK(FindBudget(tx, n, 3, p3));
     CC_CHECK_EQ(p2, 50);
     CC_CHECK_EQ(p3, 50);
+}
+
+CC_TEST(BudgetAllocator, WithoutASupplyReadingStepsEachBudgetTowardTheDefault)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    Announce(4, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    // Where each node's budget stands, from its own reports; node 4 hasn't
+    // reported one.
+    ObserveBudget(allocator, 2, 20);
+    ObserveBudget(allocator, 3, 90);
+
+    allocator.Loop();
+    FakeClock::Advance(30000); // recomputeIntervalMs
+    allocator.Loop(); // no report in between: steps on from what was sent
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[16];
+    const int n = bus::DecodeTx(tx, 16);
+    uint8_t   b[4];
+    CC_CHECK_EQ(FindBudgets(tx, n, 2, b, 4), 2);
+    CC_CHECK_EQ(b[0], 21);
+    CC_CHECK_EQ(b[1], 22);
+    CC_CHECK_EQ(FindBudgets(tx, n, 3, b, 4), 2);
+    CC_CHECK_EQ(b[0], 89);
+    CC_CHECK_EQ(b[1], 88);
+    CC_CHECK_EQ(FindBudgets(tx, n, 4, b, 4), 2); // unknown: starts at the default and stays
+    CC_CHECK_EQ(b[0], 50);
+    CC_CHECK_EQ(b[1], 50);
+}
+
+CC_TEST(BudgetAllocator, AStaleSupplyReadingStartsTheWalkBackFromTheLastAllocation)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400); // full demand
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000); // none
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+    allocator.Loop(); // 100 / 0
+
+    // The TemperatureNode goes quiet. Recomputes keep allocating from the
+    // last reading until it is 5 minutes old (NodeLib::SupplyTemp's
+    // staleTimeoutMs), then walk back instead of jumping to an even split.
+    FakeClock::Advance(5 * 60 * 1000);
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[16];
+    const int n = bus::DecodeTx(tx, 16);
+    uint8_t   b[4];
+    CC_CHECK_EQ(FindBudgets(tx, n, 2, b, 4), 2);
+    CC_CHECK_EQ(b[0], 100);
+    CC_CHECK_EQ(b[1], 99);
+    CC_CHECK_EQ(FindBudgets(tx, n, 3, b, 4), 2);
+    CC_CHECK_EQ(b[0], 0);
+    CC_CHECK_EQ(b[1], 1);
 }
 
 CC_TEST(BudgetAllocator, RecomputeDebouncesWithinTheInterval)

@@ -37,8 +37,10 @@ namespace
 BudgetAllocator::SRoom::SRoom() :
     sawTemp(false),
     sawSetpoint(false),
+    sawBudget(false),
     temp(0),
-    setpoint(0)
+    setpoint(0),
+    budget(0)
 {
 }
 
@@ -49,8 +51,7 @@ bool BudgetAllocator::SRoom::Known() const
 
 BudgetAllocator::BudgetAllocator(NodeMaster& master) :
     master(master),
-    supplyTemp(0),
-    supplyValid(false),
+    supplyTemp(),
     room{},
     recomputeTimer()
 {
@@ -58,7 +59,7 @@ BudgetAllocator::BudgetAllocator(NodeMaster& master) :
 
 void BudgetAllocator::Observe(const Message& m)
 {
-    if (m.id.operation != Operation::Report || m.len < 2)
+    if (m.id.operation != Operation::Report)
     {
         return;
     }
@@ -72,18 +73,31 @@ void BudgetAllocator::Observe(const Message& m)
     switch (m.id.endpoint)
     {
         case Endpoint::SupplyTemp:
-            supplyTemp  = ReadI16(m.data);
-            supplyValid = true;
+            supplyTemp.Snoop(m);
             break;
 
         case Endpoint::RoomTemp:
-            room[nodeIndex].temp    = ReadI16(m.data);
-            room[nodeIndex].sawTemp = true;
+            if (m.len >= 2)
+            {
+                room[nodeIndex].temp    = ReadI16(m.data);
+                room[nodeIndex].sawTemp = true;
+            }
             break;
 
         case Endpoint::RoomSetpoint:
-            room[nodeIndex].setpoint    = ReadI16(m.data);
-            room[nodeIndex].sawSetpoint = true;
+            if (m.len >= 2)
+            {
+                room[nodeIndex].setpoint    = ReadI16(m.data);
+                room[nodeIndex].sawSetpoint = true;
+            }
+            break;
+
+        case Endpoint::DamperBudget:
+            if (m.len >= 1)
+            {
+                room[nodeIndex].budget    = m.data[0];
+                room[nodeIndex].sawBudget = true;
+            }
             break;
 
         default:
@@ -93,6 +107,8 @@ void BudgetAllocator::Observe(const Message& m)
 
 void BudgetAllocator::Loop()
 {
+    supplyTemp.Loop();
+
     if (!recomputeTimer.IsRunning())
     {
         recomputeTimer.Start(recomputeIntervalMs);
@@ -127,8 +143,8 @@ void BudgetAllocator::Recompute()
             room[id] = SRoom();
             continue;
         }
-        const uint8_t w        = (supplyValid && room[id].Known())
-            ? NodeLib::RoomDemandPercent(supplyTemp, room[id].temp, room[id].setpoint)
+        const uint8_t w        = (supplyTemp.Valid() && room[id].Known())
+            ? NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), room[id].temp, room[id].setpoint)
             : 0;
         onlineIds[onlineCount] = nodeId;
         weight[onlineCount]    = w;
@@ -138,6 +154,12 @@ void BudgetAllocator::Recompute()
 
     if (onlineCount == 0)
     {
+        return;
+    }
+
+    if (!supplyTemp.Valid())
+    {
+        StepBudgetsTowardDefault(onlineIds, onlineCount);
         return;
     }
 
@@ -201,7 +223,36 @@ void BudgetAllocator::Recompute()
     }
 }
 
+// No supply reading: no room's demand can be judged, so no allocation --
+// every node walks back to the un-arbitrated default, gradually, from wherever
+// it is, and its damper follows (Damper-Budget-Spec.md §4.4). Re-sent every
+// recompute even once there, which keeps the nodes' disconnect ramp cancelled
+// (§5.3). A node whose budget isn't known yet starts at the default.
+void BudgetAllocator::StepBudgetsTowardDefault(const uint8_t* const onlineIds, const uint8_t onlineCount)
+{
+    for (uint8_t i = 0; i < onlineCount; i++)
+    {
+        const SRoom& r    = room[onlineIds[i] - 1];
+        uint8_t      next = r.sawBudget ? r.budget : defaultBudgetPerNode;
+        if (next + budgetStepPercent < defaultBudgetPerNode)
+        {
+            next += budgetStepPercent;
+        }
+        else if (next > defaultBudgetPerNode + budgetStepPercent)
+        {
+            next -= budgetStepPercent;
+        }
+        else
+        {
+            next = defaultBudgetPerNode;
+        }
+        SendBudget(onlineIds[i], next);
+    }
+}
+
 void BudgetAllocator::SendBudget(const uint8_t nodeId, const uint8_t percent)
 {
+    room[nodeId - 1].budget    = percent;
+    room[nodeId - 1].sawBudget = true;
     master.QueueMessage(Id(nodeId, Endpoint::DamperBudget, Operation::Set), percent);
 }

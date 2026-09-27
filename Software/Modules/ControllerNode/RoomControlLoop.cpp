@@ -8,7 +8,7 @@
 
 #include "RoomControlLoop.h"
 
-RoomControlLoop::RoomControlLoop(ThermostatLink& thermostatLink, const SupplyTemp& supplyTemp, Damper& damper) :
+RoomControlLoop::RoomControlLoop(ThermostatLink& thermostatLink, const NodeLib::SupplyTemp& supplyTemp, Damper& damper) :
     thermostatLink(thermostatLink),
     supplyTemp(supplyTemp),
     damper(damper),
@@ -25,16 +25,33 @@ void RoomControlLoop::Loop()
         StepBudgetRamp();
     }
 
-    if (damper.GetMode() != Damper::Mode::Auto || !thermostatLink.Room().valid)
+    if (damper.GetMode() != Damper::Mode::Auto)
     {
         return;
     }
 
-    const uint8_t desired = supplyTemp.Valid()
-        ? NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint)
-        : 0; // no supply reading -- don't guess, stay closed
+    // Without a supply reading the room can't be controlled: fail safe to the
+    // neutral position, the same as having no control at all -- still under
+    // the budget, which MainController walks back to 50% meanwhile
+    // (Damper-Budget-Spec.md §4.4).
+    uint8_t desired = Damper::NeutralPercent;
+    if (supplyTemp.Valid())
+    {
+        if (!thermostatLink.Room().valid)
+        {
+            return;
+        }
+        desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint);
+    }
 
-    damper.SetTarget(desired < budget ? desired : budget);
+    const uint8_t target = desired < budget ? desired : budget;
+    // SetTarget() (re)starts a move -- repeating the target the damper already
+    // has on every pass would keep restarting it, so the move would never
+    // settle and a stall would never be confirmed.
+    if (target != damper.Target())
+    {
+        damper.SetTarget(target);
+    }
 }
 
 void RoomControlLoop::SetBudget(const uint8_t percent)

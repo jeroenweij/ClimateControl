@@ -22,7 +22,7 @@
 class RoomControlLoop
 {
   public:
-    RoomControlLoop(ThermostatLink& thermostatLink, const SupplyTemp& supplyTemp, Damper& damper);
+    RoomControlLoop(ThermostatLink& thermostatLink, const NodeLib::SupplyTemp& supplyTemp, Damper& damper);
 
     void Loop();
 
@@ -46,9 +46,9 @@ class RoomControlLoop
     static const uint32_t rampIntervalMs  = 36000;
     static const uint8_t  rampStepPercent = 1;
 
-    ThermostatLink&   thermostatLink;
-    const SupplyTemp& supplyTemp;
-    Damper&           damper;
+    ThermostatLink&            thermostatLink;
+    const NodeLib::SupplyTemp& supplyTemp;
+    Damper&                    damper;
 
     uint8_t           budget;
     bool              connectionLost;

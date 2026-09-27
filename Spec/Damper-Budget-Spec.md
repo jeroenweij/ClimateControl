@@ -88,17 +88,19 @@ Master-side (`NodeMaster`/`MainController`) needs no such hook — it already re
 
 ### 4.1 `SupplyTemp` — the snoop cache
 
+`Lib/NodeLib/SupplyTemp.h`, shared with `MainController`'s `BudgetAllocator` (§5.1) so both sides drop a stale reading on the same timeout.
+
 ```cpp
 // Learns the shared duct SupplyTemp by passively observing whichever
 // TemperatureNode reports it as it passes on the bus (Snoop(), §3.2) -- not
 // tied to a specific TemperatureNode id, matching TemperatureNode-Spec.md §1's
 // single shared duct sensor.
-class SupplyTemp
+class NodeLib::SupplyTemp
 {
   public:
     SupplyTemp();
 
-    void Snoop(const NodeLib::Message& m);  // no-op unless Report SupplyTemp
+    void Snoop(const Message& m);            // no-op unless Report SupplyTemp
     void Loop();                             // ages out after staleTimeoutMs
 
     bool    Valid() const;
@@ -125,7 +127,7 @@ class SupplyTemp
 class RoomControlLoop
 {
   public:
-    RoomControlLoop(ThermostatLink& thermostatLink, const SupplyTemp& supplyTemp, Damper& damper);
+    RoomControlLoop(ThermostatLink& thermostatLink, const NodeLib::SupplyTemp& supplyTemp, Damper& damper);
 
     void Loop();
 
@@ -141,9 +143,9 @@ class RoomControlLoop
     static const uint32_t rampIntervalMs   = 36000;  // 1 point / 36s -> 30 min for the worst-case 50-point gap (§4.3)
     static const uint8_t  rampStepPercent  = 1;
 
-    ThermostatLink&   thermostatLink;
-    const SupplyTemp& supplyTemp;
-    Damper&           damper;
+    ThermostatLink&            thermostatLink;
+    const NodeLib::SupplyTemp& supplyTemp;
+    Damper&                    damper;
 
     uint8_t           budget;
     bool              connectionLost;
@@ -158,15 +160,26 @@ void RoomControlLoop::Loop()
     {
         StepBudgetRamp();
     }
-    if (damper.GetMode() != Damper::Mode::Auto || !thermostatLink.Room().valid)
+    if (damper.GetMode() != Damper::Mode::Auto)
     {
         return;
     }
 
-    const uint8_t desired = supplyTemp.Valid()
-        ? NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint)
-        : 0;  // no supply reading -- don't guess, stay closed
-    damper.SetTarget(desired < budget ? desired : budget);
+    uint8_t desired = Damper::NeutralPercent;  // no supply reading: the fail-safe position (§4.4)
+    if (supplyTemp.Valid())
+    {
+        if (!thermostatLink.Room().valid)
+        {
+            return;
+        }
+        desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint);
+    }
+
+    const uint8_t target = desired < budget ? desired : budget;
+    if (target != damper.Target())  // SetTarget() (re)starts a move -- repeating an unchanged target every
+    {                               // pass would keep the settle timer from running out and a stall from confirming
+        damper.SetTarget(target);
+    }
 }
 
 void RoomControlLoop::SetBudget(const uint8_t percent)
@@ -193,6 +206,16 @@ Wiring into `ControllerHandler`:
 
 While the main-bus connection is lost, a node's budget is not stuck wherever `MainController` last left it — it drifts back toward the `defaultBudget` (50%) over **30 minutes**, so a node cut off from `MainController` (bus fault, `MainController` reset, uplink-independent — this is main-bus liveness, not the uplink) eventually returns to sane, un-arbitrated behavior instead of staying pinned at whatever the last allocation was, possibly 0. Budget can only ever be 30–50 points from default in either direction (`[0,100]` range around a 50 default), so a fixed 1-point/36s step bounds the worst case at exactly 30 minutes; a smaller gap closes sooner. The ramp is cancelled — not reset, just stopped where it is — the moment a fresh `Set DamperBudget` arrives (`SetBudget()`, §4.2), which is what makes a live `MainController` connection self-evident without a separate liveness endpoint. This requires `MainController` to periodically re-`Set` `DamperBudget` for every online node even when unchanged (§5.3), on the same order as the existing keepalive cadence (`Node-Message-Model-Spec.md` §6.1) — otherwise a node whose fair allocation never changes would never learn its connection is still up.
 
+### 4.4 No supply reading — fail safe to 50%
+
+Without a valid `SupplyTemp` — the TemperatureNode is off the bus, or its supply probe failed (`DuctChannel` then stops reporting it and raises `SupplyTempSensorFault`), for `staleTimeoutMs` — no room's demand can be judged. The fail-safe is the building running as it would with no control at all: every damper at 50%. It is reached gradually and never above the budget:
+
+- **`ControllerNode`:** in `Auto`, `desired` becomes `Damper::NeutralPercent` (50%), whatever the room or thermostat state, and the damper goes to `min(desired, budget)` as always.
+- **`MainController`:** `Recompute()` stops allocating and instead moves each online node's budget one point toward 50% per recompute (`budgetStepPercent`, every 30 s — back at 50% within 25 minutes), starting from the node's own `DamperBudget` report, else what it last sent, else 50%. A node below 50% opens up as its budget rises; one above 50% stays at 50%.
+- **`MainController` gone too:** the disconnect ramp (§4.3) moves the budget to 50% the same way.
+
+A single failed probe therefore never leaves the building with every damper at its minimum stop, and never jumps a closed-down room wide open. When the supply reading returns, the next recompute allocates by demand again.
+
 ---
 
 ## 5. `MainController`: `BudgetAllocator`
@@ -216,30 +239,33 @@ class BudgetAllocator
   private:
     struct SRoom
     {
-        bool    known;
+        bool    known;      // temp + setpoint both reported
         int16_t temp;
         int16_t setpoint;
+        uint8_t budget;     // the node's DamperBudget -- its own Report, else what was last sent (§4.4)
     };
 
     void Recompute();
+    void StepBudgetsTowardDefault(const uint8_t* onlineIds, uint8_t onlineCount);  // §4.4
     void SendBudget(uint8_t nodeId, uint8_t percent);
 
     static const uint8_t  defaultBudgetPerNode = 50;   // pool = defaultBudgetPerNode * onlineCount
     static const uint32_t recomputeIntervalMs  = 30000;
+    static const uint8_t  budgetStepPercent    = 1;    // per recompute, without a supply reading (§4.4)
 
     NodeLib::NodeMaster& master;
-    int16_t               supplyTemp;
-    bool                  supplyValid;
+    NodeLib::SupplyTemp   supplyTemp;                // §4.1 -- same staleTimeoutMs as every ControllerNode
     SRoom                 room[NodeLib::MAX_NODES];  // indexed by nodeId - 1 (nodes 1..MAX_NODES)
     Tools::DelayTimer     recomputeTimer;
 };
 ```
 
-`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0.
+`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` and `DamperBudget` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0.
 
 ### 5.2 Allocation — `Recompute()`
 
 1. `pool = 50 * onlineCount` (`onlineCount` = nodes with `NodeMaster::NodeModule(id) == ControllerNode` that are `NodeActive()` and not `NodeInBootloader()`). `NodeMaster` keeps a lost node's module type, so the active check is what drops it; a node in its bootloader is excluded because it can't act on a budget. A node leaves the allocation at the next recompute (§5.3) after it is lost.
+   Without a valid supply reading the steps below are skipped: each online node's budget is stepped toward 50% instead (§4.4).
 2. `weight[i] = RoomDemandPercent(supplyTemp, room[i].temp, room[i].setpoint)` per online node (§2) — 0 for a room the current supply air can't help, exactly matching *"if the supply air is warm but setpoint is asking for cooling, budget can be low."*
 3. `weightSum == 0` (nobody has any demand) → split the pool evenly: `pool / onlineCount == 50` each — lands exactly back on the default, no special-casing needed.
 4. Otherwise `raw[i] = pool * weight[i] / weightSum`.

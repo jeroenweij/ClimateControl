@@ -56,9 +56,9 @@ class ControllerHandler : public NodeLib::INodeHandler
     void Report(const NodeLib::Endpoint endpoint, const uint8_t* const data, const uint8_t len);
     void Nack(const NodeLib::Message& m, const uint8_t reason);
 
-    NodeLib::Node&  node;
-    Damper&         damper;
-    ThermostatLink& thermostatLink;
-    SupplyTemp      supplyTemp;
-    RoomControlLoop roomControlLoop;
+    NodeLib::Node&      node;
+    Damper&             damper;
+    ThermostatLink&     thermostatLink;
+    NodeLib::SupplyTemp supplyTemp;
+    RoomControlLoop     roomControlLoop;
 };

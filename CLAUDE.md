@@ -24,12 +24,12 @@ ClimateControl/
     │   ├── Tools/           # DelayTimer + Logger — shared helpers
     │   ├── Nina/            # NINA-W152 driver shared by MainController and MainBootloader (NinaAt/NinaLineParser/NinaLink over a NinaPort)
     │   ├── Startup/         # shared startup_stm32g031xx.s + syscalls.c
-    │   └── NodeLib/          # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore
+    │   └── NodeLib/          # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore + shared room logic (RoomDemand, SupplyTemp)
     └── Modules/
         ├── Bootloader/       # bus-resident OTA bootloader — one binary for ControllerNode/TemperatureNode/Thermostat
         ├── MainBootloader/   # MainController's own bootloader — OTA over the NINA-W152 uplink instead of the bus
         ├── MainController/   # RS485 bus master + server uplink + BudgetAllocator
-        ├── ControllerNode/   # damper actuator slave: Damper, RoomControlLoop, SupplyTemp, ThermostatLink (link master)
+        ├── ControllerNode/   # damper actuator slave: Damper, RoomControlLoop, ThermostatLink (link master)
         ├── TemperatureNode/  # duct temperature slave node (DS18B20 1-Wire driver, DuctChannel/TemperatureHandler)
         └── Thermostat/       # room unit on the point-to-point link: CHT40 sensor, SSD1306 OLED, ThermostatHandler
 ```

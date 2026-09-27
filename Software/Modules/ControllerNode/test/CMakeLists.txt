@@ -5,7 +5,6 @@ cc_add_test(RoomControlLoopTests
         RoomControlLoopTests.cpp
         ${CN_DIR}/Damper.cpp
         ${CN_DIR}/ThermostatLink.cpp
-        ${CN_DIR}/SupplyTemp.cpp
         ${CN_DIR}/RoomControlLoop.cpp
     INCLUDES ${CN_DIR}
 )
@@ -19,7 +18,6 @@ cc_add_test(ControllerHandlerTests
         ControllerHandlerTests.cpp
         ${CN_DIR}/Damper.cpp
         ${CN_DIR}/ThermostatLink.cpp
-        ${CN_DIR}/SupplyTemp.cpp
         ${CN_DIR}/RoomControlLoop.cpp
         ${CN_DIR}/ControllerHandler.cpp
     INCLUDES ${CN_DIR}

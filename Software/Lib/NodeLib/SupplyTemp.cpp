@@ -10,6 +10,7 @@
 using NodeLib::Endpoint;
 using NodeLib::Message;
 using NodeLib::Operation;
+using NodeLib::SupplyTemp;
 
 namespace
 {

@@ -21,6 +21,8 @@ add_library(NodeLib STATIC
     LinkMaster.cpp
     RoomDemand.h
     RoomDemand.cpp
+    SupplyTemp.h
+    SupplyTemp.cpp
 )
 
 target_include_directories(NodeLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

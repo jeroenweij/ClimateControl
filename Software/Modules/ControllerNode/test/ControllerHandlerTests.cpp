@@ -343,7 +343,10 @@ CC_TEST(ControllerHandler, LoopReportsDamperActualOnceTheMoveSettles)
     ResetWorld();
     World w;
     Connect(w);
-    w.damper.SetTarget(80);
+    // Auto, no supply reading: the room loop holds min(50%, budget) -- a lower
+    // budget moves the damper.
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DamperBudget, Operation::Set), 30));
+    w.node.Loop();
 
     FakeClock::Advance(1500); // Damper's moveSettleMs
     Publish(w); // damper.Loop() finishes the move, actual changes -> reported
@@ -352,7 +355,7 @@ CC_TEST(ControllerHandler, LoopReportsDamperActualOnceTheMoveSettles)
     const int n = bus::DecodeTx(tx, 8);
     uint8_t   value;
     CC_CHECK(FindReport(tx, n, Endpoint::DamperActual, &value, 1));
-    CC_CHECK_EQ(value, 80);
+    CC_CHECK_EQ(value, 30);
 }
 
 CC_TEST(ControllerHandler, LoopReportsANewDamperTargetBeforeTheMoveSettles)
@@ -361,14 +364,15 @@ CC_TEST(ControllerHandler, LoopReportsANewDamperTargetBeforeTheMoveSettles)
     World w;
     Connect(w);
 
-    w.damper.SetTarget(77);
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DamperBudget, Operation::Set), 30)); // as above
+    w.node.Loop();
     Publish(w); // target changed, move still running
 
     Message   tx[8];
     const int n = bus::DecodeTx(tx, 8);
     uint8_t   value;
     CC_CHECK(FindReport(tx, n, Endpoint::DamperTarget, &value, 1));
-    CC_CHECK_EQ(value, 77);
+    CC_CHECK_EQ(value, 30);
     CC_CHECK(!FindReport(tx, n, Endpoint::DamperActual, &value, 1)); // not landed yet
 }
 

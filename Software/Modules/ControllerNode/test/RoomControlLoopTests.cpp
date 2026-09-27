@@ -19,6 +19,7 @@ using NodeLib::Id;
 using NodeLib::LinkMaster;
 using NodeLib::Message;
 using NodeLib::Operation;
+using NodeLib::SupplyTemp;
 
 namespace
 {
@@ -80,12 +81,13 @@ CC_TEST(RoomControlLoop, DoesNothingUntilTheRoomIsValid)
     SupplyTemp      supplyTemp;
     RoomControlLoop loop(thermostatLink, supplyTemp, damper);
 
-    const uint8_t before = damper.Target();
+    SeedSupply(supplyTemp, 1500); // with no supply reading the fail-safe applies instead
+    damper.SetTarget(30);
     loop.Loop();
-    CC_CHECK_EQ(damper.Target(), before);
+    CC_CHECK_EQ(damper.Target(), 30);
 }
 
-CC_TEST(RoomControlLoop, StaysClosedWithoutASupplyReading)
+CC_TEST(RoomControlLoop, GoesToTheNeutralPositionWithoutASupplyReading)
 {
     ResetWorld();
     LinkMaster      link;
@@ -94,10 +96,55 @@ CC_TEST(RoomControlLoop, StaysClosedWithoutASupplyReading)
     SupplyTemp      supplyTemp;
     RoomControlLoop loop(thermostatLink, supplyTemp, damper);
 
-    SeedRoom(thermostatLink, 2400, 1800); // 24.0C room, 18.0C setpoint -- wants cooling
+    SeedRoom(thermostatLink, 2400, 1800); // wants cooling -- but no supply to judge it by
+    damper.SetTarget(10);
     loop.Loop();
 
-    CC_CHECK_EQ(damper.Target(), 0); // no supply reading -- don't guess
+    CC_CHECK_EQ(damper.Target(), Damper::NeutralPercent);
+}
+
+CC_TEST(RoomControlLoop, TheNoSupplyPositionFollowsTheBudgetButNeverExceedsIt)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    // No room data either -- the fail-safe doesn't depend on the thermostat.
+    loop.SetBudget(20);
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 20); // capped by the budget
+
+    loop.SetBudget(21); // MainController walking the budget back up
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 21); // the damper follows
+
+    loop.SetBudget(80);
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), Damper::NeutralPercent); // and stops at neutral
+}
+
+CC_TEST(RoomControlLoop, FallsBackToNeutralOnceTheSupplyReadingGoesStale)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 1850, 1800); // small demand
+    SeedSupply(supplyTemp, 1500);
+    loop.Loop();
+    CC_CHECK(damper.Target() < Damper::NeutralPercent);
+
+    FakeClock::Advance(5 * 60 * 1000); // SupplyTemp's staleTimeoutMs, nothing heard
+    supplyTemp.Loop();
+    CC_CHECK(!supplyTemp.Valid());
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), Damper::NeutralPercent);
 }
 
 CC_TEST(RoomControlLoop, DemandBelowBudgetDoesNotPinTheDamperAtTheCeiling)
@@ -251,4 +298,55 @@ CC_TEST(RoomControlLoop, RampRunsEvenWithoutRoomData)
     FakeClock::Advance(36000);
     loop.Loop(); // room never seeded -- the ramp must not depend on it
     CC_CHECK_EQ(loop.Budget(), 11);
+}
+
+namespace
+{
+    // One main-loop pass as ControllerHandler::Loop() runs it.
+    void RunFor(RoomControlLoop& loop, Damper& damper, const uint32_t ms)
+    {
+        for (uint32_t t = 0; t < ms; t += 10)
+        {
+            FakeClock::Advance(10);
+            loop.Loop();
+            damper.Loop();
+        }
+    }
+} // namespace
+
+CC_TEST(RoomControlLoop, AnUnchangedTargetLetsTheMoveSettle)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 1850, 1800); // small demand -- a target below the 50% start
+    SeedSupply(supplyTemp, 1500);
+    RunFor(loop, damper, 2000); // past Damper::moveSettleMs (1.5 s)
+
+    // Re-asserting the same target every pass must not restart the move --
+    // the servo settles, reports it, and powers down.
+    CC_CHECK(damper.Target() < 50);
+    CC_CHECK_EQ(damper.Actual(), damper.Target());
+}
+
+CC_TEST(RoomControlLoop, AnUnchangedTargetLeavesStallDetectionWorking)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 1850, 1800);
+    SeedSupply(supplyTemp, 1500);
+    loop.Loop(); // starts the move
+    FakeAdc::SetValue(1000); // jammed: well over Damper::stallThresholdCounts
+    RunFor(loop, damper, 400); // past Damper::stallConfirmMs (200 ms)
+
+    CC_CHECK(damper.Stalled());
 }
