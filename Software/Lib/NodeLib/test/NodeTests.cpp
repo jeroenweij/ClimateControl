@@ -201,6 +201,7 @@ CC_TEST(Node, SystemInfoReportsModuleAndFirmwareVersion)
     CC_CHECK(FindMessage(tx, n, Endpoint::SystemInfo, Operation::Report, &idx));
     CC_CHECK_EQ(tx[idx].len, 6);
     CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(ModuleType::ControllerNode));
+    CC_CHECK_EQ(tx[idx].data[1], 1); // hwRev: CC_HW_REVISION, 1 in test/CMakeLists.txt as in the firmware build
     // FakeImageDescriptor.cpp bakes in fwVersionMajor=0, fwVersionMinor=1.
     CC_CHECK_EQ(tx[idx].data[2], 0);
     CC_CHECK_EQ(tx[idx].data[3], 0);

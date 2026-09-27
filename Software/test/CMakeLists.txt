@@ -19,6 +19,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Match the language subset the firmware is built with.
 add_compile_options(-Wall -Wextra -fno-exceptions -fno-rtti -g -O1)
 
+# Same board hardware revision the firmware build sets (top-level CC_HW_REVISION).
+add_compile_definitions(CC_HW_REVISION=1)
+
 enable_testing()
 
 set(CC_SW_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)

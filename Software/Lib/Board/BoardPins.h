@@ -53,6 +53,14 @@ namespace Board
         {BusDe, 1},
     };
 
+    // Hardware revision reported in SystemInfo (hwRev). Supplied by the build
+    // (CC_HW_REVISION in the top-level CMake); the fallback keeps a bare
+    // compile (an IDE indexer, a unit-test TU) working.
+#ifndef CC_HW_REVISION
+#define CC_HW_REVISION 0
+#endif
+    constexpr uint8_t HwRevision = CC_HW_REVISION;
+
     // Wire bit rate for the RS485 main bus and the ControllerNode<->Thermostat
     // link -- not an exact integer USART divisor (~0.08% generator error,
     // negligible next to the HSI16 clock spread), well within range for the

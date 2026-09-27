@@ -36,7 +36,7 @@ enum class Endpoint : uint8_t
     Transport      = 0x00,  // operation field carries Discover / Announce / Poll / Done
 
     // 0x1_  system — every node; NodeLib supplies the handler
-    SystemInfo     = 0x10,  // RO  module, hwRev, fwVersion, uid[12]
+    SystemInfo     = 0x10,  // RO  module, hwRev (build setting CC_HW_REVISION), fwVersion, uid[12]
     SystemStatus   = 0x11,  // RO  state, uptimeSec, errorFlags, resetCause  (also pushed whenever state/errorFlags change)
     SystemControl  = 0x12,  // WO  Set: 1=reset->app  2=reset->bootloader  3=identify(seconds)
 

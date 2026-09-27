@@ -318,7 +318,7 @@ void Node::HandleSystemMessage(const Message& m)
             // No UID -- physical-board id is not carried on the bus.
             const uint8_t info[6] = {
                 static_cast<uint8_t>(ConfigStore::GetModule()),
-                0, // hwRev -- TODO: strap pin / ConfigRecord settings
+                Board::HwRevision,
                 static_cast<uint8_t>(gImageDescriptor.fwVersionMajor),
                 static_cast<uint8_t>(gImageDescriptor.fwVersionMajor >> 8),
                 static_cast<uint8_t>(gImageDescriptor.fwVersionMinor),
