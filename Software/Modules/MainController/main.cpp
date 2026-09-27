@@ -50,8 +50,5 @@ int main()
         master.Loop();
         budgetAllocator.Loop();
         Tools::BootHealth::ConfirmBootHealthy();
-
-        // TODO: further supervisory logic (MainController-Spec.md §2) --
-        // expose aggregate state, detect faults.
     }
 }

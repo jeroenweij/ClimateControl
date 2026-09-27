@@ -457,14 +457,8 @@ void Node::HandleDiagnosticsMessage(const Message& m)
                 SendNack(m);
                 break;
             }
-            // code(1) uptimeAtFault(4) context(2): the fault that last reset
-            // this node (Hal::Fault), all zero if none since power-on.
-            const Hal::Fault::Record fault = Hal::Fault::Last();
-            uint8_t                  payload[7];
-            payload[0] = static_cast<uint8_t>(fault.code);
-            PackU32(&payload[1], fault.uptimeMs);
-            payload[5] = static_cast<uint8_t>(fault.context);
-            payload[6] = static_cast<uint8_t>(fault.context >> 8);
+            uint8_t payload[LastErrorPayloadSize];
+            BuildLastErrorPayload(payload);
             SendReport(Endpoint::DiagLastError, payload, sizeof(payload));
             break;
         }
@@ -516,14 +510,30 @@ void Node::SendReport(const Endpoint endpoint, const uint8_t* const data, const 
     QueueMessage(Id(nodeId, endpoint, Operation::Report), data, len);
 }
 
+void Node::BuildStatusPayload(const SystemStatus& status, uint8_t* const out)
+{
+    out[0] = status.state;
+    PackU32(&out[1], Hal::Tick::Millis() / 1000u);
+    out[5] = static_cast<uint8_t>(status.errorFlags);
+    out[6] = static_cast<uint8_t>(status.errorFlags >> 8);
+    out[7] = Hal::System::ResetCause();
+}
+
+void Node::BuildLastErrorPayload(uint8_t* const out)
+{
+    // The fault that last reset this device (Hal::Fault), all zero if none
+    // since power-on or the last DiagReset.
+    const Hal::Fault::Record fault = Hal::Fault::Last();
+    out[0]                         = static_cast<uint8_t>(fault.code);
+    PackU32(&out[1], fault.uptimeMs);
+    out[5] = static_cast<uint8_t>(fault.context);
+    out[6] = static_cast<uint8_t>(fault.context >> 8);
+}
+
 void Node::SendStatus(const SystemStatus& status)
 {
-    uint8_t payload[8];
-    payload[0] = status.state;
-    PackU32(&payload[1], Hal::Tick::Millis() / 1000u);
-    payload[5] = static_cast<uint8_t>(status.errorFlags);
-    payload[6] = static_cast<uint8_t>(status.errorFlags >> 8);
-    payload[7] = Hal::System::ResetCause();
+    uint8_t payload[StatusPayloadSize];
+    BuildStatusPayload(status, payload);
     SendReport(Endpoint::SystemStatus, payload, sizeof(payload));
 }
 

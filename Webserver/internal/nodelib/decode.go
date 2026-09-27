@@ -89,10 +89,11 @@ func DecodeValue(e Endpoint, data []byte) Value {
 			return raw
 		}
 		return Value{Kind: "struct", Fields: map[string]any{
-			"state":      data[0],
-			"uptimeSec":  u32(data[1:]),
-			"errorFlags": u16(data[5:]),
-			"resetCause": data[7],
+			"state":           data[0],
+			"uptimeSec":       u32(data[1:]),
+			"errorFlags":      u16(data[5:]),
+			"resetCause":      data[7],
+			"resetCauseNames": ResetCauseNames(data[7]),
 		}}
 
 	case EndpointDiagRxCounters:
@@ -121,6 +122,7 @@ func DecodeValue(e Endpoint, data []byte) Value {
 		}
 		return Value{Kind: "struct", Fields: map[string]any{
 			"code":          data[0],
+			"codeName":      FaultCodeName(data[0]),
 			"uptimeAtFault": u32(data[1:]),
 			"context":       u16(data[5:]),
 		}}

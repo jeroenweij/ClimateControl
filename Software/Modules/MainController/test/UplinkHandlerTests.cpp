@@ -7,9 +7,11 @@
 #include "BoardPins.h"
 #include "EEndpoint.h"
 #include "EOperation.h"
+#include "Fault.h"
 #include "NodeMaster.h"
 
 #include "BusHelpers.h"
+#include "FakeBackup.h"
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
@@ -507,6 +509,78 @@ CC_TEST(UplinkHandler, SystemControlForABusNodeIsStillRelayed)
     CC_CHECK(!Access::ResetPending(uplink)); // the MainController itself is untouched
     CC_CHECK_EQ(Access::Queued(uplink), 0);
     CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemControl), 1);
+}
+
+CC_TEST(UplinkHandler, SystemStatusForTheMainControllerIsAnsweredHere)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+    FakeClock::Advance(125000);
+
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::SystemStatus, Operation::Get)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    const Message& r = Access::Queue(uplink, 0);
+    CC_CHECK_EQ(r.id.node, 0);
+    CC_CHECK(r.id.endpoint == Endpoint::SystemStatus);
+    CC_CHECK(r.id.operation == Operation::Report);
+    CC_CHECK_EQ(r.len, 8);
+    CC_CHECK_EQ(r.data[0], 0); // state
+    const uint32_t uptimeSec = r.data[1] | (r.data[2] << 8) | (r.data[3] << 16) | (static_cast<uint32_t>(r.data[4]) << 24);
+    CC_CHECK(uptimeSec >= 125);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemStatus), 0);
+}
+
+CC_TEST(UplinkHandler, DiagLastErrorForTheMainControllerReportsItsFaultUntilDiagReset)
+{
+    ResetWorld();
+    FakeBackup::Reset();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+    Hal::Fault::Save(Hal::Fault::Code::Watchdog, 654321, 0);
+
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::DiagLastError, Operation::Get)));
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    const Message& r = Access::Queue(uplink, 0);
+    CC_CHECK(r.id.endpoint == Endpoint::DiagLastError);
+    CC_CHECK(r.id.operation == Operation::Report);
+    CC_CHECK_EQ(r.len, 7);
+    CC_CHECK_EQ(r.data[0], static_cast<uint8_t>(Hal::Fault::Code::Watchdog));
+    CC_CHECK_EQ(r.data[1] | (r.data[2] << 8) | (r.data[3] << 16), 654321);
+
+    Access::ClearQueue(uplink);
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::DiagReset, Operation::Set), static_cast<uint8_t>(0)));
+    CC_CHECK_EQ(Access::Queued(uplink), 1);
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Ack);
+    CC_CHECK(Hal::Fault::Last().code == Hal::Fault::Code::None);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::DiagLastError), 0);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::DiagReset), 0);
+}
+
+CC_TEST(UplinkHandler, OtherRequestsForTheMainControllerAreNackedNotRelayed)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    UplinkHandler   uplink(master, allocator);
+    TwoNodesUp(master);
+
+    // Wrong verb on a served endpoint, and an endpoint the MainController
+    // doesn't serve -- there is no node 0 on the bus to pass either to.
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::SystemStatus, Operation::Set), static_cast<uint8_t>(1)));
+    Access::HandleUplinkFrame(uplink, Message(Id(0, Endpoint::SystemInfo, Operation::Get)));
+
+    CC_CHECK_EQ(Access::Queued(uplink), 2);
+    CC_CHECK(Access::Queue(uplink, 0).id.operation == Operation::Nack);
+    CC_CHECK(Access::Queue(uplink, 1).id.endpoint == Endpoint::SystemInfo);
+    CC_CHECK(Access::Queue(uplink, 1).id.operation == Operation::Nack);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemStatus), 0);
+    CC_CHECK_EQ(BusFramesFor(master, Endpoint::SystemInfo), 0);
 }
 
 CC_TEST(UplinkHandler, OtaFramesAreIgnoredByTheRunningApp)

@@ -50,6 +50,14 @@ namespace NodeLib
         // Spec.md) with no other node to collide with, so it passes 0.
         Node(const Hal::Uart::Instance instance, const Hal::UartPins& pins, const int32_t announceSpacingOverride);
 
+        // The SystemStatus and DiagLastError Report payloads, for whoever
+        // answers for this device: Node for a bus slave, UplinkHandler for the
+        // MainController itself (node 0, MainController-Server-Link-Spec.md §5).
+        static const uint8_t StatusPayloadSize    = 8; // state(1) uptimeSec(4) errorFlags(2) resetCause(1)
+        static const uint8_t LastErrorPayloadSize = 7; // code(1) uptimeAtFault(4) context(2)
+        static void          BuildStatusPayload(const SystemStatus& status, uint8_t* const out);
+        static void          BuildLastErrorPayload(uint8_t* const out);
+
         void RegisterHandler(INodeHandler* handler);
         void QueueMessage(const Message& m);
         void QueueMessage(const Id& id, const uint8_t* const data, const uint8_t len);

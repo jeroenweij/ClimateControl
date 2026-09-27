@@ -173,6 +173,9 @@ func (s *Service) OnConnect(h nodelib.UplinkHello) {
 	s.mu.Unlock()
 	// After the state above, so a browser that refetches on this event sees it.
 	s.hb.SetUplink(true, boot)
+	if !boot {
+		s.requestMainStatus()
+	}
 	s.reassertOverrides(0)
 	s.kickOta() // resume any push that was waiting for the downlink
 }
@@ -189,6 +192,10 @@ func (s *Service) OnDisconnect() {
 func (s *Service) OnNodeFrame(f nodelib.Frame) {
 	ctx := context.Background()
 	node := int(f.Node)
+	if node == 0 {
+		s.onMainFrame(f) // the MainController answering for itself, not a bus node
+		return
+	}
 
 	switch f.Operation {
 	case nodelib.OpReport:

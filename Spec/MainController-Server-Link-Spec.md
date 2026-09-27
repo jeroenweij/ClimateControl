@@ -114,6 +114,19 @@ MainController has no hardware debug console (both USARTs are committed, `MainCo
 - **RTT (bench backup, off by default).** The CMake option `CC_MC_LOG_RTT` (default `OFF`) compiles a minimal SEGGER RTT control block (`_SEGGER_RTT`, one up-channel, one idle down-channel; `Software/Modules/MainController/RttLog.cpp`) into `mainController` and makes `Logger::Write` write each line to RTT up-channel 0 in non-blocking skip mode (`NO_BLOCK_SKIP`: a line that does not fit in the free space is dropped whole), so it can never stall the super-loop. It needs no pin, no UART and no extra hardware beyond the J-Link already used for flashing (`JLinkRTTClient` / `JLinkRTTLogger`), and costs ~0.6 KB of SRAM for the control block and a 512-byte up-buffer when enabled — nothing when off. A bit-banged UART on a spare pin is not used: at 9600 baud it busy-waits ~1 ms per character and stalls the bus loop. PA5 (the `ONEWIRE` net) is unused on the MainController.
 - **Bootloader.** `MainBootloader` has no log (`Tools::Logger` is not linked, to stay inside the 10 KB budget); it reports through its LEDs only.
 
+### 5.2 MainController status (`NODE = 0`)
+
+A relayed-range endpoint (`0x10`–`0x5F`) addressed to `NODE = 0` is for the MainController itself and never goes onto the bus — there is no node `0` there. `UplinkHandler` answers these for itself, in the same payloads a bus node uses (`Node-Message-Model-Spec.md` §3, built by the same `Node` helpers):
+
+| Endpoint | Op | Answer |
+|---|---|---|
+| `SystemControl` | `Set` | reset to app (`1`) / bootloader (`2`), §8 step 7 |
+| `SystemStatus` | `Get` | `Report`: `state` and `errorFlags` 0 (none defined for the MainController), its uptime and reset cause |
+| `DiagLastError` | `Get` | `Report`: the fault that last reset it — HardFault (with the faulting PC) or watchdog — from `Hal::Fault` (`Node-Flash-Layout-and-Bootloader-Spec.md` §5) |
+| `DiagReset` | `Set` | clears that fault record, `Ack` |
+
+Anything else, or the wrong verb, is `Nack`ed. The server asks for `SystemStatus` and `DiagLastError` once each time the MainController application connects (a reset always reconnects) — not its bootloader, which answers neither. It stores the replies under node `0` in `readings` and publishes them to the browser, but keeps node `0` out of the bus-node roster; the status page shows when the MainController started, the reset cause, and the last fault, and the server logs a warning when a fault is reported.
+
 ---
 
 ## 6. Server architecture

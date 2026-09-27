@@ -584,7 +584,8 @@ function onValue(msg) {
     const floor = state.floors.find((f) => String(f.id) === String($("#floor-select").value));
     if (floor) paintOverlay($("#map-overlay"), floor, false);
   } else if (currentView() === "status") {
-    renderNodeTable();
+    if (msg.node === 0) renderMainStatus();
+    else renderNodeTable();
   }
 }
 
@@ -928,16 +929,43 @@ $("#node-log-clear").addEventListener("click", () => {
   renderNodeLog();
 });
 
+// The MainController's own SystemStatus / DiagLastError, asked for on every
+// connect (node 0): when it last started, why, and the fault that last reset it.
+function mainSelfStatus(kv) {
+  const st = state.values.get(key(0, "SystemStatus"));
+  const le = state.values.get(key(0, "DiagLastError"));
+  let html = "";
+  if (st && st.value.fields) {
+    const f = st.value.fields;
+    html += kv("running since", new Date(st.ts - f.uptimeSec * 1000).toLocaleString());
+    html += kv("reset cause", (f.resetCauseNames || []).join(", ") || "—");
+  }
+  if (le && le.value.fields) {
+    const f = le.value.fields;
+    let text = "none";
+    if (f.code === 1) text = `HardFault at 0x${(0x08000000 + f.context).toString(16).padStart(8, "0")}`;
+    else if (f.code !== 0) text = f.codeName;
+    if (f.code !== 0) text += ` after ${Math.round(f.uptimeAtFault / 1000)} s`;
+    html += kv("last fault", text);
+  }
+  return html;
+}
+
 function renderMainStatus() {
   const s = state.main && state.main.status;
   const el = $("#main-status");
-  if (!s || state.bootloader) {
-    el.innerHTML = `<div><b>${state.uplinkUp ? (state.bootloader ? "bootloader" : "connected") : "no MainController"}</b><span>uplink</span></div>`;
+  const kv = (label, val) => `<div><b>${val}</b><span>${label}</span></div>`;
+  if (!state.uplinkUp || state.bootloader) {
+    el.innerHTML = kv("uplink", state.uplinkUp ? "bootloader" : "no MainController");
     return;
   }
-  const kv = (label, val) => `<div><b>${val}</b><span>${label}</span></div>`;
+  if (!s) {
+    el.innerHTML = kv("uplink", "connected") + mainSelfStatus(kv);
+    return;
+  }
   el.innerHTML =
     kv("uplink", state.uplinkUp ? "up" : "down") +
+    mainSelfStatus(kv) +
     kv("rx frames", s.rxFrames) +
     kv("crc errors", s.crcErrors) +
     kv("resyncs", s.resyncs) +

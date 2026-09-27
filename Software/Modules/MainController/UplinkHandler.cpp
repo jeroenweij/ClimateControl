@@ -6,6 +6,7 @@
 
 #include "Backup.h"
 #include "BoardPins.h"
+#include "Fault.h"
 #include "ImageDescriptor.h"
 #include "LogRing.h"
 #include "Logger.h"
@@ -19,6 +20,7 @@
 using NodeLib::Endpoint;
 using NodeLib::Id;
 using NodeLib::Message;
+using NodeLib::Node;
 using NodeLib::NodeMaster;
 using NodeLib::Operation;
 
@@ -172,6 +174,11 @@ void UplinkHandler::HandleUplinkFrame(const Message& message)
         HandleSelfControl(message);
         return;
     }
+    if (message.id.node == 0 && IsRelayedEndpoint(message.id.endpoint))
+    {
+        HandleSelfRequest(message);
+        return;
+    }
 
     if (IsRelayedEndpoint(message.id.endpoint))
     {
@@ -203,6 +210,49 @@ void UplinkHandler::HandleSelfControl(const Message& message)
     EnqueueUplink(Message(Id(0, Endpoint::SystemControl, Operation::Ack)));
     resetToBootloader = (message.data[0] == 2);
     resetPending      = true;
+}
+
+void UplinkHandler::HandleSelfRequest(const Message& message)
+{
+    Message reply(Id(0, message.id.endpoint, Operation::Report));
+    switch (message.id.endpoint)
+    {
+        case Endpoint::SystemStatus:
+            if (message.id.operation == Operation::Get)
+            {
+                // No MainController-specific state or error bits yet -- the
+                // uptime and reset cause are what it has to say.
+                const NodeLib::SystemStatus status{};
+                Node::BuildStatusPayload(status, reply.data);
+                reply.len = Node::StatusPayloadSize;
+                EnqueueUplink(reply);
+                return;
+            }
+            break;
+
+        case Endpoint::DiagLastError:
+            if (message.id.operation == Operation::Get)
+            {
+                Node::BuildLastErrorPayload(reply.data);
+                reply.len = Node::LastErrorPayloadSize;
+                EnqueueUplink(reply);
+                return;
+            }
+            break;
+
+        case Endpoint::DiagReset:
+            if (message.id.operation == Operation::Set)
+            {
+                Hal::Fault::Clear();
+                EnqueueUplink(Message(Id(0, Endpoint::DiagReset, Operation::Ack)));
+                return;
+            }
+            break;
+
+        default:
+            break;
+    }
+    EnqueueUplink(Message(Id(0, message.id.endpoint, Operation::Nack)));
 }
 
 void UplinkHandler::PerformPendingReset()

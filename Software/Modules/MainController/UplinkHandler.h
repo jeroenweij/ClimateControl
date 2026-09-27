@@ -67,7 +67,12 @@ class UplinkHandler : public NodeLib::INodeHandler, public NinaLinkHandler
     // relayed onto the bus): 1 = reset -> app, 2 = reset -> bootloader.
     // Acks, then arms resetPending -- the reset itself runs from
     // AfterFrames() once the Ack has been written out.
-    void              HandleSelfControl(const NodeLib::Message& message);
+    void HandleSelfControl(const NodeLib::Message& message);
+    // Any other relayed-range endpoint addressed to NODE = 0: the
+    // MainController answers SystemStatus / DiagLastError / DiagReset for
+    // itself, the way a bus node answers for itself; everything else is
+    // Nacked -- there is no node 0 on the bus to relay it to.
+    void              HandleSelfRequest(const NodeLib::Message& message);
     [[noreturn]] void PerformPendingReset();
     void              SendRoster();
     // Diffs every node's current active/bootloader state against the
