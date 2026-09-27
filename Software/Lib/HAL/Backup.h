@@ -21,6 +21,9 @@ namespace Hal
         {
             Boot        = 0, // TAMP->BKP0R -- Board::EnterBootloaderMagic
             BootCounter = 1, // TAMP->BKP1R -- optional boot-fail counter
+            FaultInfo   = 2, // TAMP->BKP2R -- Hal::Fault record: code(8) << 16 | context(16)
+            FaultUptime = 3, // TAMP->BKP3R -- Hal::Fault record: uptime at the fault, ms
+            AliveUptime = 4, // TAMP->BKP4R -- uptime at the last Hal::Watchdog::Feed(), ms
         };
 
         // Enables backup-domain write access on first use.

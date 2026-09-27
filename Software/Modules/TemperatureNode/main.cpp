@@ -8,9 +8,11 @@
 
 #include "BoardPins.h"
 #include "BootHealth.h"
+#include "Fault.h"
 #include "Logger.h"
 #include "MemoryMap.h"
 #include "System.h"
+#include "Watchdog.h"
 
 #include "Node.h"
 
@@ -22,6 +24,7 @@ int main()
     // before anything can fault (Node-Flash-Layout-and-Bootloader-Spec.md §4.1).
     Hal::System::SetVectorTable(Board::Flash::AppBase);
     Hal::System::Init();
+    Hal::Fault::Init(); // records a watchdog reset before anything else runs
 
     // 64 MHz from the HSI16 through the PLL -- before any peripheral comes
     // up, since UART baud and the rest are derived from the clock. Still
@@ -38,8 +41,10 @@ int main()
     node.RegisterHandler(&handler);
     node.Init(); // reads the provisioned NodeId from flash; halts if unprovisioned
 
+    Hal::Watchdog::Start();
     while (true)
     {
+        Hal::Watchdog::Feed();
         handler.Loop();
         node.Loop();
         Tools::BootHealth::ConfirmBootHealthy();

@@ -60,7 +60,15 @@ void Hal::System::Reset()
 
 uint8_t Hal::System::ResetCause()
 {
-    return static_cast<uint8_t>(RCC->CSR >> 24U);
+    static bool    latched = false;
+    static uint8_t cause   = 0;
+    if (!latched)
+    {
+        cause = static_cast<uint8_t>(RCC->CSR >> 24U);
+        RCC->CSR |= RCC_CSR_RMVF;
+        latched = true;
+    }
+    return cause;
 }
 
 void Hal::System::JumpToApplication(const uint32_t flashBase)

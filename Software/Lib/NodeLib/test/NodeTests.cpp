@@ -8,10 +8,12 @@
 #include "EEndpoint.h"
 #include "EFirmware.h"
 #include "EOperation.h"
+#include "Fault.h"
 #include "LogRing.h"
 #include "Node.h"
 
 #include "BusHelpers.h"
+#include "FakeBackup.h"
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
@@ -46,6 +48,7 @@ namespace
     void ResetWorld()
     {
         FakeBus::Reset();
+        FakeBackup::Reset();
         FakeClock::Reset();
         FakeConfig::Reset();
         FakeConfig::SetValid(true);
@@ -318,6 +321,40 @@ CC_TEST(Node, DiagTxCountersIncrementsAndDiagResetZeroesItAgain)
     // this flush's own Ack/Report/Done writes ever increment txFrames again
     // -- so the reported value is exactly 0, not just "lower than before".
     CC_CHECK_EQ(ReadU32(tx[idx].data), 0);
+}
+
+CC_TEST(Node, DiagLastErrorReportsTheSavedFaultUntilDiagResetClearsIt)
+{
+    ResetWorld();
+    // What HardFault_Handler leaves behind across its reset.
+    Hal::Fault::Save(Hal::Fault::Code::HardFault, 123456, 0x2A5C);
+    Node node;
+    node.Init();
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLastError, Operation::Get)));
+    Flush(node);
+
+    Message tx[8];
+    int     n = bus::DecodeTx(tx, 8);
+    int     idx;
+    CC_CHECK(FindMessage(tx, n, Endpoint::DiagLastError, Operation::Report, &idx));
+    CC_CHECK_EQ(tx[idx].len, 7);
+    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(Hal::Fault::Code::HardFault));
+    CC_CHECK_EQ(ReadU32(&tx[idx].data[1]), 123456);
+    CC_CHECK_EQ(tx[idx].data[5], 0x5C);
+    CC_CHECK_EQ(tx[idx].data[6], 0x2A);
+
+    FakeBus::Reset();
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagReset, Operation::Set), static_cast<uint8_t>(0)));
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DiagLastError, Operation::Get)));
+    Flush(node);
+
+    n = bus::DecodeTx(tx, 8);
+    CC_CHECK(FindMessage(tx, n, Endpoint::DiagLastError, Operation::Report, &idx));
+    for (int i = 0; i < 7; i++)
+    {
+        CC_CHECK_EQ(tx[idx].data[i], 0);
+    }
 }
 
 CC_TEST(Node, HeartbeatNeverFiresBeforeTheFirstPoll)

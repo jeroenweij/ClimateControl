@@ -24,6 +24,11 @@ set(HAL_CORE_SOURCES
     System.cpp
     Backup.h
     Backup.cpp
+    Fault.h
+    Fault.cpp
+    FaultHandler.cpp
+    Watchdog.h
+    Watchdog.cpp
 
     ${VENDOR_DIR}/CMSIS/Device/ST/STM32G0xx/Source/Templates/system_stm32g0xx.c
 

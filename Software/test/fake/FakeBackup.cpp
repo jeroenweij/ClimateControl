@@ -8,15 +8,17 @@
 
 namespace
 {
-    uint32_t registers[2] = {0, 0};
+    uint32_t registers[5] = {};
 } // namespace
 
 namespace FakeBackup
 {
     void Reset()
     {
-        registers[0] = 0;
-        registers[1] = 0;
+        for (uint32_t& value : registers)
+        {
+            value = 0;
+        }
     }
 } // namespace FakeBackup
 

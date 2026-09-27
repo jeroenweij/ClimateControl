@@ -38,8 +38,11 @@ namespace Hal
         [[noreturn]] void Reset();
 
         // RCC_CSR[31:24] reset-flag byte (OBL / PIN / BOR / SW / IWDG / WWDG /
-        // LPWR). The flags are sticky until cleared, so this reads live and is
-        // surfaced verbatim on Endpoint::SystemStatus for the master to decode.
+        // LPWR), surfaced verbatim on Endpoint::SystemStatus for the master to
+        // decode. The first call latches the byte and clears the sticky flags
+        // (RMVF), so it describes the reset(s) since the previous boot's first
+        // call -- the application makes that call at startup through
+        // Hal::Fault::Init(); the bootloaders never call it.
         uint8_t ResetCause();
     } // namespace System
 } // namespace Hal

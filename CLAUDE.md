@@ -19,19 +19,22 @@ ClimateControl/
     ├── cmake/              # ARM Cortex-M0+ toolchain file + stm32.cmake (add_stm32_executable)
     ├── test/               # host-native unit-test project (framework + Hal fakes); suites live per-module in Lib/*/test and Modules/*/test
     ├── Lib/
-    │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL (Uart/Gpio/Crc/Flash/Backup/Tick/System/OneWire) — the only place ST driver headers get included
+    │   ├── HAL/             # thin wrapper around STM32Cube HAL/LL (Uart/Gpio/Crc/Flash/Backup/Fault/Watchdog/Tick/System/OneWire) — the only place ST driver headers get included
     │   ├── Board/           # BoardPins.h (pin map) + MemoryMap.h / ImageDescriptor.h (flash layout) — header-only
     │   ├── Tools/           # DelayTimer + Logger — shared helpers
     │   ├── Nina/            # NINA-W152 driver shared by MainController and MainBootloader (NinaAt/NinaLineParser/NinaLink over a NinaPort)
     │   ├── Startup/         # shared startup_stm32g031xx.s + syscalls.c
     │   └── NodeLib/          # RS485 v2 protocol (Node/NodeMaster/Id/Message/Endpoint/Operation) + ConfigStore
     └── Modules/
-        ├── Bootloader/       # bus-resident OTA bootloader — one binary for all boards (base skeleton)
-        ├── MainController/   # RS485 bus master (base skeleton)
-        └── TemperatureNode/  # duct temperature slave node — framework in place (DS18B20 1-Wire driver, DuctChannel/TemperatureHandler)
+        ├── Bootloader/       # bus-resident OTA bootloader — one binary for ControllerNode/TemperatureNode/Thermostat
+        ├── MainBootloader/   # MainController's own bootloader — OTA over the NINA-W152 uplink instead of the bus
+        ├── MainController/   # RS485 bus master + server uplink + BudgetAllocator
+        ├── ControllerNode/   # damper actuator slave: Damper, RoomControlLoop, SupplyTemp, ThermostatLink (link master)
+        ├── TemperatureNode/  # duct temperature slave node (DS18B20 1-Wire driver, DuctChannel/TemperatureHandler)
+        └── Thermostat/       # room unit on the point-to-point link: CHT40 sensor, SSD1306 OLED, ThermostatHandler
 ```
 
-`ControllerNode/` and `Thermostat/` are not created yet. Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. `Bootloader`, `MainController` and `TemperatureNode` build today (`make -C Software build`, or the `Software/` CMake project directly); `ControllerNode` and `Thermostat` don't exist yet. The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
+Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. All six modules build (`make -C Software build`, or the `Software/` CMake project directly). The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
 
 ## System architecture
 

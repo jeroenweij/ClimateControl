@@ -4,6 +4,7 @@
 
 #include "Backup.h"
 #include "BoardPins.h"
+#include "Fault.h"
 #include "ImageDescriptor.h"
 #include "LogRing.h"
 #include "Logger.h"
@@ -111,6 +112,13 @@ void Node::Init()
             LOG_ERROR("Provisioned Node Id out of range: " << nodeId);
             errorHandler.Error(false); // never returns
         }
+    }
+
+    const Hal::Fault::Record fault = Hal::Fault::Last();
+    if (fault.code != Hal::Fault::Code::None)
+    {
+        // One DiagLog line is 32 characters -- the full record is on DiagLastError.
+        LOG_WARN("Fault " << static_cast<int>(fault.code) << " @" << fault.uptimeMs << "ms ctx " << fault.context);
     }
 
     uart.Init(Board::BusBaudRate, busInstance, busPins);
@@ -449,10 +457,14 @@ void Node::HandleDiagnosticsMessage(const Message& m)
                 SendNack(m);
                 break;
             }
-            // code(1) uptimeAtFault(4) context(2). TODO: capture in ErrorHandler
-            // -- a non-recoverable Error() halts the CPU so this only ever
-            // reports recoverable faults; zeroed until that path exists.
-            const uint8_t payload[7] = {0, 0, 0, 0, 0, 0, 0};
+            // code(1) uptimeAtFault(4) context(2): the fault that last reset
+            // this node (Hal::Fault), all zero if none since power-on.
+            const Hal::Fault::Record fault = Hal::Fault::Last();
+            uint8_t                  payload[7];
+            payload[0] = static_cast<uint8_t>(fault.code);
+            PackU32(&payload[1], fault.uptimeMs);
+            payload[5] = static_cast<uint8_t>(fault.context);
+            payload[6] = static_cast<uint8_t>(fault.context >> 8);
             SendReport(Endpoint::DiagLastError, payload, sizeof(payload));
             break;
         }
@@ -489,6 +501,7 @@ void Node::HandleDiagnosticsMessage(const Message& m)
             frame.ResetCounters();
             txFrames   = 0;
             queueDrops = 0;
+            Hal::Fault::Clear();
             SendAck(m);
             break;
         }
