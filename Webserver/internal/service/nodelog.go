@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // diagLogWait is how long ReadNodeLog waits for a node to answer one DiagLog

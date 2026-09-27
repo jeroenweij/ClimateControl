@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jweij/climatecontrol/webserver/internal/hub"
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
-	"github.com/jweij/climatecontrol/webserver/internal/store"
+	"climatecontrol/webserver/internal/hub"
+	"climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/store"
 )
 
 // fakeSender records what the service sends. Mutex-guarded: the state

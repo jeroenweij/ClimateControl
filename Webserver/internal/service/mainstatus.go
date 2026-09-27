@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // The MainController answers SystemStatus and DiagLastError for itself

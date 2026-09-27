@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // mcBootloader is a byte-level model of MainController's bootloader

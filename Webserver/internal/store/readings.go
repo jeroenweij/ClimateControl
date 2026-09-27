@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // RepeatInterval is how often an unchanged value is stored anyway. A node

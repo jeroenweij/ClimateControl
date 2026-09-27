@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 func main() {

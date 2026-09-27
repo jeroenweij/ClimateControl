@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // busNode is a byte-level model of a bus node's bootloader

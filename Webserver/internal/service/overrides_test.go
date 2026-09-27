@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 func TestSettingADamperTargetHoldsManualAndOtherModesDropTheTarget(t *testing.T) {

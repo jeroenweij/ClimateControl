@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 func TestMainLogLinesArePlacedAgainstTheHello(t *testing.T) {

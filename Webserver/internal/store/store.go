@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 	_ "modernc.org/sqlite"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // A node whose very first sighting is a live NodePresence (up between two

@@ -1,4 +1,4 @@
-module github.com/jweij/climatecontrol/webserver
+module climatecontrol/webserver
 
 go 1.27.1
 

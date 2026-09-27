@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // ValueEvent is one decoded reading, as cached and pushed to browsers.

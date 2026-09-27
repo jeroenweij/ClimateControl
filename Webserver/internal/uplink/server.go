@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // Handler receives dispatched events from the active connection. All methods

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jweij/climatecontrol/webserver/internal/service"
+	"climatecontrol/webserver/internal/service"
 )
 
 // Server holds the HTTP dependencies.

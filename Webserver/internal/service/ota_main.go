@@ -3,7 +3,7 @@ package service
 import (
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // How long to wait for MainController to reset into its bootloader and bring

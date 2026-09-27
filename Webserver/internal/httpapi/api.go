@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
-	"github.com/jweij/climatecontrol/webserver/internal/service"
-	"github.com/jweij/climatecontrol/webserver/internal/store"
+	"climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/service"
+	"climatecontrol/webserver/internal/store"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

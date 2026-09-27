@@ -3,7 +3,7 @@ package service
 import (
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // NodeFaults is one node's fault picture for the status page: what is wrong

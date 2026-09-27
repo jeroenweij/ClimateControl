@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // Thermostat mirrors the link state of the Thermostat paired to one

@@ -3,7 +3,7 @@ package service
 import (
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // Nodes report state on change only, so after this server restarts (its

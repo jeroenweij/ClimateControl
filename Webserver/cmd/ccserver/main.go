@@ -15,13 +15,13 @@ import (
 	"syscall"
 	"time"
 
-	webserver "github.com/jweij/climatecontrol/webserver"
-	"github.com/jweij/climatecontrol/webserver/internal/config"
-	"github.com/jweij/climatecontrol/webserver/internal/httpapi"
-	"github.com/jweij/climatecontrol/webserver/internal/hub"
-	"github.com/jweij/climatecontrol/webserver/internal/service"
-	"github.com/jweij/climatecontrol/webserver/internal/store"
-	"github.com/jweij/climatecontrol/webserver/internal/uplink"
+	webserver "climatecontrol/webserver"
+	"climatecontrol/webserver/internal/config"
+	"climatecontrol/webserver/internal/httpapi"
+	"climatecontrol/webserver/internal/hub"
+	"climatecontrol/webserver/internal/service"
+	"climatecontrol/webserver/internal/store"
+	"climatecontrol/webserver/internal/uplink"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".

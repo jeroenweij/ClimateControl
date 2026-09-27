@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/ws"
+	"climatecontrol/webserver/internal/ws"
 )
 
 // handleWS upgrades to a WebSocket, sends the current-state snapshot, then

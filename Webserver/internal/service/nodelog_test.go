@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // logNode answers DiagLog Gets like a node's ring: one line per Get, then an

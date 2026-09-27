@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 const minuteMs = int64(time.Minute / time.Millisecond)

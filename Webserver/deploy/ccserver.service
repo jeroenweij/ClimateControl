@@ -3,7 +3,7 @@
 
 [Unit]
 Description=ClimateControl building server
-Documentation=https://github.com/jweij/climatecontrol
+Documentation=https://github.com/jeroenweij/ClimateControl
 After=network-online.target
 Wants=network-online.target
 

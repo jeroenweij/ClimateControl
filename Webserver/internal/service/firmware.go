@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
-	"github.com/jweij/climatecontrol/webserver/internal/store"
+	"climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/store"
 )
 
 // FwTarget is one updatable thing on the Firmware page: a bus node, or the

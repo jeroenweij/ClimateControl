@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 func sentGets(fs *fakeSender, node uint8) []nodelib.Endpoint {

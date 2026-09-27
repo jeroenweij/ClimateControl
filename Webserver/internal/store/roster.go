@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
+	"climatecontrol/webserver/internal/nodelib"
 )
 
 // ExpectedNode is one row of the expected-node roster.

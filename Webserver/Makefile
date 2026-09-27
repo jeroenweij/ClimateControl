@@ -9,7 +9,7 @@
 #   make dist         tar up the binary + service unit + example config for deployment
 
 BIN      ?= ccserver
-MODULE   := github.com/jweij/climatecontrol/webserver
+MODULE   := climatecontrol/webserver
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 GOFLAGS  := -trimpath
