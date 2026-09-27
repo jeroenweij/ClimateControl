@@ -116,3 +116,30 @@ CREATE TABLE IF NOT EXISTS map_placements (
     y_px      INTEGER NOT NULL,
     poly_json TEXT
 );
+
+-- Hourly rollup of the numeric readings older than the raw retention window
+-- (config rawRetentionDays); kept indefinitely. avg is time-weighted over the
+-- part of the hour the value was known (retention.go); n counts the raw rows
+-- that fell inside the hour.
+CREATE TABLE IF NOT EXISTS readings_hourly (
+    node_id  INTEGER NOT NULL,
+    endpoint INTEGER NOT NULL,
+    hour     INTEGER NOT NULL,                -- unix millis, start of the hour
+    min      REAL    NOT NULL,
+    avg      REAL    NOT NULL,
+    max      REAL    NOT NULL,
+    n        INTEGER NOT NULL,
+    PRIMARY KEY (node_id, endpoint, hour)
+) WITHOUT ROWID;
+
+-- Per-series rollup progress: every raw row before rolled_to has been folded
+-- into readings_hourly and deleted. last_ts/last_num is the last numeric value
+-- seen before rolled_to -- it still holds at the start of the next hour.
+CREATE TABLE IF NOT EXISTS readings_rollup (
+    node_id   INTEGER NOT NULL,
+    endpoint  INTEGER NOT NULL,
+    rolled_to INTEGER NOT NULL,               -- unix millis, hour-aligned
+    last_ts   INTEGER,
+    last_num  REAL,
+    PRIMARY KEY (node_id, endpoint)
+);

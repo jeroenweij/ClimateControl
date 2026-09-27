@@ -3,6 +3,7 @@
   "uplinkAddr": ":9000",
   "uplinkToken": "",
   "dataDir": "/opt/ccserver/data",
+  "rawRetentionDays": 30,
   "nodes": [
     { "id": 1, "module": "ControllerNode", "name": "Living room" },
     { "id": 2, "module": "ControllerNode", "name": "Master bedroom" },

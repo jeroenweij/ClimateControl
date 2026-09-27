@@ -108,6 +108,7 @@ sudo -u ccserver cat /opt/ccserver/config.json
   "uplinkAddr": ":9000",
   "uplinkToken": "3f9c1a...<32 hex characters>",
   "dataDir": "/opt/ccserver/data",
+  "rawRetentionDays": 30,
   "nodes": [
     { "id": 1, "module": "ControllerNode",  "name": "Living room" },
     { "id": 2, "module": "ControllerNode",  "name": "Master bedroom" },
@@ -122,6 +123,7 @@ sudo -u ccserver cat /opt/ccserver/config.json
 | `uplinkAddr` | listen address for the `MainController` TCP connection. |
 | `uplinkToken` | the 32-hex-char shared secret. Generated once; keep it. The `MainController` must send it in its first frame. |
 | `dataDir` | holds `climatecontrol.db` and uploaded floor-plan / firmware files. |
+| `rawRetentionDays` | how long readings are kept at full resolution (default 30). Older ones are rolled up hourly (min / time-weighted avg / max), kept indefinitely. |
 | `nodes` | the **expected-node roster** — every bus node the installation should have. Optional but recommended. |
 
 `nodes[]` entries take `id` (1–254, required), `module` (`ControllerNode` /
@@ -298,7 +300,7 @@ Webserver/
 │   ├── nodelib/      frame codec (CRC16, deframer, encoder) + endpoint decoders + image parser
 │   ├── uplink/       TCP listener, token auth, frame dispatch, downlink queue
 │   ├── service/      wires uplink -> store + hub; OTA driver
-│   ├── store/        SQLite: nodes, readings, commands, overrides, ota_jobs, map_*
+│   ├── store/        SQLite: nodes, readings (+ hourly rollup), commands, overrides, ota_jobs, map_*
 │   ├── hub/          in-memory current-state cache + WebSocket fan-out
 │   ├── ws/           minimal RFC 6455 server
 │   ├── httpapi/      routes: SPA bundle, JSON API, /ws
@@ -317,7 +319,7 @@ the wire protocol changes.
 | `GET /api/health` | liveness |
 | `GET /api/state` | full current-state snapshot (same shape as the WS `snapshot`) |
 | `GET /api/nodes` | roster |
-| `GET /api/readings?node=&endpoint=&from=&to=&limit=` | history series |
+| `GET /api/readings?node=&endpoint=&from=&to=&limit=` | history series, newest first: raw points, then hourly points (`min`/`max`/`n` set, `num` = mean) beyond the raw retention window |
 | `GET /api/nodes/{id}/log` | drain a node's `DiagLog` ring over the bus — its last few log lines, oldest first, each as `{text, ageSec}` (how long before the read the node logged it, from the node's uptime); reading empties the ring on the node |
 | `GET /api/main/log` | the MainController log lines the server holds (last 500, in memory), oldest first, each as `{ts, text}` (`ts` = unix ms when it was logged) |
 | `POST /api/commands` `{node,endpoint,value}` | queue a `Set`; held as an override |

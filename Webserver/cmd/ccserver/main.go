@@ -63,7 +63,7 @@ func run(cfgPath string, log *slog.Logger) error {
 		return err
 	}
 	log.Info("ccserver starting", "version", version, "http", cfg.HTTPAddr,
-		"uplink", cfg.UplinkAddr, "data", cfg.DataDir)
+		"uplink", cfg.UplinkAddr, "data", cfg.DataDir, "rawRetention", cfg.RawRetention())
 
 	st, err := store.Open(cfg.SQLitePath())
 	if err != nil {
@@ -89,6 +89,9 @@ func run(cfgPath string, log *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Raw readings past the retention window -> hourly rollup.
+	go st.RunRetention(ctx, cfg.RawRetention(), log)
 
 	// Uplink TCP listener.
 	uplinkErr := make(chan error, 1)

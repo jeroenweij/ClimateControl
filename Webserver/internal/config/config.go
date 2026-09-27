@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Config is the on-disk server configuration.
@@ -22,6 +23,9 @@ type Config struct {
 	UplinkToken string `json:"uplinkToken"`
 	// DataDir holds the SQLite file and uploaded assets.
 	DataDir string `json:"dataDir"`
+	// RawRetentionDays is how long every stored reading is kept as is. Older
+	// readings are rolled up into hourly min/avg/max, which are kept for good.
+	RawRetentionDays int `json:"rawRetentionDays"`
 	// Nodes is the expected-node roster: every bus node the installation is
 	// supposed to have. A node seen on the bus that is not listed here is
 	// flagged "unexpected"; a listed node that is not currently reporting is
@@ -45,12 +49,16 @@ type NodeConfig struct {
 	Note string `json:"note,omitempty"`
 }
 
+const defaultRawRetentionDays = 30
+
 // Default returns the built-in defaults (no token).
 func Default() Config {
 	return Config{
 		HTTPAddr:   ":8080",
 		UplinkAddr: ":9000",
 		DataDir:    "./data",
+
+		RawRetentionDays: defaultRawRetentionDays,
 	}
 }
 
@@ -93,6 +101,16 @@ func (c Config) Token() ([16]byte, error) {
 	}
 	copy(t[:], b)
 	return t, nil
+}
+
+// RawRetention is RawRetentionDays as a duration; a value below 1 day falls
+// back to the default.
+func (c Config) RawRetention() time.Duration {
+	days := c.RawRetentionDays
+	if days < 1 {
+		days = defaultRawRetentionDays
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // SQLitePath is the database file location.

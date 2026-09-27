@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jweij/climatecontrol/webserver/internal/nodelib"
@@ -21,6 +22,11 @@ var schema string
 // Store wraps the database handle.
 type Store struct {
 	db *sql.DB
+
+	// The last readings row stored per series, for InsertReading's repeat
+	// suppression (readings.go).
+	mu         sync.Mutex
+	lastStored map[seriesKey]storedMark
 }
 
 // Open connects to (creating if needed) the SQLite file at path and applies
@@ -43,7 +49,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, lastStored: make(map[seriesKey]storedMark)}, nil
 }
 
 // migrate applies additive schema changes that CREATE TABLE IF NOT EXISTS
@@ -126,66 +132,6 @@ func (s *Store) Nodes(ctx context.Context) ([]Node, error) {
 		n.Module = nodelib.Module(mod).String()
 		n.Online = online != 0
 		out = append(out, n)
-	}
-	return out, rows.Err()
-}
-
-// InsertReading stores one decoded Report.
-func (s *Store) InsertReading(ctx context.Context, tsMillis int64, nodeID int, ep nodelib.Endpoint, raw []byte, v nodelib.Value) error {
-	var num sql.NullFloat64
-	var text sql.NullString
-	switch v.Kind {
-	case "number", "enum":
-		num = sql.NullFloat64{Float64: v.Num, Valid: true}
-		if v.Text != "" {
-			text = sql.NullString{String: v.Text, Valid: true}
-		}
-	default:
-		if v.Text != "" {
-			text = sql.NullString{String: v.Text, Valid: true}
-		}
-	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO readings (ts, node_id, endpoint, raw, value_num, value_text) VALUES (?, ?, ?, ?, ?, ?)`,
-		tsMillis, nodeID, int(ep), raw, num, text)
-	return err
-}
-
-// ReadingPoint is one historical sample.
-type ReadingPoint struct {
-	TS   int64    `json:"ts"`
-	Num  *float64 `json:"num,omitempty"`
-	Text string   `json:"text,omitempty"`
-}
-
-// Readings returns the series for one node/endpoint within [fromMs, toMs],
-// newest first, capped at limit.
-func (s *Store) Readings(ctx context.Context, nodeID int, ep nodelib.Endpoint, fromMs, toMs int64, limit int) ([]ReadingPoint, error) {
-	if limit <= 0 || limit > 50000 {
-		limit = 5000
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT ts, value_num, value_text FROM readings
-		WHERE node_id = ? AND endpoint = ? AND ts BETWEEN ? AND ?
-		ORDER BY ts DESC LIMIT ?`,
-		nodeID, int(ep), fromMs, toMs, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []ReadingPoint{}
-	for rows.Next() {
-		var p ReadingPoint
-		var num sql.NullFloat64
-		var text sql.NullString
-		if err := rows.Scan(&p.TS, &num, &text); err != nil {
-			return nil, err
-		}
-		if num.Valid {
-			p.Num = &num.Float64
-		}
-		p.Text = text.String
-		out = append(out, p)
 	}
 	return out, rows.Err()
 }
