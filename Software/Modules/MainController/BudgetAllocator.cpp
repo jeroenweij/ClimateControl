@@ -63,6 +63,12 @@ void BudgetAllocator::Observe(const Message& m)
         return;
     }
 
+    if (m.id.node == 0 || m.id.node > NodeLib::MAX_NODES)
+    {
+        return;
+    }
+
+    const uint8_t nodeIndex = m.id.node - 1;
     switch (m.id.endpoint)
     {
         case Endpoint::SupplyTemp:
@@ -71,19 +77,13 @@ void BudgetAllocator::Observe(const Message& m)
             break;
 
         case Endpoint::RoomTemp:
-            if (m.id.node < NodeLib::MAX_NODES)
-            {
-                room[m.id.node].temp    = ReadI16(m.data);
-                room[m.id.node].sawTemp = true;
-            }
+            room[nodeIndex].temp    = ReadI16(m.data);
+            room[nodeIndex].sawTemp = true;
             break;
 
         case Endpoint::RoomSetpoint:
-            if (m.id.node < NodeLib::MAX_NODES)
-            {
-                room[m.id.node].setpoint    = ReadI16(m.data);
-                room[m.id.node].sawSetpoint = true;
-            }
+            room[nodeIndex].setpoint    = ReadI16(m.data);
+            room[nodeIndex].sawSetpoint = true;
             break;
 
         default:
@@ -113,16 +113,16 @@ void BudgetAllocator::Recompute()
     uint8_t  onlineCount = 0;
     uint32_t weightSum   = 0;
 
-    for (uint8_t id = 1; id < NodeLib::MAX_NODES; id++)
+    for (uint8_t id = 0; id < NodeLib::MAX_NODES; id++)
     {
-        if (master.NodeModule(id) != ModuleType::ControllerNode)
+        if (master.NodeModule(id + 1) != ModuleType::ControllerNode)
         {
             continue;
         }
         const uint8_t w        = (supplyValid && room[id].Known())
             ? NodeLib::RoomDemandPercent(supplyTemp, room[id].temp, room[id].setpoint)
             : 0;
-        onlineIds[onlineCount] = id;
+        onlineIds[onlineCount] = id + 1;
         weight[onlineCount]    = w;
         weightSum += w;
         onlineCount++;
@@ -148,7 +148,7 @@ void BudgetAllocator::Recompute()
     // Water-fill anything over 100% into the still-open nodes, proportional to
     // weight. Bounded to onlineCount passes -- each pass clamps at least one
     // more node, so this always terminates well inside that bound (at most
-    // MAX_NODES-1 = 20 iterations, not an unbounded loop).
+    // MAX_NODES = 21 iterations, not an unbounded loop).
     for (uint8_t pass = 0; pass < onlineCount; pass++)
     {
         uint32_t overflow   = 0;

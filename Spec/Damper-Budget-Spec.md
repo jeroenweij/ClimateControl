@@ -230,7 +230,7 @@ class BudgetAllocator
     NodeLib::NodeMaster& master;
     int16_t               supplyTemp;
     bool                  supplyValid;
-    SRoom                 room[NodeLib::MAX_NODES];  // indexed by nodeId
+    SRoom                 room[NodeLib::MAX_NODES];  // indexed by nodeId - 1 (nodes 1..MAX_NODES)
     Tools::DelayTimer     recomputeTimer;
 };
 ```

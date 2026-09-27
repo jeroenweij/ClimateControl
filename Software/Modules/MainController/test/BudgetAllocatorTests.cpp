@@ -28,6 +28,11 @@ namespace
     // Same shape as NodeMaster's own detection window (NodeMasterTests.cpp).
     const uint32_t discoveryWindowMs = 250;
 
+    // SupplyTemp comes from the duct TemperatureNode -- a slave id like any
+    // other, never the master's 0. Observe() doesn't check the sender's
+    // module, so it needn't be announced.
+    const uint8_t supplyNodeId = 5;
+
     void ResetWorld()
     {
         FakeBus::Reset();
@@ -165,7 +170,7 @@ CC_TEST(BudgetAllocator, WeightsByEachRoomsDemand)
     Announce(3, ModuleType::ControllerNode);
     StartPolling(master);
 
-    ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
     ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400); // 24.0C, wants cooling, saturates demand
     ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
     ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000); // already at setpoint -- zero demand
@@ -199,7 +204,7 @@ CC_TEST(BudgetAllocator, SplitRoundsToNearestRatherThanFlooring)
     // 33.33/66.67. Flooring both would give 33/66 (summing to 99, one point
     // short of the pool); rounding to nearest gives 33/67, using the whole
     // pool.
-    ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500); // 15.0C, colder than either room
     ObserveReport(allocator, 2, Endpoint::RoomTemp, 2033); // 0.33C past the 0.30C deadband -- weight 1
     ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 2000);
     ObserveReport(allocator, 3, Endpoint::RoomTemp, 2035); // 0.35C past deadband -- weight 2
@@ -230,7 +235,7 @@ CC_TEST(BudgetAllocator, WaterFillsOverflowFromAClampedNodeIntoTheRest)
     Announce(4, ModuleType::ControllerNode);
     StartPolling(master);
 
-    ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
     ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400); // full demand -- alone would want 150% of a 3-node pool
     ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
     ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000); // no demand
@@ -273,6 +278,102 @@ CC_TEST(BudgetAllocator, IgnoresNonControllerNodeModules)
     uint8_t p2;
     CC_CHECK(FindBudget(tx, n, 2, p2));
     CC_CHECK_EQ(p2, 50); // sole online node -- the whole 50%-per-node pool
+}
+
+CC_TEST(BudgetAllocator, IncludesTheHighestNodeId)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(MAX_NODES, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    // Only the top node has demand, so it takes the whole pool -- which it
+    // can only do if both its room data and its budget reach room[MAX_NODES - 1].
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2000); // at setpoint -- zero demand
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 2000);
+    ObserveReport(allocator, MAX_NODES, Endpoint::RoomTemp, 2400); // wants cooling, saturates demand
+    ObserveReport(allocator, MAX_NODES, Endpoint::RoomSetpoint, 1800);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   p2, pTop;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, MAX_NODES, pTop));
+    CC_CHECK_EQ(p2, 0);
+    CC_CHECK_EQ(pTop, 100);
+}
+
+// Node 0 is the master itself -- nothing on the bus ever reports under it.
+CC_TEST(BudgetAllocator, IgnoresSupplyTempFromTheMasterNodeId)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    // Room demand that would give node 2 the whole pool -- if the supply
+    // reading from node 0 were taken as valid.
+    ObserveReport(allocator, 0, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2400);
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 1800);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2000);
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   p2, p3;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK_EQ(p2, 50); // no valid supply -> no weights -> even split
+    CC_CHECK_EQ(p3, 50);
+}
+
+CC_TEST(BudgetAllocator, IgnoresRoomReportsFromTheMasterNodeId)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(1, ModuleType::ControllerNode);
+    Announce(2, ModuleType::ControllerNode);
+    StartPolling(master); // polls node 1 first
+
+    // Full demand reported under node 0, none by the real rooms: node 1 has
+    // no room data of its own and node 2 sits at its setpoint. Node 0's data
+    // landing on any room -- node 1's slot is the one right next to it --
+    // would hand that room the pool.
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 0, Endpoint::RoomTemp, 2400);
+    ObserveReport(allocator, 0, Endpoint::RoomSetpoint, 1800);
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2000);
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 2000);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 1);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   p1, p2;
+    CC_CHECK(FindBudget(tx, n, 1, p1));
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK_EQ(p1, 50);
+    CC_CHECK_EQ(p2, 50);
 }
 
 CC_TEST(BudgetAllocator, RecomputeDebouncesWithinTheInterval)
