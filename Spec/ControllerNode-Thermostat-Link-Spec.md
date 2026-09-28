@@ -43,19 +43,24 @@ On the ControllerNode this is a *second* RS485 front-end (USART2, PA2/PA3, DE PA
 
 ### 3.1 Cable, power, and connector
 
-The Thermostat is **fed from the ControllerNode's own regulated 5V rail** (`Node-Bus-Power-Path-Spec.md` §3 — the same LMR16030 buck output that feeds the CN's own 3.3V LDO and, on a ControllerNode, the servo), not raw 48V and not an independent local supply. A local `XC6206P332MR` (`C5446`, same part used board-wide) drops it to 3.3V on the Thermostat side.
+The Thermostat is **fed from the ControllerNode's own regulated 5V rail** (`Node-Bus-Power-Path-Spec.md` §3 — the same LMR16030 buck output that feeds the CN's own 3.3V LDO and, on a ControllerNode, the servo), not raw 48V and not an independent local supply. On the Thermostat side a `RT9080-33GJ5` (`C841192`, the same regulator as the ControllerNode's) drops it to 3.3V, and a separate 3.8V regulator feeds the OLED's `VBAT` (§4.1).
+
+**Feed protection:**
+- **ControllerNode end:** `F2`, a Littelfuse `1206L020YR` PTC (`C207035`, 200mA hold / 420mA trip, 24V, 0.65Ω), sits in series between the CN's `+5V` and connector pin 1. A short anywhere in the wall cable trips it instead of dragging the CN's 5V rail — and with it the CN's MCU and servo — into the buck's current-limit hiccup, so the CN stays up and reports `RoomLink = 0`. 200mA hold is ~2.5× the Thermostat's worst case (§4.5), and still clears it with the hold current derated for a warm duct.
+- **Thermostat end:** `F1`, the same `1206L020YR`, followed by a `1N5819WS` series Schottky (`C191023`) for reverse polarity — a miswired cable, which no fuse covers. With the CN-side fuse in place, `F1` only matters when a Thermostat is powered from something other than a ControllerNode (e.g. a bench supply).
 
 - **4 conductors, no separate ENABLE.** `RS485 A`, `RS485 B`, `+5V`, `GND` — that's it. A separate power-kill line from CN to the Thermostat isn't needed: CN can already reset the Thermostat over the link (`Firmware[EnterBootloader]`, §5), a physical reset button already exists on the Thermostat board (inherited from the node-core schematic, §4), and a hung link already parks the damper safely without needing to power-cycle anything (§5.1). Whatever would need a hard power-cycle to recover is already covered when the main bus's shared `ENABLE` kills this CN's own buck — the Thermostat's feed collapses with it for free, since it's downstream of the same rail.
-- **Voltage drop margin is not a constraint.** At the documented worst-case load (§4.5, ~40mA peak) and the `XC6206`'s datasheet-worst-case dropout (350mV @ 100mA — conservative, since our load is well under that test point), the cable can run to roughly 125–200m (26AWG–24AWG stranded) before the far-end LDO loses regulation, using CN's ~5.0V rail as the source. That's far beyond any real duct-to-wall or wall-to-CN run; RS485 itself isn't the limiting factor either. Cable routing and connector cost are what actually bound the practical run, not electronics.
-- **Connector: JST-XH, 2.5mm pitch, 4-position** — chosen over RJ45 specifically to keep the Thermostat enclosure compact (§4.6); RJ45's ~16×13.5×20mm mating envelope would blow out the puck's thickness budget, where an XH header mounts flat on the PCB and only needs a small cutout for the plug nose.
+- **Voltage drop margin is not a constraint.** The binding rail is the OLED's 3.8V `VBAT` regulator (§4.1), not the 3.3V one: it needs ~3.9V at its input. From the CN's ~5.3V worst-case-low rail, minus the series Schottky (~0.4V) and both PTCs (~0.1V at load), that leaves ~0.9V for the cable's round trip at the ~80mA worst case (§4.5) — roughly 40m of 26AWG or 65m of 24AWG stranded. That's still well beyond any real duct-to-wall or wall-to-CN run; RS485 itself isn't the limiting factor either. Cable routing and connector cost are what actually bound the practical run, not electronics.
+- **Connector: JST-XH, 2.5mm pitch, 4-position** — chosen over RJ45 specifically to keep the Thermostat enclosure compact (§4.6); RJ45's ~16×13.5×20mm mating envelope would blow out the puck's thickness budget. Both ends use the XH family, so one straight-through `XHP-4` cable mates both; pin order is identical at both ends (1 `+5V`, 2 `A`, 3 `B`, 4 `GND`).
 
   | Role | Part | LCSC |
   |---|---|---|
-  | PCB header (both ends) | `B4B-XH-A(LF)(SN)` | `C144395` |
+  | PCB header, ControllerNode (through-hole, top entry) | `B4B-XH-A(LF)(SN)` | `C144395` |
+  | PCB header, Thermostat (SMD, side entry — lies flat in the puck) | `S4B-XH-SM4-TB(LF)(SN)` | `C161861` |
   | Cable-side housing | `XHP-4` | `C144403` |
   | Crimp socket contacts (×4/cable end) | `SXH-001T-P0.6` | `C140573` (standard, not the `-N` low-insertion-force variant — this connector is installed once and left, so favor vibration retention over easy insertion) |
 
-  3A/250V rated (far past our ~40mA), 22–28 AWG wire, −25…+85°C — the standard compact XH family (9.8mm mounting height), not JST's bulkier "high box" potted-board variant. Verify the friction latch before ordering at volume — LCSC's own listing metadata tags `XHP-4` as "non-latching," which conflicts with XH's usual friction-latch reputation and isn't contradicted anywhere in JST's datasheet; check a product photo or a sample part.
+  3A/250V rated (far past our ~80mA), 22–28 AWG wire, −25…+85°C — the standard compact XH family (9.8mm mounting height), not JST's bulkier "high box" potted-board variant. Verify the friction latch before ordering at volume — LCSC's own listing metadata tags `XHP-4` as "non-latching," which conflicts with XH's usual friction-latch reputation and isn't contradicted anywhere in JST's datasheet; check a product photo or a sample part.
 
 ### 3.2 A/B line passives — reuses the main-bus scheme (`Node-Bus-Hardware-Design-Spec.md` §6.3), same transceiver
 
@@ -80,20 +85,25 @@ The `Thermostat` reuses the **STM32G031F8P6** (project MCU) and the node-core sc
 **SSD1306 / SSD1315 128×64 mono OLED.** Part: **Wisevision `X096-2864KSWPG01-H30`** (LCSC `C18723026`).
 - **True bare COG module** — SSD1315 chip bonded directly to the glass, 30-pin 0.7 mm-pitch FPC tail exposing every controller pin, no PCB, no onboard regulator of any kind.
 - **Panel:** 24.7×16.6×1.3 mm outline, 21.74×11.175 mm active area, white — comfortably inside the §4.6 puck enclosure, and white reads more neutral than the common blue hobbyist panels behind a matte-white front.
-- **I²C pin strapping** (per datasheet §1.5 Pin Definition): `BS0=0, BS1=1, BS2=0` (tie to `VSS`/`VDD`/`VSS`) selects I²C mode; then `CS#→VSS`, `R/W#→VSS`, `E/RD#→VSS` (all tied low, per the datasheet's serial/I²C note); `D0→SCL`, `D1` and `D2` **tied together→SDA** (the controller uses separate internal SDA-in/SDA-out pins that must be shorted externally); `D3–D7` unused, tie to `VSS`. `D/C#` doubles as the I²C slave-address bit `SA0` — pick whichever ties (`VSS`/`VDD`) doesn't collide with the CHT40MEMS's fixed address on the same shared bus (§4.3), check both datasheets before laying out.
-- Also needs, per the datasheet's application circuit: `RES#` driven by an MCU GPIO or simple RC (pull high for normal operation), an `IREF` resistor to `VSS` (segment current reference, ≤ 12.5 µA), a cap from `VCOMH` to `VSS`, and — using the internal DC/DC charge pump so no separate ~7.5–15 V panel rail is needed — `VBAT` tied to the same `VDD`/3.3 V rail with the `C1P/C1N/C2P/C2N` flying capacitors populated per that circuit. Pins `1`/`30` (N.C., support pins) must still be tied to ground for ESD.
+- **I²C pin strapping** (per datasheet §1.5 Pin Definition): `BS0=0, BS1=1, BS2=0` (tie to `VSS`/`VDD`/`VSS`) selects I²C mode; then `CS#→VSS`, `R/W#→VSS`, `E/RD#→VSS` (all tied low, per the datasheet's serial/I²C note); `D0→SCL`, `D1` and `D2` **tied together→SDA** (the controller uses separate internal SDA-in/SDA-out pins that must be shorted externally); `D3–D7` unused, tie to `VSS`. `D/C#` doubles as the I²C slave-address bit `SA0`; it is tied to `VSS`, giving address `0x3C`, clear of the CHT40MEMS's `0x44` on the same shared bus (§4.3).
+- The rest follows the datasheet's I²C-with-internal-charge-pump reference circuit (§3.3.5.2), part for part:
+  - **`VBAT` rail — 3.8V, its own regulator.** With the internal charge pump (so no separate ~7.5–15 V panel rail), `VBAT` must be 3.5–4.2V — the 3.3V logic rail is below that window. A `MD7218A38PA1` (`U9`, `C920501`, SOT-89) makes 3.8V from the link's `+5V`. A `R17` 0Ω footprint from `+3v3` is left DNP.
+  - **`VBAT` switch.** Required by the datasheet ("add an electronic switch, otherwise leakage current"): `Q3` `FDN338P` P-FET with **source on the 3.8V rail, drain on `VBAT`**, gate pulled to 3.8V by 47kΩ (`R3`); `Q4` `FDN335N` pulls that gate low when `PA4` is high, with a 47kΩ gate pull-down (`R4`) so `VBAT` stays off while the MCU pin is Hi-Z (reset, unprogrammed, bootloader). The orientation matters: with source and drain swapped, the P-FET's body diode feeds `VBAT` permanently and the switch can never turn off.
+  - **`RES#`** on `PA0`, with a 10kΩ pull-down (`R6`) — the display is held in reset whenever `PA0` is Hi-Z (power-up, and the whole time the bootloader is resident), and firmware releases it.
+  - **Passives:** `IREF` 620kΩ to `VSS` (the datasheet value); `VCOMH` 4.7µF; `VCC` 2.2µF; 1µF on each flying-capacitor pair (`C1P/C1N`, `C2P/C2N`); 1µF ×2 on `VDD`. No capacitor on the switched `VBAT` pin — the reference circuit has none, and the 2.2µF on the regulator output sits behind the ~0.1Ω switch.
+  - Pins `1`/`30` (N.C., support pins) tied to ground for ESD; pin 7 N.C.
 - I²C: 2 pins (SDA/SCL), **shared** with the room sensor (§4.3) — no extra pins for the sensor.
 - Framebuffer 128×64/8 = **1 KB** of the 8 KB SRAM — fine alongside the link's `Message` buffers.
 - **Constraint is flash, not RAM:** the app slot is 50 KB (`Node-Flash-Layout-and-Bootloader-Spec.md` §3). Driver + framing + app fits, but keep fonts minimal (one small + one large digit font, not a font library).
 
-**Power** (module with onboard charge pump, from 3.3 V):
+**Power** (internal charge pump, drawn from the 3.8V `VBAT` rail — U9 is linear, so the same current comes off the link's `+5V`):
 
 | State | Current | Note |
 |---|---|---|
-| off (`0xAE` sleep) | < 10 µA (bare controller) | cheap modules add ~0.05–5 mA from an onboard LDO — use a bare-controller module or drive the SSD1306 chip directly |
+| off (`0xAE` sleep, `VBAT` switched off) | < 10 µA | datasheet `IDD,SLEEP` — a bare COG module has no onboard regulator to add standby draw |
 | on, blank | ~3–5 mA | |
 | on, typical UI (~15 % pixels) | ~8–12 mA | |
-| on, all-white max contrast | ~20–27 mA | worst case |
+| on, worst case | 27 mA typ / **32 mA max** | datasheet `IBAT`; plus `IDD` ≤ 0.22 mA on the 3.3V logic rail |
 
 ### 4.2 Display wake — button press
 
@@ -113,7 +123,7 @@ While on, the panel is redrawn only when something it shows visibly changes (tem
 - **Room temperature/humidity sensor: CYBERSEN CHT40MEMS** (`CHT40MEMS`, JLCPCB `C54305346`) on the shared I²C display bus. SHT40-clone in the same DFN-4 1.5×1.5 mm footprint, I²C, ±0.2 °C / ±2.5 % RH, −40…+125 °C. 0 extra pins, no ADC calibration.
   - The footprint is the standard SHT40 DFN-4 so a genuine Sensirion `SHT40-AD1F-R2` (`C7461846`) drops onto the same pads — the fallback if CHT40MEMS stock or humidity quality disappoints. SHTC3 (`C194656`) is *not* pad-compatible (2×2).
   - Before committing firmware, verify from the CHT40MEMS datasheet that it is SHT4x command-compatible (command bytes, CRC-8 poly/init, measurement timing). If so, the existing SHT4x driver just works.
-  - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDO/MCU/OLED; mill isolation slots around it (Sensirion app-note "thermal decoupling"); vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
+  - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDOs/MCU/OLED (on the board: `U7` at the bottom edge, both regulators and the 47µF bulk cap at the top); keep the ground pour out from under and around it so copper doesn't conduct board heat into it (done — a pour keep-out around `U7`/`C24`); mill isolation slots around it if that proves insufficient (Sensirion app-note "thermal decoupling"); vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
   - This part has no protective membrane — keep flux/outgassing away from it (clean assembly, no conformal coat over the sensor).
 
 ### 4.4 Pin map (STM32G031F8P6, TSSOP20)
@@ -127,14 +137,25 @@ While on, the panel is redrawn only when something it shows visibly changes (tem
 | 14 | status LED (PA7) |
 | 15 | error LED (PB0, net `LED_ERROR`) — on while the ControllerNode isn't polling the link (`Node::ShowBusState()`) |
 | 6 / 18 / 19 | NRST + reset button / SWDIO / SWCLK |
-| 7 | OLED `RES#` (PA0) — GPIO output |
-| 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, gates the `Q3`/`Q4` pair per §4.1's I²C reference circuit |
+| 7 | OLED `RES#` (PA0) — GPIO output; 10kΩ pull-down holds the display in reset while the pin is Hi-Z |
+| 11 | OLED `VBAT` power-switch gate (PA4) — GPIO output, HIGH = `VBAT` on; drives the `Q3`/`Q4` switch (§4.1), off while Hi-Z |
 
 ~10 of 15 usable GPIO — comfortable headroom.
 
 ### 4.5 Power delivery
 
-The display's ~10 mA typical (≤ ~27 mA peak) is trivial over any reasonable feed. The Thermostat is fed from the `ControllerNode` over the link cable (§3.1); size that feed for MCU (~5 mA) + transceiver (~1 mA) + OLED (~12 mA typ) ≈ 20 mA, ~40 mA peak.
+The Thermostat is fed from the `ControllerNode` over the link cable (§3.1). Worst-case draw on its `+5V` input:
+
+| Load | Worst case | Note |
+|---|---|---|
+| OLED `VBAT` (via U9) | 32 mA | datasheet `IBAT` max (§4.1) |
+| RS-485 driver, while the Thermostat transmits | ~30 mA | drives the two 120 Ω terminations in parallel (60 Ω); only during its own frames |
+| MCU at 64 MHz | ~5–7 mA | |
+| Activity + error LEDs | ~8 mA | ~4 mA each through 330 Ω |
+| BS212C-1, CHT40MEMS (heater off), OLED logic | ~1 mA | |
+| **Total** | **~80 mA** | ~20 mA typical with the display off |
+
+The CN-side 200mA-hold PTC (§3.1) covers this with ~2.5× margin. The one load that would eat into it is the CHT40MEMS's built-in heater (SHT4x-class, up to ~200 mW ≈ 60 mA at 3.3V): keep it off, or at its low-power settings — room humidity indoors doesn't need it.
 
 ### 4.6 Enclosure — industrial design direction
 

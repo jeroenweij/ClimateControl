@@ -1,80 +1,6 @@
 PROTEL NETLIST 2.0
 [
 DESIGNATOR
-F1
-FOOTPRINT
-F2920
-PARTTYPE
-JK-SMD050L/60V
-DESCRIPTION
-Voltage - Max:60V Current - Max:100A Hold Current:500mA Trip Current:1A Power Dissipation:1.5W Resistance - Initial (Ri) (Min):180mΩ Resistance - Post Trip (R1) (Max):1.4Ω Time to Trip(Max):4s Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85
-Component Kind
-Standard
-Add into BOM
-yes
-Convert to PCB
-yes
-Symbol
-JK-SMD050L/60V
-Designator
-F1
-Device
-JK-SMD050L/60V
-Unique ID
-gge2
-Name
-JK-SMD030L/60V
-LCSC Part Name
-60V 0.5A 2920自恢复
-Supplier Part
-C2830278
-Manufacturer
-Jinrui Electronic Materials Co.
-Manufacturer Part
-JK-SMD030L/60V
-Supplier Footprint
-SMD,8x5mm
-JLCPCB Part Class
-Extended Part
-Datasheet
-https://item.szlcsc.com/datasheet/JK-SMD050L%252F60V/2981908.html
-Supplier
-LCSC
-3D Model Title
-F2920-1
-Voltage - Max
-60V
-Current - Max
-100A
-Hold Current
-500mA
-Trip Current
-1A
-Power Dissipation
-1.5W
-Resistance - Initial (Ri) (Min)
-180mΩ
-Resistance - Post Trip (R1) (Max)
-1.4Ω
-Time to Trip(Max)
-4s
-Operating Temperature
--40℃~+85℃
-Length
--
-Width
--
-Height
--
-Pitch
--
-Description
-Voltage - Max:60V Current - Max:100A Hold Current:500mA Trip Current:1A Power Dissipation:1.5W Resistance - Initial (Ri) (Min):180mΩ Resistance - Post Trip (R1) (Max):1.4Ω Time to Trip(Max):4s Operating Temperature:-40℃~+85℃ Operating Temperature:-40℃~+85
-
-*
-]
-[
-DESIGNATOR
 D2
 FOOTPRINT
 SOD-323_L1.8-W1.3-LS2.5-RD
@@ -608,6 +534,8 @@ Symbol
 THVD2410DR
 Designator
 U1
+Device
+THVD2410DR
 Unique ID
 gge28_0
 Name
@@ -654,8 +582,6 @@ Features
 Tx/Rx enable；Thermal shutdown protection；Fail-safe；Enable shutdown；Overcurrent Protection；Low-power mode
 Description
 Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
-Device
-THVD2410DR
 
 *
 ]
@@ -1295,6 +1221,86 @@ Description
 ]
 [
 DESIGNATOR
+F1
+FOOTPRINT
+F1206
+PARTTYPE
+1206L020YR
+DESCRIPTION
+Voltage - Max:24V Current - Max:100A Hold Current:200mA Trip Current:420mA Power Dissipation:600mW Resistance - Initial (Ri) (Min):650mΩ Resistance - Post Trip (R1) (Max):2.6Ω Time to Trip(Max):100ms Operating Temperature:-40℃~+85℃ Operating Temperature:-
+Component Kind
+Standard
+Unique ID
+gge115
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+1206L020YR
+Designator
+F1
+Device
+1206L020YR
+LCSC Part Name
+24V 200mA 1206自恢复
+Supplier Part
+C207035
+Manufacturer
+Littelfuse(美国力特)
+Manufacturer Part
+1206L020YR
+Supplier Footprint
+1206
+JLCPCB Part Class
+Extended Part
+Datasheet
+https://item.szlcsc.com/datasheet/1206L020YR/208154.html
+Supplier
+LCSC
+3D Model Title
+F1206_L3.2-W1.7-H0.6
+Voltage - Max
+24V
+Current - Max
+100A
+Hold Current
+200mA
+Trip Current
+420mA
+Power Dissipation
+600mW
+Resistance - Initial (Ri) (Min)
+650mΩ
+Resistance - Post Trip (R1) (Max)
+2.6Ω
+Time to Trip(Max)
+100ms
+Operating Temperature
+-40℃~+85℃
+Length
+-
+Width
+-
+Height
+-
+Pitch
+-
+Name
+1206L020YR
+Description
+Voltage - Max:24V Current - Max:100A Hold Current:200mA Trip Current:420mA Power Dissipation:600mW Resistance - Initial (Ri) (Min):650mΩ Resistance - Post Trip (R1) (Max):2.6Ω Time to Trip(Max):100ms Operating Temperature:-40℃~+85℃ Operating Temperature:-
+Reuse Block
+
+Group ID
+
+Channel ID
+
+
+*
+]
+[
+DESIGNATOR
 U2
 FOOTPRINT
 TSSOP-20_L6.5-W4.4-P0.65-LS6.4-BL
@@ -1625,9 +1631,9 @@ LED2
 FOOTPRINT
 LED0805-R-RD
 PARTTYPE
-KT-0805G
+KT-0805Y
 DESCRIPTION
-Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
+Lamp Holder Type:- Illumination Color:Yellow Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:- Wavelength - Dominant:584nm~594nm Wavelength - Dominant:584nm~594nm Peak Wavelength:596nm Peak Wavelength:596n
 Component Kind
 Standard
 Add into BOM
@@ -1635,63 +1641,63 @@ yes
 Convert to PCB
 yes
 Symbol
-0805G (Green)
+17-21SUYC/TR8
 Designator
 LED2
-Device
-KT-0805G
 Supplier
 LCSC
 Supplier Part
-C2297
+C2296
 Manufacturer
 KENTO
 Manufacturer Part
-KT-0805G
+KT-0805Y
 JLCPCB Part Class
 Basic Part
 Unique ID
 gge33
 LCSC Part Name
-0805 翠绿 高亮
+0805 黄灯 高亮
 Supplier Footprint
 0805
 Datasheet
-https://item.szlcsc.com/datasheet/KT-0805G/2670.html
+https://item.szlcsc.com/datasheet/KT-0805Y/2669.html
 3D Model Title
 LED0805-RD
 Illumination Color
-Emerald Green
+Yellow
 Voltage - Forward(Vf)
-2.6V~3.1V
+1.8V~2.4V
 Power(Watts)
-100mW
+40mW
 Forward Current
-5mA
+-
 Wavelength - Dominant
-513nm~528nm
+584nm~594nm
 Peak Wavelength
-525nm
+596nm
 Lens Color
 Water Clear
 Luminous Intensity
-430mcd
+175mcd
 Viewing Angle
 120°
 Operating Temperature
 -40℃~+85℃
 Name
-KT-0805G
+KT-0805Y
 Description
-Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
+Lamp Holder Type:- Illumination Color:Yellow Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:- Wavelength - Dominant:584nm~594nm Wavelength - Dominant:584nm~594nm Peak Wavelength:596nm Peak Wavelength:596n
 Lamp Holder Type
-2mm x 1.25mm square LED
+-
 Diode Configuration
 Discrete Diode
 Color Temperature
 -
 Mounting Style
 -
+Device
+KT-0805Y
 
 *
 ]
@@ -2503,11 +2509,11 @@ gge112
 LCSC Part Name
 1x4P 间距:2.54mm 方针 直插
 Supplier Part
-C5383113
+DNP
 Manufacturer
-HanElectricity(瀚源)
+DNP
 Manufacturer Part
-2541WV-04P
+DNP
 Supplier Footprint
 插件,P=2.54mm
 JLCPCB Part Class
@@ -2515,7 +2521,7 @@ Extended Part
 Datasheet
 https://item.szlcsc.com/datasheet/2541WV-04P/6258473.html
 Supplier
-LCSC
+DNP
 3D Model Title
 HDR-TH_4P-P2.54-V-M-1
 Pin Structure
@@ -2545,7 +2551,7 @@ Gold
 Operating Temperature
 -55℃~+105℃
 Name
-2541WV-04P
+DNP
 Description
 Pin Structure:1x4P Pitch:2.54mm Row Spacing:- Circluar Pins/Square Pins:Pin Header Mounting Type:Through Hole Number of Rows:1 Number of Pins:4P Current Rating:3A Length of Mating Pin:6mm Insulation Height:2.54mm Length of End Connection Pin:3mm Contact M
 Mounting Type
@@ -3873,16 +3879,74 @@ Capacitance:2.2uF Tolerance:±10% Tolerance:±10% Voltage Rating:16V Temperature
 
 *
 ]
-(
-$1N10 
-F1-2 JK-SMD050L/60V-2 Passive 
-D2-2 1N5819WS_C191023-A Passive 
-)
-(
-+5V IN 
-F1-1 JK-SMD050L/60V-1 Passive 
-U5-1 S4B-XH-SM4-TB(LF)(SN)-1 Passive 
-)
+[
+DESIGNATOR
+R6
+FOOTPRINT
+R0402
+PARTTYPE
+0402WGF1002TCE
+DESCRIPTION
+Type:Thick Film Resistor Resistance:10kΩ Tolerance:±1% Tolerance:±1% Power(Watts):62.5mW Voltage-Supply(Max):50V Temperature Coefficient:±100ppm/℃ Temperature Coefficient:±100ppm/℃ Operating Temperature:-55℃~+155℃ Operating Temperature:-55℃~+155℃ 
+Component Kind
+Standard
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+0402WGF1002TCE
+Designator
+R6
+Device
+0402WGF1002TCE
+Unique ID
+gge76_0
+LCSC Part Name
+厚膜电阻 10kΩ ±1%
+Supplier Part
+C25744
+Manufacturer
+UNI-ROYAL(厚声)
+Manufacturer Part
+0402WGF1002TCE
+Supplier Footprint
+0402
+JLCPCB Part Class
+Basic Part
+Datasheet
+https://item.szlcsc.com/datasheet/0402WGF1002TCE/26487.html
+Supplier
+LCSC
+3D Model Title
+R0402_L1.0-W0.5-H0.4
+Type
+Thick Film Resistor
+Value
+10kΩ
+Tolerance
+±1%
+Power(Watts)
+62.5mW
+Voltage-Supply(Max)
+50V
+Temperature Coefficient
+±100ppm/℃
+Operating Temperature
+-55℃~+155℃
+Name
+10kΩ
+Description
+Type:Thick Film Resistor Resistance:10kΩ Tolerance:±1% Tolerance:±1% Power(Watts):62.5mW Voltage-Supply(Max):50V Temperature Coefficient:±100ppm/℃ Temperature Coefficient:±100ppm/℃ Operating Temperature:-55℃~+155℃ Operating Temperature:-55℃~+155℃ 
+Reuse Block
+
+Group ID
+
+Channel ID
+
+
+*
+]
 (
 +5V 
 D2-1 1N5819WS_C191023-K Passive 
@@ -3893,6 +3957,11 @@ C8-2 CL10A105KB8NNNC-2 Passive
 C10-1 SVZ1VM470E06E00RAXXX-1 Input   
 U9-2 MD7218A38PA1-VIN Passive 
 C14-1 CL10A225KO8NNNC-1 Input   
+)
+(
+$1N10 
+D2-2 1N5819WS_C191023-A Passive 
+F1-2 1206L020YR-2 Passive 
 )
 (
 GND 
@@ -3918,7 +3987,7 @@ D3-8 TPESD8004MUTAG-GND Passive
 SW1-4 GT-TZ084B-H015-L1-4 Passive 
 SW1-3 GT-TZ084B-H015-L1-3 Passive 
 C12-1 CL05B104KO5NNNC-1 Passive 
-LED2-2 KT-0805G-K Passive 
+LED2-2 KT-0805Y-- Passive 
 LED3-1 NCD0805R1_C84256-- Passive 
 C17-1 CL10A106MA8NRNC-1 Input   
 R15-2 0402WGF1002TCE-2 Input   
@@ -3956,6 +4025,7 @@ C11-1 CL10A225KO8NNNC-1 Input
 U9-1 MD7218A38PA1-GND Passive 
 C13-1 CL10A225KO8NNNC-1 Input   
 C14-2 CL10A225KO8NNNC-2 Input   
+R6-1 0402WGF1002TCE-1 Input   
 )
 (
 +3v3 
@@ -4024,6 +4094,11 @@ U1-7 THVD2410DR-B Passive
 R18-1 0402WGF100JTCE-1 Input   
 )
 (
++5V IN 
+U5-1 S4B-XH-SM4-TB(LF)(SN)-1 Passive 
+F1-1 1206L020YR-1 Passive 
+)
+(
 SCL 
 U2-20 STM32G031F8P6-PB3/PB4/PB5/PB6 Passive 
 U7-2 CHT40MEMS-SCL Passive 
@@ -4075,6 +4150,7 @@ R4-1 0402WGF4702TCE-1 Input
 RES 
 U2-7 STM32G031F8P6-PA0 Passive 
 U17-14 X096-2864KSWPG01-H30-RES# Passive 
+R6-2 0402WGF1002TCE-2 Input   
 )
 (
 NRST 
@@ -4096,7 +4172,7 @@ R11-2 0402WGF4701TCE-2 Input
 )
 (
 $2N40 
-LED2-1 KT-0805G-A Passive 
+LED2-1 KT-0805Y-+ Passive 
 R7-2 0402WGF3300TCE-2 Input   
 )
 (
@@ -4139,7 +4215,7 @@ C5-2 CL05A105KA5NQNC-2 Passive
 (
 $3N5 
 U17-6 X096-2864KSWPG01-H30-VBAT Passive 
-Q3-2 FDN338P_C518789-S Passive 
+Q3-3 FDN338P_C518789-D Passive 
 )
 (
 $3N16 
@@ -4157,16 +4233,16 @@ U17-28 X096-2864KSWPG01-H30-VCC Passive
 C11-2 CL10A225KO8NNNC-2 Input   
 )
 (
-$3N6 
-Q3-1 FDN338P_C518789-G Passive 
-Q4-3 FDN335N_C845588-D Passive 
-R3-2 0402WGF4702TCE-2 Input   
-)
-(
 +VIN 
-Q3-3 FDN338P_C518789-D Passive 
+Q3-2 FDN338P_C518789-S Passive 
 R3-1 0402WGF4702TCE-1 Input   
 R17-2 0603WAF0000T5E-2 Input   
 U9-3 MD7218A38PA1-VOUT Passive 
 C13-2 CL10A225KO8NNNC-2 Input   
+)
+(
+$3N6 
+Q3-1 FDN338P_C518789-G Passive 
+Q4-3 FDN335N_C845588-D Passive 
+R3-2 0402WGF4702TCE-2 Input   
 )

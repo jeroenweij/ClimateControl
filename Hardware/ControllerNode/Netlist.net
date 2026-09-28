@@ -1518,6 +1518,8 @@ Symbol
 CL21B104KCFNNNE
 Designator
 C15
+Device
+CL21B104KCFNNNE
 Unique ID
 gge40
 Name
@@ -1550,8 +1552,6 @@ Temperature Coefficient
 X7R
 Description
 Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:100V Temperature Coefficient:X7R 
-Device
-CL21B104KCFNNNE
 
 *
 ]
@@ -1812,22 +1812,26 @@ Channel ID
 
 Check
 true
-LCSC Part Name
-712，两路双向ESD静电防护器件，30kV，CJ：40pF；RS485/RS422串口通讯防护
-Supplier Part
-DNP
+Fitted
+No
+Description
+Polarity:Bidirectional Reverse Stand-Off Voltage (Vrwm):12V；7V Clamping Voltage:19V；26V Peak Pulse Current (Ipp):17A Peak Pulse Power Dissipation (Ppp):350W Voltage - Breakdown:7.5V；13.3V Reverse Leakage Current (Ir):1uA Number of Channels:2 Operating Tem
 Manufacturer
 DNP
 Manufacturer Part
 DNP
+Supplier
+DNP
+Supplier Part
+DNP
+LCSC Part Name
+712，两路双向ESD静电防护器件，30kV，CJ：40pF；RS485/RS422串口通讯防护
 Supplier Footprint
 SOT-23
 JLCPCB Part Class
 Extended Part
 Datasheet
 https://item.szlcsc.com/datasheet/CDSOT23-SM712-ES/5884007.html
-Supplier
-DNP
 3D Model Title
 SOT-23-3P_L2.9-W1.3-H1.0-LS2.4-P0.95
 Polarity
@@ -1854,10 +1858,6 @@ Type
 ESD
 Junction Capacitance
 40pF
-Description
-Polarity:Bidirectional Reverse Stand-Off Voltage (Vrwm):12V；7V Clamping Voltage:19V；26V Peak Pulse Current (Ipp):17A Peak Pulse Power Dissipation (Ppp):350W Voltage - Breakdown:7.5V；13.3V Reverse Leakage Current (Ir):1uA Number of Channels:2 Operating Tem
-Fitted
-No
 
 *
 ]
@@ -2515,9 +2515,9 @@ LED2
 FOOTPRINT
 LED0805-R-RD
 PARTTYPE
-KT-0805G
+KT-0805Y
 DESCRIPTION
-Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
+Lamp Holder Type:- Illumination Color:Yellow Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:- Wavelength - Dominant:584nm~594nm Wavelength - Dominant:584nm~594nm Peak Wavelength:596nm Peak Wavelength:596n
 Component Kind
 Standard
 Add into BOM
@@ -2525,63 +2525,63 @@ yes
 Convert to PCB
 yes
 Symbol
-0805G (Green)
+17-21SUYC/TR8
 Designator
 LED2
-Device
-KT-0805G
 Supplier
 LCSC
 Supplier Part
-C2297
+C2296
 Manufacturer
 KENTO
 Manufacturer Part
-KT-0805G
+KT-0805Y
 JLCPCB Part Class
 Basic Part
 Unique ID
 gge33
 LCSC Part Name
-0805 翠绿 高亮
+0805 黄灯 高亮
 Supplier Footprint
 0805
 Datasheet
-https://item.szlcsc.com/datasheet/KT-0805G/2670.html
+https://item.szlcsc.com/datasheet/KT-0805Y/2669.html
 3D Model Title
 LED0805-RD
 Illumination Color
-Emerald Green
+Yellow
 Voltage - Forward(Vf)
-2.6V~3.1V
+1.8V~2.4V
 Power(Watts)
-100mW
+40mW
 Forward Current
-5mA
+-
 Wavelength - Dominant
-513nm~528nm
+584nm~594nm
 Peak Wavelength
-525nm
+596nm
 Lens Color
 Water Clear
 Luminous Intensity
-430mcd
+175mcd
 Viewing Angle
 120°
 Operating Temperature
 -40℃~+85℃
 Name
-KT-0805G
+KT-0805Y
 Description
-Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
+Lamp Holder Type:- Illumination Color:Yellow Voltage - Forward(Vf):1.8V~2.4V Voltage - Forward(Vf):1.8V~2.4V Power(Watts):40mW Forward Current:- Wavelength - Dominant:584nm~594nm Wavelength - Dominant:584nm~594nm Peak Wavelength:596nm Peak Wavelength:596n
 Lamp Holder Type
-2mm x 1.25mm square LED
+-
 Diode Configuration
 Discrete Diode
 Color Temperature
 -
 Mounting Style
 -
+Device
+KT-0805Y
 
 *
 ]
@@ -2759,11 +2759,11 @@ ESD Withstand Voltage
 DESIGNATOR
 LED1
 FOOTPRINT
-LED0603-RD
+LED0805-R-RD
 PARTTYPE
-TZ-P2-0603YGTCS1-0.6T
+KT-0805G
 DESCRIPTION
-Illumination Color:Green Voltage - Forward(Vf):1.9V~2.4V Voltage - Forward(Vf):1.9V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:570nm~575nm Wavelength - Dominant:570nm~575nm Peak Wavelength:574nm Diode Configuration:- Lens Color:Wate
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
 Component Kind
 Standard
 Add into BOM
@@ -2771,69 +2771,63 @@ yes
 Convert to PCB
 yes
 Symbol
-TZ-P2-0603YGTCS1-0.6T
+0805G (Green)
 Designator
 LED1
-Device
-TZ-P2-0603YGTCS1-0.6T
 Unique ID
 gge36
 Name
-TZ-P2-0603YGTCS1-0.6T
-Reuse Block
-
-Group ID
-
-Channel ID
-
-Check
-true
+KT-0805G
 LCSC Part Name
-普绿/黄绿
+0805 翠绿 高亮
 Supplier Part
-C916074
+C2297
 Manufacturer
-TUOZHAN(拓展光电)
+KENTO
 Manufacturer Part
-TZ-P2-0603YGTCS1-0.6T
+KT-0805G
 Supplier Footprint
-0603
+0805
 JLCPCB Part Class
-Extended Part
+Basic Part
 Datasheet
-https://item.szlcsc.com/datasheet/TZ-P2-0603YGTCS1-0.6T/990102.html
+https://item.szlcsc.com/datasheet/KT-0805G/2670.html
 Supplier
 LCSC
 3D Model Title
-LED0603-RD
+LED0805-RD
 Illumination Color
-Green
+Emerald Green
 Voltage - Forward(Vf)
-1.9V~2.4V
+2.6V~3.1V
 Power(Watts)
-60mW
+100mW
 Forward Current
-20mA
+5mA
 Wavelength - Dominant
-570nm~575nm
+513nm~528nm
 Peak Wavelength
-574nm
+525nm
 Diode Configuration
--
+Discrete Diode
 Lens Color
 Water Clear
 Color Temperature
 -
 Luminous Intensity
-50mcd
+430mcd
 Viewing Angle
 120°
 Mounting Style
 -
 Operating Temperature
--40℃~+80℃
+-40℃~+85℃
 Description
-Illumination Color:Green Voltage - Forward(Vf):1.9V~2.4V Voltage - Forward(Vf):1.9V~2.4V Power(Watts):60mW Forward Current:20mA Wavelength - Dominant:570nm~575nm Wavelength - Dominant:570nm~575nm Peak Wavelength:574nm Diode Configuration:- Lens Color:Wate
+Lamp Holder Type:2mm x 1.25mm square LED Illumination Color:Emerald Green Voltage - Forward(Vf):2.6V~3.1V Voltage - Forward(Vf):2.6V~3.1V Power(Watts):100mW Forward Current:5mA Wavelength - Dominant:513nm~528nm Wavelength - Dominant:513nm~528nm Peak Wavel
+Lamp Holder Type
+2mm x 1.25mm square LED
+Device
+KT-0805G
 
 *
 ]
@@ -3242,6 +3236,8 @@ Symbol
 THVD2410DR
 Designator
 U5
+Device
+THVD2410DR
 Unique ID
 gge28_0
 Name
@@ -3288,8 +3284,6 @@ Features
 Tx/Rx enable；Thermal shutdown protection；Fail-safe；Enable shutdown；Overcurrent Protection；Low-power mode
 Description
 Type:Transceiver Number of Drivers:1 Number of Receivers:1 Voltage - Supply:3V~5.5V Voltage - Supply:3V~5.5V Data Rate:500Kbps Data Rate:500Kbps Number of Nodes:256 ESD Protect:±16kV ESD Protect:±16kV Operating Temperature:-40℃~+125℃ Operating Temperature
-Device
-THVD2410DR
 
 *
 ]
@@ -4245,6 +4239,86 @@ Type:Thick Film Resistor Resistance:560Ω Tolerance:±1% Tolerance:±1% Power(Wa
 ]
 [
 DESIGNATOR
+F2
+FOOTPRINT
+F1206
+PARTTYPE
+1206L020YR
+DESCRIPTION
+Voltage - Max:24V Current - Max:100A Hold Current:200mA Trip Current:420mA Power Dissipation:600mW Resistance - Initial (Ri) (Min):650mΩ Resistance - Post Trip (R1) (Max):2.6Ω Time to Trip(Max):100ms Operating Temperature:-40℃~+85℃ Operating Temperature:-
+Component Kind
+Standard
+Unique ID
+gge108
+Add into BOM
+yes
+Convert to PCB
+yes
+Symbol
+1206L020YR
+Designator
+F2
+Device
+1206L020YR
+LCSC Part Name
+24V 200mA 1206自恢复
+Supplier Part
+C207035
+Manufacturer
+Littelfuse(美国力特)
+Manufacturer Part
+1206L020YR
+Supplier Footprint
+1206
+JLCPCB Part Class
+Extended Part
+Datasheet
+https://item.szlcsc.com/datasheet/1206L020YR/208154.html
+Supplier
+LCSC
+3D Model Title
+F1206_L3.2-W1.7-H0.6
+Voltage - Max
+24V
+Current - Max
+100A
+Hold Current
+200mA
+Trip Current
+420mA
+Power Dissipation
+600mW
+Resistance - Initial (Ri) (Min)
+650mΩ
+Resistance - Post Trip (R1) (Max)
+2.6Ω
+Time to Trip(Max)
+100ms
+Operating Temperature
+-40℃~+85℃
+Length
+-
+Width
+-
+Height
+-
+Pitch
+-
+Name
+1206L020YR
+Description
+Voltage - Max:24V Current - Max:100A Hold Current:200mA Trip Current:420mA Power Dissipation:600mW Resistance - Initial (Ri) (Min):650mΩ Resistance - Post Trip (R1) (Max):2.6Ω Time to Trip(Max):100ms Operating Temperature:-40℃~+85℃ Operating Temperature:-
+Reuse Block
+
+Group ID
+
+Channel ID
+
+
+*
+]
+[
+DESIGNATOR
 R22
 FOOTPRINT
 R1206
@@ -4883,11 +4957,11 @@ Number:1 N-channel Drain to Source Voltage:60V Current - Continuous Drain(Id):11
 DESIGNATOR
 U14
 FOOTPRINT
-SOT-23-5_L2.9-W1.6-P0.95-LS2.8-BR_1
+SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR
 PARTTYPE
-SN74LVC1G126DBVR-TP
+SN74AHCT1G126DBVR
 DESCRIPTION
-Input type:- output type:Tri-State Voltage - Supply:1.65V~5.5V Voltage - Supply:1.65V~5.5V Number of Elements:1 Number of Bits per Element:1 Channel Type:Unidirectional Current - Output Low(IOL):32mA Current - Output High(IOH):32mA Logic Family:74LVC Oper
+Input type:- output type:Tri-State Voltage - Supply:4.5V~5.5V Voltage - Supply:4.5V~5.5V Number of Elements:1 Number of Bits per Element:1 Channel Type:Unidirectional Current - Output Low(IOL):8mA Current - Output High(IOH):8mA Logic Family:74AHCT Operati
 Component Kind
 Standard
 Add into BOM
@@ -4895,37 +4969,35 @@ yes
 Convert to PCB
 yes
 Symbol
-SN74LVC1G126DBVR-TP
+SN74AHCT1G126DBVR
 Designator
 U14
-Device
-SN74LVC1G126DBVR-TP
 Unique ID
 gge68
 LCSC Part Name
-三态输出，总线缓冲器/线路驱动器
+三态输出，单路总线缓冲门
 Supplier Part
-C46472327
+C163712
 Manufacturer
-TECH PUBLIC(台舟)
+TI(德州仪器)
 Manufacturer Part
-SN74LVC1G126DBVR-TP
+SN74AHCT1G126DBVR
 Supplier Footprint
 SOT-23-5
 JLCPCB Part Class
 Extended Part
 Datasheet
-https://item.szlcsc.com/datasheet/SN74LVC1G126DBVR-TP/48590275.html
+https://www.ti.com/cn/lit/ds/symlink/sn74ahct1g126.pdf
 Supplier
 LCSC
 3D Model Title
-SOT-23-5_L2.9-W1.6-P0.95-LS2.8-BR_1
+SOT-23-5_L2.9-W1.6-H1.1-LS2.8-P0.95
 Input type
 -
 output type
 Tri-State
 Voltage - Supply
-1.65V~5.5V
+4.5V~5.5V
 Number of Elements
 1
 Number of Bits per Element
@@ -4933,21 +5005,25 @@ Number of Bits per Element
 Channel Type
 Unidirectional
 Current - Output Low(IOL)
-32mA
+8mA
 Current - Output High(IOH)
-32mA
+8mA
 Logic Family
-74LVC
+74AHCT
 Operating Temperature
 -40℃~+125℃
 Quiescent Current
 10uA
 Propagation Delay
-9ns@5V,50pF
+5.5ns@5V,15pF
 Name
-SN74LVC1G126DBVR-TP
+SN74AHCT1G126DBVR
 Description
-Input type:- output type:Tri-State Voltage - Supply:1.65V~5.5V Voltage - Supply:1.65V~5.5V Number of Elements:1 Number of Bits per Element:1 Channel Type:Unidirectional Current - Output Low(IOL):32mA Current - Output High(IOH):32mA Logic Family:74LVC Oper
+Input type:- output type:Tri-State Voltage - Supply:4.5V~5.5V Voltage - Supply:4.5V~5.5V Number of Elements:1 Number of Bits per Element:1 Channel Type:Unidirectional Current - Output Low(IOL):8mA Current - Output High(IOH):8mA Logic Family:74AHCT Operati
+Features
+Edge rate controllable；Output enable；Level shifting
+Device
+SN74AHCT1G126DBVR
 
 *
 ]
@@ -5376,11 +5452,11 @@ D3-8 TPESD8004MUTAG-GND Passive
 SW1-4 GT-TZ084B-H015-L1-4 Passive 
 SW1-3 GT-TZ084B-H015-L1-3 Passive 
 C12-1 CL05B104KO5NNNC-1 Passive 
-LED2-2 KT-0805G-K Passive 
+LED2-2 KT-0805Y-- Passive 
 SW2-4 GT-TZ084B-H015-L1-4 Passive 
 SW2-3 GT-TZ084B-H015-L1-3 Passive 
 LED3-1 NCD0805R1_C84256-- Passive 
-LED1-1 TZ-P2-0603YGTCS1-0.6T-K Passive 
+LED1-2 KT-0805G-K Passive 
 C16-1 CL05B104KO5NNNC-1 Passive 
 C17-1 CL10A106MA8NRNC-1 Input   
 H1-1 PZ2.54-2x2PLT-L11.0 Pin header-1 Passive 
@@ -5400,7 +5476,7 @@ C19-2 MA25V220M6X8-2 Input
 R13-1 0402WGF1003TCE-1 Input   
 C20-1 CL10A106MA8NRNC-1 Input   
 Q2-2 2N7002_C8545-S Passive 
-U14-3 SN74LVC1G126DBVR-TP-GND Passive 
+U14-3 SN74AHCT1G126DBVR-GND Input   
 C21-1 CL05B104KO5NNNC-1 Passive 
 R16-2 0402WGF4702TCE-2 Input   
 U17-2 INA180A1IDBVR(LX)-GND Passive 
@@ -5441,11 +5517,11 @@ C8-2 CL10A105KB8NNNC-2 Passive
 C11-1 RVT220UF16V67RV0015-1 Input   
 R1-2 0603WAF7502T5E-2 Input   
 U10-1 RH-5015-1 Passive 
-U18-1 B4B-XH-A(LF)(SN)-1 Passive 
+F2-1 1206L020YR-1 Passive 
 C19-1 MA25V220M6X8-1 Input   
 Q1-2 AO3401A_C15127-S Passive 
 R12-2 0402WGF1003TCE-2 Input   
-U14-5 SN74LVC1G126DBVR-TP-VCC Passive 
+U14-5 SN74AHCT1G126DBVR-VCC Input   
 C21-2 CL05B104KO5NNNC-2 Passive 
 )
 (
@@ -5537,14 +5613,14 @@ R7-1 0402WGF3300TCE-1 Input
 (
 SERVO 
 U2-13 STM32G031F8P6-PA6 Passive 
-U14-2 SN74LVC1G126DBVR-TP-A Passive 
+U14-2 SN74AHCT1G126DBVR-A Input   
 )
 (
 SERVO_ENABLE 
 U2-12 STM32G031F8P6-PA5 Passive 
 R13-2 0402WGF1003TCE-2 Input   
 Q2-1 2N7002_C8545-G Passive 
-U14-1 SN74LVC1G126DBVR-TP-OE Passive 
+U14-1 SN74AHCT1G126DBVR-OE Input   
 )
 (
 USART2_RX 
@@ -5587,7 +5663,7 @@ U5-1 THVD2410DR-R Passive
 )
 (
 $2N40 
-LED2-1 KT-0805G-A Passive 
+LED2-1 KT-0805Y-+ Passive 
 R7-2 0402WGF3300TCE-2 Input   
 )
 (
@@ -5597,7 +5673,7 @@ R8-2 0402WGF3300TCE-2 Input
 )
 (
 $2N39 
-LED1-2 TZ-P2-0603YGTCS1-0.6T-A Passive 
+LED1-1 KT-0805G-A Passive 
 R6-2 0402WGF3300TCE-2 Input   
 )
 (
@@ -5615,6 +5691,11 @@ U18-3 B4B-XH-A(LF)(SN)-3 Passive
 R17-1 0402WGF1200TCE-1 Input   
 R18-2 0402WGF100JTCE-2 Input   
 R21-2 0603WAF5600T5E-2 Input   
+)
+(
+$4N27 
+U18-1 B4B-XH-A(LF)(SN)-1 Passive 
+F2-2 1206L020YR-2 Passive 
 )
 (
 $4N21 
@@ -5647,7 +5728,7 @@ C20-2 CL10A106MA8NRNC-2 Input
 (
 SERVO_Y 
 R10-2 0402WGF1000TCE-2 Input   
-U14-4 SN74LVC1G126DBVR-TP-Y Passive 
+U14-4 SN74AHCT1G126DBVR-Y Input   
 )
 (
 $5N10 

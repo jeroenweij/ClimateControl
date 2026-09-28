@@ -121,7 +121,7 @@ TSSOP20: a **single combined `VDD/VDDA` pin (4)** and **single `VSS/VSSA` (5)** 
 |---|---|---|
 | `VDD` (pin 4) | 100 nF + 1 µF at the pin, plus 4.7 µF bulk on the local 3V3 rail | Standard STM32G0 decoupling; keep the 100 nF loop tight. |
 | ADC reference | (none — it's `VDD`) | Matters for `TemperatureNode` if NTC-into-ADC is chosen: LDO ripple sets the temperature noise floor. Consider AP2112 (`C51118`) over XC6206 there. |
-| `NRST` (pin 6) | 100 nF to GND + reset button (§6.4) | Internal ~40 kΩ pull-up present — no external pull-up. |
+| `NRST` (pin 6) | cap to GND + reset button (§6.4) — 100 nF on the MainController, 10 nF on the ControllerNode and Thermostat | Internal ~40 kΩ pull-up present — no external pull-up. Both work for noise filtering and the button; 100 nF is ST's guideline value. |
 | `BOOT0` | nothing | Shares the `PA14`/SWCLK pad. Factory `nBOOT_SEL = 1` → boot source is the option byte, pad free as SWCLK, boots from flash. |
 | Clock | **HSI16 only, ×4 by the PLL** | No crystal. The applications run SYSCLK/HCLK/PCLK at **64 MHz** — HSI16 through the PLL (×8 ÷ 2), 2 flash wait states (`Hal::System::ClockTo64MHz()`); the bootloaders stay at 16 MHz, and both the bootloader→app jump and any reset return to it. The PLL does not change the accuracy, which is the HSI16's own: it is ±0.75% trimmed, ±1%/0–85°C, ±2% at −40°C — fine for the 115200 baud bus: an indoor duct/wall sees ~10–40°C where HSI16 holds ≈±1%, so two nodes are ~±2% apart, inside the async-UART framing budget. 115200 is not an exact integer divisor of the USART clock at either speed (64 MHz/115200 ≈ 555.6 → BRR 556 in the applications, 16 MHz/115200 ≈ 138.9 → BRR 139 in the bootloaders; both ≈115108 Hz, ≈0.08% generator error) — negligible next to the HSI16 spread itself. This is why 1 Mbit is not used. Pins 2/3 (`PB9/PC14-OSC32_IN`, `PC15-OSC32_OUT`) can instead take a **32.768 kHz LSE crystal** for the G031 RTC (wall-clock for MainController schedules). On the MainController board `PB9` is the bus-disable output (`RESET_NODES`), so LSE there would need it relocated; on Node/Thermostat boards pins 2/3 are free. Footprint LSE **DNP** on all boards for now. |
 | SWD | 5-pin header: `3V3` (Vtref), `SWDIO`=PA13 (18), `SWCLK`=PA14 (19), `NRST` (6), `GND` | No caps on SWDIO/SWCLK. Cortex-M0+ has no SWO/ITM — see §6.5. |
@@ -137,7 +137,7 @@ USART1 on port B + PA12, no SYSCFG pad remap needed:
 | 3 | PC15 | free (LSE xtal DNP) |
 | 4 | VDD/VDDA | 3V3 |
 | 5 | VSS/VSSA | GND |
-| 6 | NRST | reset button + 100 nF |
+| 6 | NRST | reset button + cap (§6.1) |
 | 7–13 | PA0–PA6 | **application** — see per-board split below |
 | 14 | PA7 | **activity LED** |
 | 15 | PB0…/PA8 mux | **error LED** |
@@ -211,10 +211,13 @@ Driven by `NodeLib`:
 
 All LED GPIOs are push-pull, active-high (`led.Write(true)` = lit). Wire each `pin → R → LED anode, cathode → GND`.
 
-| Function | LCSC | Part | Vf | notes |
-|---|---|---|---|---|
-| red (error) | `C2286` | Hubei KENTO KT-0603R | 1.8–2.4 V | 0603, JLC Basic |
-| green (activity) | `C916074` | TUOZHAN TZ-P2-0603YGTCS1 | 1.9–2.4 V | 0603, 570–575 nm yellow-green (works on 3.3V, unlike a 525 nm green at ~3.1V) |
+| Board | Error (PB0) | Activity (PA7) | Power (always on, `+3v3`) |
+|---|---|---|---|
+| MainController | `C2286` KT-0603R red, 0603 | `C389518` MHT192CGCT yellow-green, 568–575 nm | `C916074` TZ-P2-0603YGTCS1 yellow-green, 0603 |
+| ControllerNode | `C84256` NCD0805R1 red, 0805 | `C2296` KT-0805Y yellow, 0805 | `C2297` KT-0805G emerald green, 0805 |
+| Thermostat | `C84256` NCD0805R1 red, 0805 | `C2296` KT-0805Y yellow, 0805 | — |
+
+All GPIO-driven parts have Vf ≈ 1.7–2.4 V, which is what a 3.3V GPIO through 330 Ω needs to be readable. The ControllerNode's power LED is the one deliberate exception: a 525 nm emerald green (Vf 2.6–3.1 V) runs at only ~0.3–1 mA from `+3v3` through 330 Ω, so it glows dimly — acceptable for a steady power indicator, not for an activity LED that only flashes briefly. On the Thermostat, the two LEDs sit under Bivar `SLP3-150-100-F` light pipes (`B1`/`B2`, ordered but not assembled) that bring them to the enclosure edge.
 
 **Series resistor: 330 Ω** for every indicator LED (red / green / any orange). `R = (3.3 − ~2.0) / I` → ~3.3–4 mA, well inside the 8 mA/pin guideline; the low-mcd parts need the current to be readable. 470 Ω if a softer indicator is wanted. Avoid blue/white/525 nm-green (Vf ≈ 3.1V) on the 3.3V GPIO rail entirely.
 
