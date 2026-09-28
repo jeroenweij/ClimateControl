@@ -25,8 +25,9 @@ class Ds18b20
     // Reset + Skip-ROM + CONVERT T. False if no device answered the reset.
     bool StartConversion();
 
-    // Reset + Skip-ROM + READ SCRATCHPAD, verify CRC-8, decode. On success
-    // 'centiDegC' holds the temperature in 1/100 °C; on failure it is untouched.
+    // Reset + Skip-ROM + READ SCRATCHPAD, verify CRC-8, reject the +85 degC
+    // power-on value, decode. On success 'centiDegC' holds the temperature in
+    // 1/100 °C; on failure it is untouched.
     bool ReadTemperature(int16_t& centiDegC);
 
   private:

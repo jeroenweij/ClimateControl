@@ -47,15 +47,28 @@ uint32_t Hal::Tick::Micros()
 
 void Hal::Tick::DelayUs(const uint32_t us)
 {
+    // Timestamp first, so the setup below counts against the delay instead of
+    // adding to it (bit-banged 1-Wire slots need a few-us delay to be accurate).
+    uint32_t prev = SysTick->VAL;
+
     if (us == 0U)
     {
         return;
     }
 
-    const uint32_t reload     = SysTick->LOAD + 1U; // ticks per 1 ms SysTick period
-    const uint32_t ticksPerUs = SystemCoreClock / 1000000U;
-    uint32_t       remaining  = us * ticksPerUs;
-    uint32_t       prev       = SysTick->VAL;
+    // The M0+ has no hardware divide -- a SystemCoreClock / 1000000 on every
+    // call is a ~1 us __aeabi_uidiv. Recompute only when the clock changes
+    // (e.g. after ClockTo64MHz()).
+    static uint32_t cachedCoreClock = 0;
+    static uint32_t ticksPerUs      = 0;
+    if (SystemCoreClock != cachedCoreClock)
+    {
+        cachedCoreClock = SystemCoreClock;
+        ticksPerUs      = SystemCoreClock / 1000000U;
+    }
+
+    const uint32_t reload    = SysTick->LOAD + 1U; // ticks per 1 ms SysTick period
+    uint32_t       remaining = us * ticksPerUs;
 
     while (remaining != 0U)
     {

@@ -11,6 +11,12 @@ namespace
 {
     constexpr uint8_t ScratchpadLen = 9; // bytes 0..7 payload, byte 8 = CRC-8
 
+    // Temperature register power-on value (+85 degC). Read back with a valid
+    // CRC when the conversion never ran -- the probe browned out / reset, or is
+    // wired parasite-powered with no strong pull-up. Far above any duct air
+    // temperature, so a real 85.00 reading is not a concern.
+    constexpr int16_t PowerOnRaw = 0x0550;
+
     // DS18B20 raw reading is int16 in units of 1/16 °C. Convert to 1/100 °C:
     // centi = raw * 100 / 16 = raw * 25 / 4 (int32 keeps the full range).
     int16_t RawToCentiDeg(const int16_t raw)
@@ -68,6 +74,11 @@ bool Ds18b20::ReadTemperature(int16_t& centiDegC)
 
     const int16_t raw = static_cast<int16_t>(static_cast<uint16_t>(scratchpad[0]) |
                                              (static_cast<uint16_t>(scratchpad[1]) << 8U));
-    centiDegC         = RawToCentiDeg(raw);
+    if (raw == PowerOnRaw)
+    {
+        return false;
+    }
+
+    centiDegC = RawToCentiDeg(raw);
     return true;
 }

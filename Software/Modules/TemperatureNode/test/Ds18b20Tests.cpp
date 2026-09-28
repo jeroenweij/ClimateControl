@@ -128,3 +128,18 @@ CC_TEST(Ds18b20, RejectsAStuckLowLine)
     int16_t centi = 0;
     CC_CHECK(!sensor.ReadTemperature(centi));
 }
+
+CC_TEST(Ds18b20, RejectsThePowerOnValue)
+{
+    FakeOneWire::ResetAll();
+    FakeOneWire::SetPresent(line, true);
+
+    uint8_t scratchpad[9];
+    MakeScratchpad(0x0550, scratchpad); // +85.0 degC, valid CRC -- conversion never ran
+    FakeOneWire::QueueRead(line, scratchpad, 9);
+
+    Ds18b20 sensor(line);
+    int16_t centi = 999;
+    CC_CHECK(!sensor.ReadTemperature(centi));
+    CC_CHECK_EQ(centi, 999);
+}

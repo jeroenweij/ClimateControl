@@ -22,8 +22,9 @@ namespace
     constexpr uint32_t WriteZeroLowUs    = 60; //  C
     constexpr uint32_t WriteZeroRecovUs  = 10; //  D
     constexpr uint32_t ReadLowUs         = 6; //   A
-    constexpr uint32_t ReadToSampleUs    = 8; //   E  release -> sample (must be < 15 us total)
-    constexpr uint32_t ReadRecoveryUs    = 55; //  F
+    constexpr uint32_t ReadToSampleUs    = 6; //   E  release -> sample (must be < 15 us total; AN126
+                                              //      says 9, trimmed to leave margin for call/GPIO overhead)
+    constexpr uint32_t ReadRecoveryUs    = 57; //  F  (+2 us, keeps the 70 us slot)
 
     // PRIMASK-preserving critical section -- masks interrupts across a single
     // time-critical low pulse / sample without clobbering a caller that already
