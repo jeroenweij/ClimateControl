@@ -117,13 +117,17 @@ While on, the panel is redrawn only when something it shows visibly changes (tem
 
 - **2 touch buttons, capacitive**, driven by a **Holtek BS212C-1** touch-key IC (LCSC `C42372571`, SOT-23-6) rather than mechanical switches, to support the sealed-enclosure look of §4.6 (copper mesh behind the plastic front as the two electrodes, no physical hole/actuator through the case).
   - `KOUT1`/`KOUT2` are NMOS, active-low, with internal pull-high — the same polarity `Hal::Gpio::Mode::InputPullUp` already assumes for a plain switch-to-GND button, so they wire straight onto the same two MCU GPIOs (`PA11`/`PA12`, §4.4) with no firmware change. One channel keeps the node `ErrorHandler` ack role (also clears a link-lost error); the other is the UI's set/adjust control.
-  - `KEY1`/`KEY2` route to the two copper-mesh electrode pads. Per the datasheet, sensitivity is set by electrode/copper area, the plastic's thickness, and — the easy knob during bring-up — a per-channel 0–25 pF capacitor footprint on each `KEY` pin (`Ct`; higher Ct = lower sensitivity, 0 pF = max). Leave the footprint unpopulated until the enclosure's actual plastic thickness is known, then tune empirically.
+  - **Electrodes, both 12 mm round** (§4.7 has the board orientation):
+    - `KEY1` is a copper disc on the PCB's bottom layer — the front face, flush against the housing — at the top edge of the board. L2/L3 and the top pour are cleared behind it to keep its parasitic capacitance low. The two LED light pipes (`B1`/`B2`) pass through plated holes inside the disc; those holes are part of the `KEY1` net, which is harmless.
+    - `KEY2` has no room on the PCB — the OLED flex wraps around the board edge where it would go — so it is a copper-mesh or copper-tape disc stuck to the inside of the housing, wired to test pad `U3` (DNP footprint, used as a solder pad). Keep that wire short and away from the OLED flex, which carries the charge-pump `VCC` rail.
+    - Nothing shields `KEY1` from the top side, where the link connector (`U5`) and the RS-485 traces sit right behind it. At bring-up, test touch while the link is busy; if it false-triggers, fit `Ct` (`C18`).
+  - Per the datasheet, sensitivity is set by electrode/copper area, the plastic's thickness, and — the easy knob during bring-up — a per-channel 0–25 pF capacitor footprint on each `KEY` pin (`Ct`; higher Ct = lower sensitivity, 0 pF = max). Leave the footprint unpopulated until the enclosure's actual plastic thickness is known, then tune empirically.
   - **Auto-calibration** (power-on, and again after ~1 s idle in normal mode / ~2 s in standby, per datasheet) re-baselines against drift from temperature, humidity and aging of the mesh/adhesive. A stuck-key timeout (60–68 s max key-on time) forces a re-cal if something covers a pad continuously.
   - Power: ~3.5 µA (3 V) standby, ~0.6 mA typ / 0.9 mA max (3 V) while active — negligible against the §4.5 budget. 0.1 µF decoupling on `VDD` per the datasheet's application circuit; no external LDO needed.
 - **Room temperature/humidity sensor: CYBERSEN CHT40MEMS** (`CHT40MEMS`, JLCPCB `C54305346`) on the shared I²C display bus. SHT40-clone in the same DFN-4 1.5×1.5 mm footprint, I²C, ±0.2 °C / ±2.5 % RH, −40…+125 °C. 0 extra pins, no ADC calibration.
   - The footprint is the standard SHT40 DFN-4 so a genuine Sensirion `SHT40-AD1F-R2` (`C7461846`) drops onto the same pads — the fallback if CHT40MEMS stock or humidity quality disappoints. SHTC3 (`C194656`) is *not* pad-compatible (2×2).
   - Before committing firmware, verify from the CHT40MEMS datasheet that it is SHT4x command-compatible (command bytes, CRC-8 poly/init, measurement timing). If so, the existing SHT4x driver just works.
-  - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDOs/MCU/OLED (on the board: `U7` at the bottom edge, both regulators and the 47µF bulk cap at the top); keep the ground pour out from under and around it so copper doesn't conduct board heat into it (done — a pour keep-out around `U7`/`C24`); mill isolation slots around it if that proves insufficient (Sensirion app-note "thermal decoupling"); vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
+  - **Self-heating is the real design problem.** MCU + LDO + OLED warm the board and a wall thermostat classically reads 1–3 °C high. Mitigate: put the sensor at the *bottom* edge of the PCB (heat rises), far from the LDOs/MCU/OLED (on the board: `U7` at the bottom edge, both regulators and the 47µF bulk cap at the top); keep copper from conducting board heat into it (Sensirion app-note "thermal decoupling"). On the board, `U7`/`C24` sit on an island separated from the rest by a milled slot. The top pour is kept out around them. The island's own L2 GND and L3 +3V3 pours are joined to the main planes only by thin 0.25 mm traces across the gap, and they spread heat within the island rather than carrying it in from the board. Also: vent holes in the enclosure bottom + top for convection; keep the LDO on the far side of the board. The OLED being off most of the time (§4.2) already removes the biggest heat source. Expect to still need a small firmware offset.
   - This part has no protective membrane — keep flux/outgassing away from it (clean assembly, no conformal coat over the sensor).
 
 ### 4.4 Pin map (STM32G031F8P6, TSSOP20)
@@ -169,6 +173,21 @@ Styled after the **IKEA TIMMERFLOTTE** (temp/humidity sensor, ~65×65×18 mm puc
 **Two real deltas from a literal copy:**
 - TIMMERFLOTTE is battery-powered and cable-free; this Thermostat is wired — link plus power, both on the same 4-conductor cable (§3.1) — so the enclosure needs a cable entry TIMMERFLOTTE doesn't have — round back, cable out the rear/bottom so the front stays clean.
 - TIMMERFLOTTE's whole face is *one* button (read-only device — press to cycle temp/humidity). This Thermostat also drives a setpoint (§4.3, 2 touch buttons), so a literal one-big-button face doesn't carry over as-is — left for a future interaction-design pass.
+
+### 4.7 PCB orientation and front-face stack
+
+The PCB's **bottom side is the front**. It sits flush against the inside of the housing's face, and all components are on the top side, facing the wall.
+
+- **Board shape:** a Ø50 mm circle with a flat bottom edge and a 25.8 × 7.9 mm notch in it. The OLED flex wraps around the board through that notch.
+- **OLED:** the glass lies on the bottom (front) side, behind the display window. Its FPC tail wraps 180° around the notched edge to the `U17` solder pads on the top side.
+  - This is the opposite fold to the usual mounting, where the glass and pads share one PCB face with the flex folded under the glass. So two things depend on the fold:
+    - which face of the FPC the exposed contacts are on;
+    - the pin order. Seen from the top side, the pad row is mirrored compared with the library footprint.
+  - Check both against a real module before committing a board revision: print the top copper at 1:1, wrap the flex around a 1.6 mm edge the way it will be assembled, and confirm pin 1 lands on `U17` pad 1. Pins 1 and 30 are both GND, so a mirrored footprint looks right at the ends while shorting pin 9 (`VDD`) to pin 22 (`D4`, tied to GND).
+  - Also respect the flex's minimum bend radius around the board edge plus the glass.
+- **Touch electrodes:** `KEY1` is on-board on the bottom layer and `KEY2` is a disc on the housing, wired to `U3` (§4.3).
+- **Status LEDs:** `LED2`/`LED3` are on the top side. The light pipes `B1`/`B2` carry their light through the board to the front, inside the `KEY1` electrode.
+- **Room sensor:** `U7` is on the top side, on its slotted island at the notched edge (§4.3). It faces the wall side of the enclosure, so venting has to reach the back of the board.
 
 ---
 
