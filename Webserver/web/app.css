@@ -174,32 +174,57 @@ td .warn, td.warn { color: var(--warn); font-weight: 600; }
 .stage img { width: 100%; display: block; }
 .stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage.editing { cursor: crosshair; }
+.duct-temps {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.15rem 0.7rem;
+  padding: 0.45rem 0.7rem;
+  line-height: 1.3;
+  font-size: 0.9rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.duct-temps div { display: contents; }
+.duct-temps span { color: var(--muted); }
+.duct-temps b { text-align: right; font-variant-numeric: tabular-nums; }
 
-.node-dot { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
-.node-dot.selected { fill: var(--accent); stroke: var(--accent); stroke-width: 2; }
+/* Overlay sizes are screen px times --k (viewBox units per screen px, set by
+   paintOverlay) so they don't grow or shrink with the floor plan's resolution. */
+.node-dot { fill: var(--panel); stroke: var(--ink); stroke-width: calc(1.5px * var(--k, 1)); }
+.node-dot.selected { fill: var(--accent); stroke: var(--accent); stroke-width: calc(2px * var(--k, 1)); }
 .node-halo {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 2;
+  stroke-width: calc(2px * var(--k, 1));
   opacity: 0.7;
   animation: node-pulse 1.4s ease-out infinite;
 }
 @keyframes node-pulse {
-  from { r: 6; opacity: 0.7; }
-  to { r: 18; opacity: 0; }
+  from { r: calc(7px * var(--k, 1)); opacity: 0.7; }
+  to { r: calc(20px * var(--k, 1)); opacity: 0; }
 }
-.node-label {
-  font: 600 12px system-ui;
-  fill: var(--ink);
+.node-label,
+.node-room {
+  text-anchor: middle;
   paint-order: stroke;
   stroke: var(--panel);
-  stroke-width: 3px;
+  stroke-width: calc(3px * var(--k, 1));
 }
-.node-sub { font: 11px system-ui; fill: var(--muted); }
+.node-label { font: 600 calc(16px * var(--k, 1)) system-ui; fill: var(--ink); }
+.node-room { font: 500 calc(13px * var(--k, 1)) system-ui; fill: var(--ink); }
 
-.draft-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+.draft-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: calc(2px * var(--k, 1));
+  stroke-dasharray: calc(6px * var(--k, 1)) calc(4px * var(--k, 1));
+}
 .draft-outline-fill { fill: var(--accent); fill-opacity: 0.18; }
-.draft-vertex { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.draft-vertex { fill: var(--accent); stroke: var(--panel); stroke-width: calc(1.5px * var(--k, 1)); }
 
 .empty { color: var(--muted); padding: 2rem; text-align: center; }
 .view[hidden] { display: none; }

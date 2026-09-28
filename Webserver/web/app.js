@@ -196,6 +196,28 @@ async function renderMap() {
   if (!state.floors.length) return;
 
   drawFloor(sel.value, $("#floor-img"), $("#map-overlay"), false);
+  renderDuctTemps();
+}
+
+// The shared duct Supply/Return temperatures, top left of the map. Like the
+// firmware's NodeLib::SupplyTemp it doesn't care which TemperatureNode reports
+// them -- the newest reading wins -- but shows "—" while that node is offline or
+// has the matching probe fault raised, rather than a frozen last value.
+function ductTemp(endpoint, faultName) {
+  let newest = null;
+  for (const v of state.values.values()) {
+    if (v.endpoint === endpoint && v.value.kind === "number" && (!newest || v.ts > newest.ts)) newest = v;
+  }
+  if (!newest) return "—";
+  const n = state.nodes.find((n) => n.id === newest.node);
+  if (n && (!n.online || (n.faults || []).includes(faultName))) return "—";
+  return `${newest.value.num.toFixed(1)}°`;
+}
+
+function renderDuctTemps() {
+  $("#duct-temps").innerHTML =
+    `<div><span>Supply</span><b>${ductTemp("SupplyTemp", "Supply sensor fault")}</b></div>` +
+    `<div><span>Return</span><b>${ductTemp("ReturnTemp", "Return sensor fault")}</b></div>`;
 }
 $("#floor-select").addEventListener("change", () =>
   drawFloor($("#floor-select").value, $("#floor-img"), $("#map-overlay"), false)
@@ -209,7 +231,31 @@ function drawFloor(floorId, img, svg, editable) {
   paintOverlay(svg, floor, editable);
 }
 
+// The overlay's viewBox is the floor plan's native pixel size, stretched to the
+// stage width -- so anything meant to look the same on every floor plan (node
+// dots, labels, strokes, draft handles) is sized in screen px times k, the
+// viewBox units per screen pixel. CSS picks k up as --k. A hidden overlay has
+// no width yet; the ResizeObserver below repaints it once it gets one.
+function overlayScale(svg, floor) {
+  const w = svg.getBoundingClientRect().width;
+  return w > 0 ? floor.widthPx / w : 1;
+}
+
+const overlayPainted = new WeakMap(); // svg -> { floorId, editable, width } of its last paint
+const overlayResize = new ResizeObserver((entries) => {
+  for (const e of entries) {
+    const last = overlayPainted.get(e.target);
+    if (!last || e.contentRect.width === last.width) continue;
+    const floor = state.floors.find((f) => f.id === last.floorId);
+    if (floor) paintOverlay(e.target, floor, last.editable);
+  }
+});
+for (const svg of [$("#map-overlay"), $("#setup-overlay")]) overlayResize.observe(svg);
+
 function paintOverlay(svg, floor, editable) {
+  const k = overlayScale(svg, floor);
+  svg.style.setProperty("--k", k);
+  overlayPainted.set(svg, { floorId: floor.id, editable, width: svg.getBoundingClientRect().width });
   const r = Math.max(floor.widthPx, floor.heightPx) * 0.06;
   const selectedNode = editable ? parseInt($("#setup-node-select").value, 10) : null;
   let defs = `<defs>`;
@@ -236,14 +282,17 @@ function paintOverlay(svg, floor, editable) {
     } else {
       blobs += `<circle cx="${p.xPx}" cy="${p.yPx}" r="${r}" fill="url(#${gid})"/>`;
     }
-    const label = temp == null ? "—" : `${temp.toFixed(1)}°`;
-    const sub = set && set.value.kind === "number" ? `set ${set.value.num.toFixed(1)}°` : `node ${p.nodeId}`;
+    const current = temp == null ? "—" : temp.toFixed(1);
+    const label = set && set.value.kind === "number" ? `${current} - ${set.value.num.toFixed(1)}` : current;
+    const node = state.nodes.find((n) => n.id === p.nodeId);
+    const room = (node && node.name) || `node ${p.nodeId}`;
     const selected = p.nodeId === selectedNode;
+    // "current - setpoint" centered above the dot, room name centered below it.
     markers += `<g data-node="${p.nodeId}">
-      ${selected ? `<circle class="node-halo" cx="${p.xPx}" cy="${p.yPx}" r="6"/>` : ""}
-      <circle class="node-dot${selected ? " selected" : ""}" cx="${p.xPx}" cy="${p.yPx}" r="6"/>
-      <text class="node-label" x="${p.xPx + 12}" y="${p.yPx - 2}">${label}</text>
-      <text class="node-sub" x="${p.xPx + 12}" y="${p.yPx + 14}">${esc(sub)}</text>
+      ${selected ? `<circle class="node-halo" cx="${p.xPx}" cy="${p.yPx}" r="${7 * k}"/>` : ""}
+      <circle class="node-dot${selected ? " selected" : ""}" cx="${p.xPx}" cy="${p.yPx}" r="${7 * k}"/>
+      <text class="node-label" x="${p.xPx}" y="${p.yPx - 12 * k}">${label}</text>
+      <text class="node-room" x="${p.xPx}" y="${p.yPx + 25 * k}">${esc(room)}</text>
     </g>`;
   }
   defs += `</defs>`;
@@ -257,10 +306,10 @@ function paintOverlay(svg, floor, editable) {
           ? `<polyline points="${ptsAttr}" class="draft-outline"/>`
           : `<polygon points="${ptsAttr}" class="draft-outline draft-outline-fill"/>`;
       for (const [x, y] of draft.points) {
-        draftMarkup += `<circle class="draft-vertex" cx="${x}" cy="${y}" r="4"/>`;
+        draftMarkup += `<circle class="draft-vertex" cx="${x}" cy="${y}" r="${4 * k}"/>`;
       }
     } else if (draft.seed) {
-      draftMarkup += `<circle class="draft-vertex" cx="${draft.seed.x}" cy="${draft.seed.y}" r="5"/>`;
+      draftMarkup += `<circle class="draft-vertex" cx="${draft.seed.x}" cy="${draft.seed.y}" r="${5 * k}"/>`;
     }
   }
   svg.innerHTML = defs + blobs + markers + draftMarkup;
@@ -583,6 +632,7 @@ function onValue(msg) {
   if (currentView() === "map") {
     const floor = state.floors.find((f) => String(f.id) === String($("#floor-select").value));
     if (floor) paintOverlay($("#map-overlay"), floor, false);
+    if (msg.endpoint === "SupplyTemp" || msg.endpoint === "ReturnTemp") renderDuctTemps();
   } else if (currentView() === "status") {
     if (msg.node === 0) renderMainStatus();
     else renderNodeTable();
