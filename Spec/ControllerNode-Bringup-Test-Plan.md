@@ -1,7 +1,7 @@
 # ControllerNode — Hardware Bring-up Test Plan
 ### What to check, in order, when the first real ControllerNode boards (servo, INA180, Thermostat link) arrive
 
-**Companion docs:** `Node-Bus-Hardware-Design-Spec.md` (servo, linkage, pin map), `Node-Bus-Power-Path-Spec.md` §3.1 (servo rail gating, stall detection), `Damper-Budget-Spec.md` (room loop and its tunable constants), `ControllerNode-Thermostat-Link-Spec.md` (link + Thermostat), `Node-Flash-Layout-and-Bootloader-Spec.md` (flash, provisioning, OTA).
+**Companion docs:** `Node-Bus-Hardware-Design-Spec.md` (servo, linkage, pin map), `Damper-Mechanics-Spec.md` (damper, mounting ring, fork and gears), `Node-Bus-Power-Path-Spec.md` §3.1 (servo rail gating, stall detection), `Damper-Budget-Spec.md` (room loop and its tunable constants), `ControllerNode-Thermostat-Link-Spec.md` (link + Thermostat), `Node-Flash-Layout-and-Bootloader-Spec.md` (flash, provisioning, OTA).
 
 Everything below is implemented in firmware and covered by host unit tests, but has only ever run on MainController PCBs with the ControllerNode build — no servo, no current-sense amp, no link transceiver. Each step lists what to do, what should happen, and what to change if it doesn't. Work top to bottom: later steps assume the earlier ones passed.
 
@@ -56,7 +56,7 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 | 5.5 | Scope 5 V and 3.3 V during 5.2 | 5 V dips but recovers; 3.3 V stays in spec; MCU does not reset | Power-path issue (`Node-Bus-Power-Path-Spec.md` §3.1) |
 | 5.6 | Moves while the bus is busy | No bus CRC errors or dropped polls on this node or its neighbours | Rail noise into the RS-485 transceiver — decoupling / layout |
 
-## 6. With linkage and damper (2.5:1, 72° blade travel)
+## 6. With linkage and damper (2.2:1, ≈ 82° blade travel — `Damper-Mechanics-Spec.md`)
 
 | # | Do | Expect | If not |
 |---|---|---|---|
