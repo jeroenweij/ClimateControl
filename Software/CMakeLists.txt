@@ -12,12 +12,12 @@ set(CMAKE_C_STANDARD 11)
 # used to name the OTA image the build produces
 # (<Module>_<version>.bin, e.g. ControllerNode_1.0.bin -- the name the server's
 # firmware repository parses). Bump this for a release.
-set(CC_FW_VERSION "0.1" CACHE STRING "Firmware version <major>.<minor>")
+set(CC_FW_VERSION "0.12") # <major>.<minor>; plain variable, not CACHE -- a cached value would outlive edits here
 
 # Hardware revision of the boards this firmware is built for, reported by every
 # node in SystemInfo (hwRev, 0..255) as Board::HwRevision. Bump it together
 # with a board revision that firmware needs to tell apart.
-set(CC_HW_REVISION "1" CACHE STRING "Board hardware revision reported in SystemInfo (hwRev)")
+set(CC_HW_REVISION "1")
 add_compile_definitions(CC_HW_REVISION=${CC_HW_REVISION})
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/stm32.cmake)

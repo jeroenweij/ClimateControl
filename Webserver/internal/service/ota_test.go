@@ -132,3 +132,48 @@ func TestStartOTAThermostatJob(t *testing.T) {
 }
 
 var _ Sender = (*fakeSender)(nil)
+
+// A push that fails after Begin Aborts the bootloader, so it drops out of
+// Receiving instead of waiting for chunks that never come; one that fails
+// before Begin, or succeeds, sends nothing extra.
+func TestFailedPushAbortsTheBootloaderAfterBegin(t *testing.T) {
+	cases := []struct {
+		name      string
+		target    string
+		begun     bool
+		state     string
+		wantAbort bool
+		wantEp    nodelib.Endpoint
+	}{
+		{"thermostat error after Begin", "thermostat", true, "error", true, nodelib.EndpointThermostatFirmware},
+		{"node error after Begin", "node", true, "error", true, nodelib.EndpointFirmware},
+		{"error before Begin", "node", false, "error", false, 0},
+		{"success", "thermostat", true, "done", false, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			svc, fs := newTestService(t)
+			d := &otaDriver{svc: svc, nodeID: 3, target: c.target, begun: c.begun, doneCh: make(chan struct{})}
+			d.done(c.state, "", 0)
+
+			var aborts []nodelib.Frame
+			for _, f := range fs.Frames() {
+				if f.Operation == nodelib.OpSet && len(f.Data) == 1 && f.Data[0] == byte(nodelib.FirmwareOpAbort) {
+					aborts = append(aborts, f)
+				}
+			}
+			if !c.wantAbort {
+				if len(aborts) != 0 {
+					t.Fatalf("sent %d Abort(s), want none", len(aborts))
+				}
+				return
+			}
+			if len(aborts) != 1 {
+				t.Fatalf("sent %d Abort(s), want 1", len(aborts))
+			}
+			if aborts[0].Node != 3 || aborts[0].Endpoint != c.wantEp {
+				t.Errorf("Abort went to node %d endpoint %v, want node 3 endpoint %v", aborts[0].Node, aborts[0].Endpoint, c.wantEp)
+			}
+		})
+	}
+}

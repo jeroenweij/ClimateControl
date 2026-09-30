@@ -17,6 +17,9 @@ namespace NodeLib
     // it shares only the framing/Node plumbing, none of the discovery array or
     // round-robin cursor.
     //
+    // Transport frames stay here, except the peer's Announce, which is also
+    // handed to the registered handler so it can track the state byte.
+    //
     // The peer (the paired Thermostat) always has THERMOSTAT_NODE_ID -- every
     // Thermostat carries the same fixed id, independent of this ControllerNode's
     // own bus id (link is private; §5.2.1).
@@ -32,6 +35,13 @@ namespace NodeLib
         bool    LinkUp() const;
         uint8_t PeerId() const;
         bool    PeerInBootloader() const; // learned from the peer's Announce
+
+        // Broadcast a Discover now instead of waiting for the periodic one, and
+        // forget the cached bootloader state until the peer's Announce answers.
+        // The bootloader only ever Announces in reply to a Discover, so this is
+        // how the ControllerNode learns its peer came back up in the bootloader
+        // after Firmware[EnterBootloader].
+        void Rediscover();
 
         // --- inject a frame to the peer (flushed on the next poll) -----------
         void SendToPeer(const Endpoint endpoint, const Operation op, const uint8_t* const data, const uint8_t len);

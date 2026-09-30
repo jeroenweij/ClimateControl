@@ -38,9 +38,17 @@ namespace
         p[3] = static_cast<uint8_t>(v >> 24);
     }
 
-    // Peer Status state byte: 0 = app; the bootloader never reports 0.
+    // Peer Status state byte: 0 = app; the bootloader never reports 0
+    // (Modules/Bootloader/FirmwareSlave.h State).
     constexpr uint8_t StateApp       = 0;
+    constexpr uint8_t StateIdle      = 1;
     constexpr uint8_t StateReceiving = 3;
+    constexpr uint8_t StateValid     = 4;
+    constexpr uint8_t StateError     = 5;
+
+    // Write's Ack/Nack: byteOffset(2) chunkCrc16(2) programFailed(1).
+    // Begin/End/Abort's: lastError(1).
+    constexpr uint8_t WriteReplyLen = 5;
 } // namespace
 
 ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
@@ -53,7 +61,10 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     beginPayload{},
     expectedOffset(0),
     peerState(StateApp),
+    pendingOp(FirmwareOp::Status),
+    statusChanged(false),
     enterBlTimer(),
+    enterBlDiscoverTimer(),
     pendingWriteLen(0),
     writeReplyPending(false),
     writeReplyNack(false),
@@ -73,13 +84,20 @@ void ThermostatLink::Loop()
         if (link.PeerInBootloader())
         {
             SendFirmwareOp(FirmwareOp::Begin, &beginPayload[1], sizeof(beginPayload) - 1);
-            otaState = OtaState::Transferring;
+            pendingOp = FirmwareOp::Begin;
+            otaState  = OtaState::Transferring;
         }
         else if (enterBlTimer.Finished())
         {
             LOG_WARN("Thermostat did not enter bootloader");
-            lastError = FirmwareError::BadState;
-            otaState  = OtaState::Failed;
+            lastError     = FirmwareError::BadState;
+            otaState      = OtaState::Failed;
+            statusChanged = true;
+        }
+        else if (enterBlDiscoverTimer.Finished())
+        {
+            link.Rediscover();
+            enterBlDiscoverTimer.ReStart();
         }
         return;
     }
@@ -118,7 +136,13 @@ void ThermostatLink::PushDisplay()
 
 void ThermostatLink::ReceivedMessage(const Message& m)
 {
-    if (m.id.operation == Operation::Report)
+    if (m.id.operation == Operation::Announce)
+    {
+        // Handed over by LinkMaster: the bootloader's carries its state byte
+        // at data[1], the app's has none.
+        SetPeerState(m.len >= 2 ? m.data[1] : StateApp);
+    }
+    else if (m.id.operation == Operation::Report)
     {
         switch (m.id.endpoint)
         {
@@ -160,7 +184,7 @@ void ThermostatLink::ReceivedMessage(const Message& m)
                 // expectedOffset(4) lastError fwVersion(2)
                 if (m.len >= 9 && m.data[0] == static_cast<uint8_t>(FirmwareOp::Status))
                 {
-                    peerState      = m.data[1];
+                    SetPeerState(m.data[1]);
                     expectedOffset = ReadU32(&m.data[2]);
                     lastError      = static_cast<FirmwareError>(m.data[6]);
                     thermostatFw   = ReadU16(&m.data[7]);
@@ -181,7 +205,11 @@ void ThermostatLink::ReceivedMessage(const Message& m)
         // chunkCrc16(2) programFailed(1). Relayed up the main bus from
         // Loop() via ConsumeWriteReply(), not answered here -- the CN
         // terminates and re-originates rather than forwarding.
-        if (m.id.endpoint == Endpoint::Firmware && m.len >= 5 && otaState == OtaState::Transferring)
+        if (m.id.endpoint == Endpoint::Firmware && m.len >= 1 && m.len < WriteReplyLen)
+        {
+            OnOpReply(m.id.operation == Operation::Nack, m.data[0]); // Begin/End/Abort
+        }
+        else if (m.id.endpoint == Endpoint::Firmware && m.len >= WriteReplyLen && otaState == OtaState::Transferring)
         {
             const bool     nack          = (m.id.operation == Operation::Nack);
             const uint16_t offset        = ReadU16(m.data);
@@ -203,15 +231,50 @@ void ThermostatLink::ReceivedMessage(const Message& m)
     }
 }
 
+void ThermostatLink::OnOpReply(const bool nack, const uint8_t error)
+{
+    if (nack)
+    {
+        lastError = static_cast<FirmwareError>(error);
+        SetPeerState(StateError);
+        return;
+    }
+    const FirmwareOp op = pendingOp;
+    pendingOp           = FirmwareOp::Status; // nothing awaiting a reply
+    switch (op)
+    {
+        case FirmwareOp::Begin:
+            expectedOffset = 0;
+            SetPeerState(StateReceiving);
+            break;
+        case FirmwareOp::End:
+            SetPeerState(StateValid);
+            break;
+        case FirmwareOp::Abort:
+            SetPeerState(StateIdle);
+            break;
+        default:
+            break;
+    }
+}
+
+void ThermostatLink::SetPeerState(const uint8_t state)
+{
+    if (state != peerState)
+    {
+        peerState     = state;
+        statusChanged = true;
+    }
+}
+
 void ThermostatLink::ConnectionLost()
 {
     LOG_WARN("Thermostat link down");
     room.valid = false;
-    if (otaState == OtaState::EnteringBootloader || otaState == OtaState::Transferring)
-    {
-        lastError = FirmwareError::LinkDown;
-        otaState  = OtaState::Failed;
-    }
+    // An OTA in flight is not failed here: the peer is silent for a moment
+    // both while it resets into the bootloader and while Begin erases the app
+    // slot (~0.5-1 s, longer than linkTimeoutMs). enterBlTimer bounds the
+    // first; the server's own per-step timeouts bound the transfer.
 }
 
 void ThermostatLink::PushSetpoint(const int16_t centiDegC)
@@ -268,12 +331,14 @@ bool ThermostatLink::OtaBegin(const uint8_t module, const uint32_t imageSize, co
     if (link.PeerInBootloader())
     {
         SendFirmwareOp(FirmwareOp::Begin, &beginPayload[1], sizeof(beginPayload) - 1);
-        otaState = OtaState::Transferring;
+        pendingOp = FirmwareOp::Begin;
+        otaState  = OtaState::Transferring;
     }
     else
     {
         SendFirmwareOp(FirmwareOp::EnterBootloader, nullptr, 0);
         enterBlTimer.Start(enterBlTimeoutMs);
+        enterBlDiscoverTimer.Start(enterBlDiscoverMs);
         otaState = OtaState::EnteringBootloader;
     }
     return true;
@@ -308,11 +373,19 @@ bool ThermostatLink::ConsumeWriteReply(bool& nack, uint16_t& offset, uint16_t& c
     return true;
 }
 
+bool ThermostatLink::ConsumeStatusChange()
+{
+    const bool changed = statusChanged;
+    statusChanged      = false;
+    return changed;
+}
+
 void ThermostatLink::OtaEnd()
 {
     if (otaState == OtaState::Transferring)
     {
         SendFirmwareOp(FirmwareOp::End, nullptr, 0);
+        pendingOp = FirmwareOp::End;
     }
 }
 
@@ -320,20 +393,25 @@ void ThermostatLink::OtaActivate()
 {
     SendFirmwareOp(FirmwareOp::Activate, nullptr, 0);
     otaState = OtaState::Done;
+    // The peer resets into the new app without replying; if that app doesn't
+    // start, the next periodic Discover's Announce puts the bootloader back.
+    SetPeerState(StateApp);
 }
 
 void ThermostatLink::OtaAbort()
 {
     SendFirmwareOp(FirmwareOp::Abort, nullptr, 0);
+    pendingOp = FirmwareOp::Abort;
     lastError = FirmwareError::None;
     otaState  = OtaState::Idle;
 }
 
 void ThermostatLink::SendFirmwareOp(const FirmwareOp op, const uint8_t* const payload, const uint8_t len)
 {
-    uint8_t buf[1 + 31];
+    // A Write is op(1) + byteOffset(2) + data(32) = MAX_DATA.
+    uint8_t buf[NodeLib::MAX_DATA];
     buf[0]          = static_cast<uint8_t>(op);
-    const uint8_t n = len > 31 ? 31 : len;
+    const uint8_t n = len > NodeLib::MAX_DATA - 1 ? NodeLib::MAX_DATA - 1 : len;
     if (payload && n)
     {
         memcpy(&buf[1], payload, n);
@@ -344,7 +422,7 @@ void ThermostatLink::SendFirmwareOp(const FirmwareOp op, const uint8_t* const pa
 void ThermostatLink::FillOtaStatus(uint8_t out[9]) const
 {
     out[0] = static_cast<uint8_t>(FirmwareOp::Status);
-    out[1] = (otaState == OtaState::Idle || otaState == OtaState::Done) ? StateApp : peerState;
+    out[1] = peerState;
     WriteU32(&out[2], expectedOffset);
     out[6] = static_cast<uint8_t>(lastError);
     out[7] = static_cast<uint8_t>(thermostatFw);

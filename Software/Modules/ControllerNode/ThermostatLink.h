@@ -80,11 +80,24 @@ class ThermostatLink : public NodeLib::INodeHandler
     // nothing is waiting to be relayed up the main bus.
     bool ConsumeWriteReply(bool& nack, uint16_t& offset, uint16_t& chunkCrc16, bool& programFailed);
 
+    // True once per change of the Status that FillOtaStatus() would report
+    // (peer state byte, or the relay giving up). The ControllerNode then
+    // Reports ThermostatFirmware unsolicited: Begin/End's outcome and a
+    // Thermostat dropping into or out of its bootloader only become known
+    // here, well after the main-bus request that caused them was answered.
+    bool ConsumeStatusChange();
+
   private:
     static const uint32_t displayPushMs    = 1000;
     static const uint32_t enterBlTimeoutMs = 4000;
+    // While EnteringBootloader, re-Discover this often: the peer's bootloader
+    // Announces only in reply to a Discover, and LinkMaster's periodic one
+    // (5 s) is slower than enterBlTimeoutMs.
+    static const uint32_t enterBlDiscoverMs = 500;
 
     void SendFirmwareOp(const NodeLib::FirmwareOp op, const uint8_t* const payload, const uint8_t len);
+    void SetPeerState(const uint8_t state);
+    void OnOpReply(const bool nack, const uint8_t error);
     void PushDisplay();
 
     NodeLib::LinkMaster& link;
@@ -98,8 +111,13 @@ class ThermostatLink : public NodeLib::INodeHandler
     NodeLib::FirmwareError lastError;
     uint8_t                beginPayload[12]; // cached Firmware[Begin] body
     uint32_t               expectedOffset;
-    uint8_t                peerState; // last state byte from the peer's Status
-    Tools::DelayTimer      enterBlTimer;
+    // Peer's FirmwareSlave state byte (0 = app), from whichever arrived last:
+    // its Announce, a Status Report, or the Ack/Nack to Begin/End/Abort.
+    uint8_t             peerState;
+    NodeLib::FirmwareOp pendingOp; // last Begin/End/Abort sent, awaiting its Ack/Nack
+    bool                statusChanged;
+    Tools::DelayTimer   enterBlTimer;
+    Tools::DelayTimer   enterBlDiscoverTimer;
 
     // Outcome of the write currently (or most recently) in flight on the
     // link, awaiting relay up the main bus -- see ConsumeWriteReply().

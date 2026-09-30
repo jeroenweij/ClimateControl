@@ -80,6 +80,10 @@ void ControllerHandler::Loop()
     {
         AckOrNackThermostatWrite(nack, offset, chunkCrc16, programFailed);
     }
+    if (thermostatLink.ConsumeStatusChange())
+    {
+        ReportThermostatFirmwareStatus();
+    }
 }
 
 void ControllerHandler::ReceivedMessage(const Message& m)

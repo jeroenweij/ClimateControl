@@ -92,6 +92,10 @@ void LinkMaster::HandleMasterMessage(const Message& m)
                 // is length 1. A non-zero state means "in the bootloader".
                 peerInBootloader = (m.len >= 2 && m.data[1] != 0);
                 discovering      = false;
+                if (handler)
+                {
+                    handler->ReceivedMessage(m); // the ControllerNode tracks the peer's state byte
+                }
                 break;
             case Operation::Done:
                 sendOk = true;
@@ -107,6 +111,14 @@ void LinkMaster::HandleMasterMessage(const Message& m)
     {
         handler->ReceivedMessage(m);
     }
+}
+
+void LinkMaster::Rediscover()
+{
+    peerInBootloader = false;
+    WriteMessage(Message(BROADCAST_NODE, Operation::Discover));
+    discovering = true;
+    discoverTimer.ReStart();
 }
 
 void LinkMaster::SendToPeer(const Endpoint endpoint, const Operation op, const uint8_t* const data, const uint8_t len)

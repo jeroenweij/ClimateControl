@@ -174,6 +174,39 @@ CC_TEST(ThermostatLink, LoopAdvancesToTransferOncePeerAnnouncesBootloaderEntry)
     CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Begin));
 }
 
+CC_TEST(ThermostatLink, EnteringBootloaderRediscoversWellBeforeTheTimeout)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false);
+    w.link.Loop();
+
+    w.thermostatLink.OtaBegin(4, 512, 0, 0, false);
+    Flush(w.link); // EnterBootloader goes out; the peer resets
+
+    // The real bootloader Announces only in reply to a Discover -- the CN must
+    // ask, and well inside enterBlTimeoutMs rather than on the 5 s periodic one.
+    FakeBus::Reset();
+    FakeClock::Advance(501);
+    w.thermostatLink.Loop();
+
+    Message   tx[4];
+    const int n = bus::DecodeTx(tx, 4);
+    CC_CHECK(FindMessage(tx, n, Endpoint::Transport, Operation::Discover, nullptr));
+
+    AnnouncePeer(true); // the bootloader's answer to that Discover
+    w.link.Loop();
+    w.thermostatLink.Loop(); // queues Firmware[Begin]
+    FakeBus::Reset();
+    bus::InjectFrame(Message(peerId, Operation::Done)); // answers the poll that went out meanwhile
+    w.link.Loop();
+
+    const int n2  = bus::DecodeTx(tx, 4);
+    int       idx = 0;
+    CC_CHECK(FindMessage(tx, n2, Endpoint::Firmware, Operation::Set, &idx));
+    CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Begin));
+}
+
 CC_TEST(ThermostatLink, LoopFaultsIfThePeerNeverEntersTheBootloaderInTime)
 {
     ResetWorld();
@@ -249,6 +282,32 @@ CC_TEST(ThermostatLink, OtaWriteSendsTheChunkWhileTransferring)
     CC_CHECK_EQ(static_cast<uint16_t>(tx[idx].data[1] | (tx[idx].data[2] << 8)), 16);
     CC_CHECK_EQ(tx[idx].data[3], 0xAA);
     CC_CHECK_EQ(tx[idx].data[6], 0xDD);
+}
+
+CC_TEST(ThermostatLink, OtaWriteRelaysAFull32ByteChunkIntact)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(true);
+    w.link.Loop();
+    w.thermostatLink.OtaBegin(4, 512, 0, 0, false);
+    Flush(w.link);
+
+    uint8_t chunk[32];
+    for (uint8_t i = 0; i < sizeof(chunk); i++)
+    {
+        chunk[i] = static_cast<uint8_t>(0x40 + i);
+    }
+    w.thermostatLink.OtaWrite(64, chunk, sizeof(chunk));
+    Flush(w.link);
+
+    Message   tx[4];
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = 0;
+    CC_CHECK(FindMessage(tx, n, Endpoint::Firmware, Operation::Set, &idx));
+    CC_CHECK_EQ(tx[idx].len, 1 + 2 + 32); // op + byteOffset + data
+    CC_CHECK_EQ(tx[idx].data[3], 0x40);
+    CC_CHECK_EQ(tx[idx].data[3 + 31], 0x40 + 31); // last byte of the chunk
 }
 
 CC_TEST(ThermostatLink, ConsumeWriteReplyDeliversAnAckAndThenGoesEmpty)
@@ -403,7 +462,7 @@ CC_TEST(ThermostatLink, PushSetpointSendsRoomSetpointToThePeer)
     }
 }
 
-CC_TEST(ThermostatLink, ConnectionLostInvalidatesRoomAndFailsAnInFlightTransfer)
+CC_TEST(ThermostatLink, ConnectionLostInvalidatesRoomButRidesOutAnInFlightTransfer)
 {
     ResetWorld();
     World w;
@@ -411,10 +470,89 @@ CC_TEST(ThermostatLink, ConnectionLostInvalidatesRoomAndFailsAnInFlightTransfer)
     w.link.Loop();
     w.thermostatLink.OtaBegin(4, 512, 0, 0, false); // -> Transferring
 
+    // Begin's app-slot erase silences the bootloader for longer than the link
+    // timeout -- that must not abort the transfer.
     w.thermostatLink.ConnectionLost();
 
     CC_CHECK(!w.thermostatLink.Room().valid);
     uint8_t status[9];
     w.thermostatLink.FillOtaStatus(status);
-    CC_CHECK_EQ(status[6], static_cast<uint8_t>(NodeLib::FirmwareError::LinkDown));
+    CC_CHECK_EQ(status[6], static_cast<uint8_t>(NodeLib::FirmwareError::None));
+
+    uint8_t chunk[32] = {};
+    w.thermostatLink.OtaWrite(0, chunk, sizeof(chunk)); // still Transferring
+    FakeBus::Reset();
+    AnnouncePeer(true);
+    w.link.Loop(); // link back up -- flushes Begin, then the Write
+    Message   tx[4];
+    const int n     = bus::DecodeTx(tx, 4);
+    bool      write = false;
+    for (int i = 0; i < n; i++)
+    {
+        write = write || (tx[i].id.endpoint == Endpoint::Firmware && tx[i].data[0] == static_cast<uint8_t>(FirmwareOp::Write));
+    }
+    CC_CHECK(write);
+}
+
+CC_TEST(ThermostatLink, ReportsTheBootloaderStateFromThePeersAnnounceWhileIdle)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false);
+    w.link.Loop();
+    w.thermostatLink.ConsumeStatusChange();
+
+    uint8_t status[9];
+    w.thermostatLink.FillOtaStatus(status);
+    CC_CHECK_EQ(status[1], 0); // app
+
+    AnnouncePeer(true); // e.g. stuck in the bootloader after an interrupted push
+    w.link.Loop();
+    CC_CHECK(w.thermostatLink.ConsumeStatusChange());
+    w.thermostatLink.FillOtaStatus(status);
+    CC_CHECK(status[1] != 0);
+    CC_CHECK(!w.thermostatLink.ConsumeStatusChange()); // once per change
+}
+
+CC_TEST(ThermostatLink, BeginAndEndAcksAdvanceTheReportedState)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(true);
+    w.link.Loop();
+    w.thermostatLink.OtaBegin(4, 512, 0, 0, false); // -> Transferring, Begin sent
+    w.thermostatLink.ConsumeStatusChange();
+
+    Message ack(Id(peerId, Endpoint::Firmware, Operation::Ack));
+    ack.data[0] = 0; // lastError
+    ack.len     = 1;
+    w.thermostatLink.ReceivedMessage(ack);
+    CC_CHECK(w.thermostatLink.ConsumeStatusChange());
+    uint8_t status[9];
+    w.thermostatLink.FillOtaStatus(status);
+    CC_CHECK_EQ(status[1], 3); // Receiving
+
+    w.thermostatLink.OtaEnd();
+    w.thermostatLink.ReceivedMessage(ack);
+    w.thermostatLink.FillOtaStatus(status);
+    CC_CHECK_EQ(status[1], 4); // Valid
+}
+
+CC_TEST(ThermostatLink, ABeginNackReportsTheErrorState)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(true);
+    w.link.Loop();
+    w.thermostatLink.OtaBegin(4, 512, 0, 0, false);
+
+    Message nack(Id(peerId, Endpoint::Firmware, Operation::Nack));
+    nack.data[0] = static_cast<uint8_t>(NodeLib::FirmwareError::WrongModule);
+    nack.len     = 1;
+    w.thermostatLink.ReceivedMessage(nack);
+
+    uint8_t status[9];
+    w.thermostatLink.FillOtaStatus(status);
+    CC_CHECK_EQ(status[1], 5); // Error
+    CC_CHECK_EQ(status[6], static_cast<uint8_t>(NodeLib::FirmwareError::WrongModule));
 }

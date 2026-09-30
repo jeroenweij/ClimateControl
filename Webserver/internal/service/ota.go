@@ -232,6 +232,9 @@ type otaDriver struct {
 	// mainController: this push targets the MainController itself (node 0),
 	// driven over OtaControl/OtaData by runMainController.
 	mainController bool
+	// begun: a Firmware / ThermostatFirmware Begin has gone out, so the node's
+	// bootloader may be sitting in Receiving -- done() Aborts it on an error.
+	begun bool
 
 	// resume, when set, is called if a chunk goes unanswered through every retry:
 	// it waits for the link to come back and returns the offset to carry on
@@ -366,6 +369,13 @@ func (d *otaDriver) finished() bool {
 
 func (d *otaDriver) done(state, errMsg string, offset int) {
 	d.once.Do(func() {
+		if state == "error" && d.begun && !d.mainController {
+			// Best effort, no reply awaited: otherwise the bootloader stays in
+			// Receiving (fast activity blink, bl state "receiving") waiting for
+			// chunks that never come. It drops to Idle; the app slot stays
+			// erased, so the next push starts over with Begin either way.
+			d.sendSet(nodelib.EncodeFirmwareAbort())
+		}
 		_ = d.svc.st.UpdateOtaJob(context.Background(), d.jobID, state, offset, errMsg)
 		d.svc.hb.PublishOta(hub.OtaEvent{
 			JobID: d.jobID, State: state, NodeID: d.nodeID,
@@ -406,12 +416,14 @@ func (d *otaDriver) run() {
 	if d.target == "thermostat" {
 		// The ControllerNode does EnterBootloader + the bootloader-Announce
 		// wait itself (spec §5.4) -- Begin is the whole first step here.
+		d.begun = true
 		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, d.force))
 	} else {
 		if !d.enterBootloader() {
 			d.done("error", "node did not enter bootloader", 0)
 			return
 		}
+		d.begun = true
 		d.sendSet(nodelib.EncodeFirmwareBegin(d.module, uint32(len(d.image)), d.crc32, d.fw))
 	}
 
@@ -839,7 +851,7 @@ func (d *otaDriver) enterBootloader() bool {
 		case <-d.reports:
 			return true
 		case <-ticker.C:
-			d.svc.send.SendGet(d.nodeID, nodelib.EndpointFirmware)
+			d.svc.send.SendGet(d.nodeID, d.endpoint())
 		case <-deadline:
 			return false
 		}
@@ -881,7 +893,7 @@ func (d *otaDriver) waitForWithProbe(timeout, probeInterval time.Duration, state
 			}
 			return nodelib.FirmwareStatusReport{State: state, LastError: nodelib.FwErrNone}, true
 		case <-ticker.C:
-			d.svc.send.SendGet(d.nodeID, nodelib.EndpointFirmware)
+			d.svc.send.SendGet(d.nodeID, d.endpoint())
 		case <-deadline:
 			return nodelib.FirmwareStatusReport{}, false
 		}

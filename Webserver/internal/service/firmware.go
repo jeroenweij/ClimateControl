@@ -17,7 +17,7 @@ type FwTarget struct {
 	Name         string `json:"name"`
 	Module       string `json:"module"` // the image module this target needs
 	Target       string `json:"target"` // "node" | "thermostat"
-	Status       string `json:"status"` // online | offline | unexpected | link-down
+	Status       string `json:"status"` // online | bootloader | offline | unexpected | link-down
 	Online       bool   `json:"online"`
 	Installed    int    `json:"installed"` // running version, 0 = unknown
 	InstalledStr string `json:"installedStr"`
@@ -194,7 +194,9 @@ func (s *Service) thermostatTarget(n store.RosterNode, th store.Thermostat, byMo
 	mod := nodelib.ModuleThermostat.String()
 	online := n.Online && th.LinkUp
 	status := "link-down"
-	if online {
+	if online && th.BLState != 0 {
+		status = "bootloader" // BLState is the FirmwareSlave state byte; 0 = application
+	} else if online {
 		status = "online"
 	} else if !n.Online {
 		status = "offline"
