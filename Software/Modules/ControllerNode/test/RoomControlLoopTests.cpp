@@ -325,7 +325,7 @@ CC_TEST(RoomControlLoop, AnUnchangedTargetLetsTheMoveSettle)
 
     SeedRoom(thermostatLink, 1850, 1800); // small demand -- a target below the 50% start
     SeedSupply(supplyTemp, 1500);
-    RunFor(loop, damper, 2000); // past Damper::moveSettleMs (1.5 s)
+    RunFor(loop, damper, 2500); // past a half-stroke slew plus settle (2.3 s)
 
     // Re-asserting the same target every pass must not restart the move --
     // the servo settles, reports it, and powers down.

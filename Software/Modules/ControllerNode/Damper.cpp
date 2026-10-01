@@ -5,6 +5,7 @@
 #include "BoardPins.h"
 #include "Logger.h"
 #include "Tick.h"
+#include "Watchdog.h"
 
 #include "Damper.h"
 
@@ -27,8 +28,10 @@ Damper::Damper() :
     target(NeutralPercent),
     actual(NeutralPercent),
     mode(Mode::Auto),
-    powered(false),
-    stalled(false),
+    state(State::Off),
+    positionUs(PulseFor(NeutralPercent)),
+    stallStartUs(positionUs),
+    lastSlewMs(0),
     settleTimer(),
     stallTimer()
 {
@@ -37,55 +40,44 @@ Damper::Damper() :
 void Damper::Init()
 {
     pwm.Init();
-    PowerOff();
+    PowerOff(State::Off);
 }
 
 void Damper::Loop()
 {
-    if (!powered)
+    if (!Moving())
     {
         return;
     }
 
-    if (currentSense.Read() >= stallThresholdCounts)
+    if (CheckStall())
     {
-        if (!stallTimer.IsRunning())
-        {
-            stallTimer.Start(stallConfirmMs);
-        }
-        else if (stallTimer.Finished())
-        {
-            LOG_WARN("Damper stall detected, cutting servo power early");
-            stalled = true;
-            PowerOff();
-            return;
-        }
-    }
-    else
-    {
-        stallTimer.Stop(); // current dropped back down -- not a sustained stall
+        return;
     }
 
-    if (settleTimer.Finished())
+    if (state == State::Moving)
     {
-        // Move settle time elapsed -- assume the actuator reached the target and
-        // drop servo power; the gearing holds it there.
+        Slew();
+    }
+    else if (settleTimer.Finished())
+    {
+        // The servo has had settleMs to follow the end of the ramp -- adopt the
+        // target and drop servo power; the gearing holds it there.
         actual = target;
-        PowerOff();
+        PowerOff(State::Off);
     }
 }
 
 void Damper::SetTarget(const uint8_t percent)
 {
     const uint8_t clamped = Clamp100(percent);
-    if (clamped == target && !powered && !stalled)
+    if (clamped == target && state != State::Stalled)
     {
-        return; // already there -- but after a stall, the same target is a retry
+        return; // already there or on the way -- but after a stall, the same target is a retry
     }
     LOG_INFO("Damper target " << clamped << "%");
-    target  = clamped;
-    stalled = false; // a fresh move gets a fresh attempt
-    PowerOn();
+    target = clamped;
+    StartMove();
 }
 
 void Damper::SetMode(const Mode newMode)
@@ -107,16 +99,19 @@ void Damper::SetMode(const Mode newMode)
 
 void Damper::ParkNeutral()
 {
-    if (!powered && target == NeutralPercent && actual == NeutralPercent)
+    // Blocks the main loop for up to half a stroke plus the settle time --
+    // keep that well inside the watchdog.
+    static_assert(fullStrokeMs / 2 + settleMs + 1000 <= Hal::Watchdog::TimeoutMs, "ParkNeutral() would outlast the watchdog");
+
+    if (state == State::Off && target == NeutralPercent && actual == NeutralPercent)
     {
         return; // already parked
     }
 
     LOG_WARN("Damper -> neutral, servo off");
-    target  = NeutralPercent;
-    stalled = false;
-    PowerOn();
-    while (powered)
+    target = NeutralPercent;
+    StartMove();
+    while (Moving())
     {
         Loop(); // powers off once settled, or early on a stall
         Hal::Tick::DelayMs(parkPollMs);
@@ -138,35 +133,100 @@ Damper::Mode Damper::GetMode() const
     return mode;
 }
 
+Damper::State Damper::GetState() const
+{
+    return state;
+}
+
 bool Damper::Moving() const
 {
-    return powered;
+    return state == State::Moving || state == State::Settling;
 }
 
 bool Damper::Stalled() const
 {
-    return stalled;
+    return state == State::Stalled;
 }
 
 uint8_t Damper::ReportedMode() const
 {
-    return stalled ? StalledCode : static_cast<uint8_t>(mode);
+    return Stalled() ? StalledCode : static_cast<uint8_t>(mode);
 }
 
-void Damper::PowerOn()
+void Damper::StartMove()
 {
-    // Signal first, so the servo sees the target pulse the moment its rail
-    // comes up rather than whatever it last held.
-    pwm.SetPulseUs(PulseFor(target));
-    powered = true;
-    enable.Write(true);
-    settleTimer.Start(moveSettleMs);
-    stallTimer.Stop(); // no stale overcurrent window carried over from last time
+    if (!Moving())
+    {
+        // Signal first, on the last commanded position -- where the gearing
+        // has been holding the horn -- so the servo sees no jump the moment
+        // its rail comes up.
+        pwm.SetPulseUs(positionUs);
+        enable.Write(true);
+        stallTimer.Stop(); // no stale overcurrent window carried over from last time
+    }
+    settleTimer.Stop();
+    lastSlewMs = Hal::Tick::Millis();
+    state      = State::Moving;
 }
 
-void Damper::PowerOff()
+void Damper::Slew()
 {
-    powered = false;
+    const uint32_t now    = Hal::Tick::Millis();
+    const uint32_t frames = (now - lastSlewMs) / slewFrameMs;
+    if (frames == 0)
+    {
+        return;
+    }
+    lastSlewMs += frames * slewFrameMs;
+
+    const uint16_t goal = PulseFor(target);
+    const uint32_t step = frames * slewStepUs;
+    const uint32_t gap  = positionUs < goal ? goal - positionUs : positionUs - goal;
+    if (positionUs < goal)
+    {
+        positionUs = (gap <= step) ? goal : static_cast<uint16_t>(positionUs + step);
+    }
+    else if (positionUs > goal)
+    {
+        positionUs = (gap <= step) ? goal : static_cast<uint16_t>(positionUs - step);
+    }
+    pwm.SetPulseUs(positionUs);
+
+    if (positionUs == goal)
+    {
+        state = State::Settling;
+        settleTimer.Start(settleMs);
+    }
+}
+
+bool Damper::CheckStall()
+{
+    if (currentSense.Read() < stallThresholdCounts)
+    {
+        stallTimer.Stop(); // current dropped back down -- not a sustained stall
+        return false;
+    }
+
+    if (!stallTimer.IsRunning())
+    {
+        stallTimer.Start(stallConfirmMs);
+        stallStartUs = positionUs;
+        return false;
+    }
+    if (!stallTimer.Finished())
+    {
+        return false;
+    }
+
+    LOG_WARN("Damper stall detected, cutting servo power early");
+    positionUs = stallStartUs; // the slew ran on past the jam during the confirm window
+    PowerOff(State::Stalled);
+    return true;
+}
+
+void Damper::PowerOff(const State next)
+{
+    state = next;
     enable.Write(false);
     pwm.SetPulseUs(0); // signal low -- never drive an unpowered servo's input
     settleTimer.Stop();

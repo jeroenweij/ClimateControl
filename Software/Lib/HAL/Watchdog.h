@@ -16,8 +16,8 @@ namespace Hal
     {
         // Timeout between two Feed()s before the IWDG resets the MCU. Covers
         // the longest blocking call in any application main loop (Damper::
-        // ParkNeutral(), up to Damper::moveSettleMs) with margin for the LSI's
-        // tolerance.
+        // ParkNeutral(), up to half a slewed stroke plus settle -- checked by a
+        // static_assert there) with margin for the LSI's tolerance.
         constexpr uint32_t TimeoutMs = 4000;
 
         // Starts the IWDG. Frozen while the core is halted by a debugger, so

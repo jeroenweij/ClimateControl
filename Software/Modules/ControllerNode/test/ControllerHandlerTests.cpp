@@ -348,7 +348,9 @@ CC_TEST(ControllerHandler, LoopReportsDamperActualOnceTheMoveSettles)
     bus::InjectFrame(Message(Id(kNodeId, Endpoint::DamperBudget, Operation::Set), 30));
     w.node.Loop();
 
-    FakeClock::Advance(1500); // Damper's moveSettleMs
+    FakeClock::Advance(800); // Damper's 20 % slew (4 s full stroke)
+    w.handler.Loop(); // pulse reaches 30 %, servo settling
+    FakeClock::Advance(300); // Damper's settleMs
     Publish(w); // damper.Loop() finishes the move, actual changes -> reported
 
     Message   tx[8];

@@ -33,7 +33,7 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 |---|---|---|---|
 | 3.1 | Idle | `PA6` low, rail off | — |
 | 3.2 | `DamperTarget` 0 / 50 / 100 | 50 Hz (20.0 ms period), high time **500 / 1500 / 2500 µs**, within ~1 % (HSI16 tolerance) | Period or width off by a constant factor → timer clock / prescaler (`Hal::Pwm::Init()`) |
-| 3.3 | Same, watch rail and signal together | Pulse present from the moment the rail switches on, for ~1.5 s (`moveSettleMs`); then rail off and `PA6` low | — |
+| 3.3 | Same, watch rail and signal together | Pulse present from the moment the rail switches on, starting at the previous position's width and ramping to the target's at 0.5 µs/ms (full stroke 4 s, `fullStrokeMs`); held there for 300 ms (`settleMs`), then rail off and `PA6` low | Pulse jumps straight to the target width → slew not running |
 | 3.4 | Change target while a move is running | No short or stretched pulse at the change (the new width lands on the next period) | — |
 
 ## 4. Servo alone (connected, no linkage)
@@ -42,7 +42,7 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 |---|---|---|---|
 | 4.1 | `DamperTarget` 0 / 50 / 100 | Horn at 0° / 90° / 180°, direction consistent between units | — |
 | 4.2 | Hold at 0 and at 100 while powered | No buzzing or humming against the servo's internal stop | Narrow `closedPulseUs` / `openPulseUs` in `Damper.h` (e.g. 550 / 2450) — the same for every unit |
-| 4.3 | Full 0 → 100 move, time it on the scope (rail current) | Settles well inside 1.5 s (DS3225 ~0.4 s for 180° at 5 V) | Slower → raise `moveSettleMs` in `Damper.h` |
+| 4.3 | Full 0 → 100 move, watch the horn and the rail current | Smooth ~4 s sweep with no jerk at start or end; running current well under the stall threshold throughout; horn at rest before the rail drops | Horn still moving when the rail drops → raise `settleMs`; visible stepping → lower `fullStrokeMs` or check the servo's deadband in `Damper.h` |
 | 4.4 | After the rail switches off, push the horn gently | Holds position (gearing holds it unpowered) | — |
 
 ## 5. Current sense and stall detection
@@ -70,7 +70,7 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 
 | # | Do | Expect | If not |
 |---|---|---|---|
-| 7.1 | OTA-push the ControllerNode from the server, damper away from 50 % | Damper drives to 50 % (~1.5 s) before the node resets into the bootloader; OTA completes | Server times out waiting for the bootloader → look at the park time vs the server's wait |
+| 7.1 | OTA-push the ControllerNode from the server, damper away from 50 % | Damper slews to 50 % (up to ~2.3 s from an end stop) before the node resets into the bootloader; OTA completes | Server times out waiting for the bootloader → look at the park time vs the server's wait |
 | 7.2 | Power-cycle mid-move | Rail off during reset; comes back up unpowered | — |
 | 7.3 | Push new firmware twice in a row | Boot counter returns to 0 after each (app healthy) | — |
 
