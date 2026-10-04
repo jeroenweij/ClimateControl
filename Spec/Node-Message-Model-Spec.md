@@ -57,6 +57,8 @@ enum class Endpoint : uint8_t
     SupplyTemp     = 0x38,  // RO  int16 centi-degC
     ReturnTemp     = 0x39,  // RO  int16 centi-degC
     SensorStatus   = 0x3A,  // RO  bitfield: per-sensor present/valid
+    SupplyTempOffset = 0x3B, // RW  int16 centi-degC, ±10.00 -- added to the raw supply probe reading; persisted on the node (TemperatureNode-Spec.md §4.3)
+    ReturnTempOffset = 0x3C, // RW  int16 centi-degC, ±10.00 -- same for the return probe
 
     // 0x4_  room — relayed from the paired Thermostat (ControllerNode only), served from cache
     RoomSetpoint   = 0x40,  // RO / RW*  int16 centi-degC   (*Set = master override, link spec §5.3)

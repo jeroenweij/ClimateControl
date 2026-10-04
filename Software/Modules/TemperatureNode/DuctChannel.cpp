@@ -2,6 +2,8 @@
  * Created by J. Weij
  *************************************************************/
 
+#include <stdint.h>
+
 #include "Logger.h"
 
 #include "DuctChannel.h"
@@ -25,6 +27,8 @@ DuctChannel::DuctChannel(NodeLib::Node& node, const Endpoint endpoint, const Hal
     endpoint(endpoint),
     sensor(oneWirePin),
     state(State::Idle),
+    raw(0),
+    offset(0),
     value(0),
     present(false),
     sampleTimer(),
@@ -78,8 +82,8 @@ void DuctChannel::Loop()
             if (sensor.ReadTemperature(sample))
             {
                 SetPresent(true);
-                value = sample;
-                node.PublishIfChanged(endpoint, value);
+                raw = sample;
+                Publish();
             }
             else
             {
@@ -101,6 +105,24 @@ void DuctChannel::Report()
         static_cast<uint8_t>((value >> 8) & 0xFF),
     };
     node.QueueMessage(Id(node.GetId(), endpoint, Operation::Report), payload, sizeof(payload));
+}
+
+void DuctChannel::SetOffset(const int16_t centiDegC)
+{
+    offset = centiDegC;
+    if (present)
+    {
+        Publish();
+    }
+}
+
+void DuctChannel::Publish()
+{
+    // int32 sum, saturated -- a probe near +125 degC plus a +10 degC offset
+    // still fits int16 centi-degC, but don't rely on that.
+    const int32_t corrected = static_cast<int32_t>(raw) + offset;
+    value                   = static_cast<int16_t>(corrected > INT16_MAX ? INT16_MAX : (corrected < INT16_MIN ? INT16_MIN : corrected));
+    node.PublishIfChanged(endpoint, value);
 }
 
 void DuctChannel::SetPresent(const bool nowPresent)

@@ -51,6 +51,8 @@ type simNode struct {
 	module nodelib.Module
 	temp   float64
 	setpt  float64
+	supOff float64 // SupplyTempOffset, °C
+	retOff float64 // ReturnTempOffset, °C
 }
 
 func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fwMajor, fwMinor uint16) error {
@@ -209,6 +211,18 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 							nodes[i].setpt = float64(int16(uint16(f.Data[0])|uint16(f.Data[1])<<8)) / 100
 							log.Printf("node %d setpoint -> %.2f", f.Node, nodes[i].setpt)
 						}
+						// Probe calibration: stored and echoed back as a Report, like the real node.
+						if nodes[i].id == int(f.Node) && len(f.Data) >= 2 &&
+							(f.Endpoint == nodelib.EndpointSupplyTempOffset || f.Endpoint == nodelib.EndpointReturnTempOffset) {
+							off := float64(int16(uint16(f.Data[0])|uint16(f.Data[1])<<8)) / 100
+							if f.Endpoint == nodelib.EndpointSupplyTempOffset {
+								nodes[i].supOff = off
+							} else {
+								nodes[i].retOff = off
+							}
+							log.Printf("node %d %v -> %.2f", f.Node, f.Endpoint, off)
+							emit(write, nodes[i].id, f.Endpoint, f.Data[:2])
+						}
 					}
 				}
 			}
@@ -236,8 +250,8 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 					emit(write, n.id, nodelib.EndpointRoomLink, []byte{1})
 				} else {
 					supply := n.temp + 18
-					emit(write, n.id, nodelib.EndpointSupplyTemp, i16(supply*100))
-					emit(write, n.id, nodelib.EndpointReturnTemp, i16(n.temp*100))
+					emit(write, n.id, nodelib.EndpointSupplyTemp, i16((supply+n.supOff)*100))
+					emit(write, n.id, nodelib.EndpointReturnTemp, i16((n.temp+n.retOff)*100))
 					emit(write, n.id, nodelib.EndpointSensorStatus, []byte{0x03})
 				}
 			}

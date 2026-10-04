@@ -48,9 +48,9 @@ Three things, one flash design:
              │  Application               │  50 KB  (25 pages)  — OTA target; vector table at 0x0800_2800
              │                            │
 0x0800_F000  ├────────────────────────────┤
-             │  Config page A             │  2 KB   (1 page)    ┐ ping-pong record log
-0x0800_F800  ├────────────────────────────┤                    │ (persistent NodeId + per-node config)
-             │  Config page B             │  2 KB   (1 page)    ┘
+             │  Config page A             │  2 KB   (1 page)    — factory identity (NodeId + per-node config), read-only
+0x0800_F800  ├────────────────────────────┤
+             │  Config page B             │  2 KB   (1 page)    — runtime settings, written by the app
 0x0801_0000  └────────────────────────────┘
 ```
 
@@ -59,7 +59,7 @@ Three things, one flash design:
 | Bootloader | `0x0800_0000` | 10 KB | J-Link only | Holds the reset vector; runs first on every boot. Carries the full OTA slave (main bus + the Thermostat link on USART2, `ControllerNode-Thermostat-Link-Spec.md` §5.5), which needs the 5th page. Links at ~8.0 KB, ~2 KB headroom. |
 | Application | `0x0800_2800` | 50 KB | Bootloader (OTA) | Linked with `FLASH ORIGIN = 0x08002800`. First 0xC0 bytes = vector table; image descriptor at fixed offset `0xC0` (§4). The biggest module uses about half the slot. |
 | Config A | `0x0800_F000` | 2 KB | J-Link at factory only | A single static `ConfigRecord` at the page base — `NodeId` + per-node factory config. Read-only to firmware (§6.3). |
-| Config B | `0x0800_F800` | 2 KB | — (reserved) | Spare page, unused in v1 — held back for a future *runtime-writable* setting, which would turn A/B into a ping-pong log. |
+| Config B | `0x0800_F800` | 2 KB | Application, at runtime | Runtime settings (`Board::Flash::SettingsBase`). The TemperatureNode keeps its per-probe calibration record here (`TemperatureNode-Spec.md` §4.3). Neither OTA nor re-provisioning erases it, so settings survive both. The page is erased and rewritten only when a setting changes, which stalls the core for tens of milliseconds (single-bank flash) — fine for values that change a handful of times in a node's life, not for anything written routinely. |
 
 `Lib/Board/MemoryMap.h` (header-only) is the single source of truth for these four constants; bootloader linker script, app linker script, `ConfigStore`, and the flash-program HAL all include it.
 

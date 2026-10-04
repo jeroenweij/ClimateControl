@@ -2,6 +2,8 @@ package nodelib
 
 import (
 	"bytes"
+	"encoding/binary"
+	"math"
 	"testing"
 )
 
@@ -79,5 +81,20 @@ func TestEncodeValueSetpoint(t *testing.T) {
 	d, ok := EncodeValue(EndpointRoomSetpoint, 20.5)
 	if !ok || !bytes.Equal(d, []byte{0x02, 0x08}) { // 2050 = 0x0802
 		t.Fatalf("EncodeValue setpoint = %x ok=%v", d, ok)
+	}
+}
+
+func TestEncodeValueOffsetRoundsToTheNearestCentiDegree(t *testing.T) {
+	for _, tc := range []struct {
+		in   float64
+		want int16
+	}{{-1.3, -130}, {0.29, 29}, {-0.9, -90}, {1000, math.MaxInt16}} {
+		d, ok := EncodeValue(EndpointReturnTempOffset, tc.in)
+		if !ok || len(d) != 2 {
+			t.Fatalf("EncodeValue(%v) = %x ok=%v", tc.in, d, ok)
+		}
+		if got := int16(binary.LittleEndian.Uint16(d)); got != tc.want {
+			t.Errorf("EncodeValue(%v) = %d, want %d", tc.in, got, tc.want)
+		}
 	}
 }

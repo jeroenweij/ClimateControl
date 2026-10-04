@@ -14,7 +14,8 @@
 //                                                 image descriptor at +0xC0
 //   0x0800_F000  Config A      2 KB  (1 page)   -- factory-written node identity,
 //                                                 read-only to firmware
-//   0x0800_F800  Config B      2 KB  (1 page)   -- reserved (future runtime setting)
+//   0x0800_F800  Config B      2 KB  (1 page)   -- runtime settings, written by the
+//                                                 app (TemperatureNode probe calibration)
 //
 // The bootloader carries the full OTA slave (main bus + the Thermostat link on
 // USART2), which needs the 10 KB; the biggest application uses about half its
@@ -39,8 +40,10 @@ namespace Board
         constexpr uint32_t ConfigBase = 0x0800F000;
         constexpr uint32_t ConfigSize = 2 * 1024;
 
-        constexpr uint32_t ConfigReservedBase = 0x0800F800;
-        constexpr uint32_t ConfigReservedSize = 2 * 1024;
+        // Runtime-writable settings page (Config B), owned by the application.
+        // Survives OTA and re-provisioning, neither of which erases it.
+        constexpr uint32_t SettingsBase = 0x0800F800;
+        constexpr uint32_t SettingsSize = 2 * 1024;
     } // namespace Flash
 
     // Written to Hal::Backup::Reg::Boot by a running app to ask the bootloader to

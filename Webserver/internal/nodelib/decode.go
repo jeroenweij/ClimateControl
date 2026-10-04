@@ -1,6 +1,9 @@
 package nodelib
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"math"
+)
 
 // Value is a decoded endpoint payload. Num holds a numeric reading (already
 // scaled to engineering units, e.g. °C not centi-°C) when Kind == "number";
@@ -34,7 +37,8 @@ func DecodeValue(e Endpoint, data []byte) Value {
 	raw := Value{Kind: "raw", Text: hexBytes(data)}
 
 	switch e {
-	case EndpointSupplyTemp, EndpointReturnTemp, EndpointRoomTemp, EndpointRoomSetpoint:
+	case EndpointSupplyTemp, EndpointReturnTemp, EndpointRoomTemp, EndpointRoomSetpoint,
+		EndpointSupplyTempOffset, EndpointReturnTempOffset:
 		if len(data) < 2 {
 			return raw
 		}
@@ -138,6 +142,13 @@ func EncodeValue(e Endpoint, num float64) (data []byte, ok bool) {
 	case EndpointRoomSetpoint, EndpointRoomTemp, EndpointSupplyTemp, EndpointReturnTemp:
 		v := int16(num * 100)
 		return binary.LittleEndian.AppendUint16(nil, uint16(v)), true
+	case EndpointSupplyTempOffset, EndpointReturnTempOffset:
+		// Rounded, not truncated: -1.3 must go out as -130, not -129. Out-of-
+		// range values are left for the node to Nack (±10.00 °C there); only
+		// clamp so the int16 can't wrap.
+		v := math.Round(num * 100)
+		v = math.Max(math.MinInt16, math.Min(math.MaxInt16, v))
+		return binary.LittleEndian.AppendUint16(nil, uint16(int16(v))), true
 	case EndpointDamperTarget:
 		if num < 0 {
 			num = 0

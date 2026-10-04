@@ -84,7 +84,21 @@ Any pre-made "DS18B20 waterproof stainless probe" (SS tube ~6×50 mm, 3-wire, 0.
 - **Cable jacket temp rating** — assume PVC (~70–80 °C) unless stated. Fine on the return-air side; use a silicone lead if a probe will sit in hot supply air.
 - Plain tube (no thread) → plan a cable-gland / grommet duct-wall mount; or buy a "DS18B20 G1/2″ thread" SKU.
 
+**Ice-bath check:** crushed ice packed in a glass, cold water filling only the gaps, stirred, is 0.0 °C. Both probes in it, most of the tube submerged, should settle within ±0.5 °C. A clone that settles at a steady offset is still usable with calibration (§4.3); one that never settles, or that disagrees widely with the other probe, is not.
+
 **NTC fallback:** if only one channel is ever needed and cost is critical, a 10 kΩ 1 % NTC into an ADC pin (10 kΩ bias + RC filter) still works and matches the old `ANALOG_IN` model — but it loses the single-bus multi-probe advantage.
+
+### 4.3 Calibration — per-probe offset
+
+Each probe has an offset that the node adds to every raw reading before it goes on the bus: `SupplyTempOffset` (`0x3B`) and `ReturnTempOffset` (`0x3C`), RW, `int16` centi-°C, limited to ±10.00 °C (`Node-Message-Model-Spec.md` §3). The correction lives on the node rather than in the server because each `ControllerNode` takes `SupplyTemp` straight off the bus for its room loop.
+
+- **Set** stores the new offset in the runtime settings page (`Node-Flash-Layout-and-Bootloader-Spec.md` §3, Config B) and replies with a `Report` of the stored value. Out of range, a short payload, or a failed flash write is answered with a `Nack` and leaves the old offset in place. A Set with the value already stored costs no flash write. The corrected reading is published straight away, without waiting for the next sample.
+- **Get** reports the current offset.
+- The offsets survive resets, OTA and re-provisioning. A blank or corrupt record reads as zero.
+- The server sends them like any other command (`POST /api/commands`), but does not hold them as overrides to re-assert on rejoin: the node already keeps them.
+
+To calibrate, measure the probe against a known temperature and set the offset to the difference. For example, a probe that settles at +1.3 °C in an ice bath gets an offset of −1.30. An ice bath checks a single point, so on clone probes, which can also have a scale error, check a second point near supply-air temperature against a reliable thermometer.
+
 
 ---
 

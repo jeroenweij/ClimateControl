@@ -7,6 +7,7 @@
 #include "INodeHandler.h"
 #include "Node.h"
 
+#include "Calibration.h"
 #include "DuctChannel.h"
 
 // TemperatureNode application logic: two duct probes on the RS485 bus.
@@ -14,9 +15,12 @@
 //   OneWire1 (PA5) -- "incoming" / return air  -> Endpoint::ReturnTemp
 //   OneWire2 (PA4) -- "outgoing" / supply air  -> Endpoint::SupplyTemp
 //
-// (mapping per TemperatureNode-Spec.md §4.1). Every TemperatureNode endpoint is
-// read-only -- the node only measures (spec §2). Transport / System* / Firmware /
-// Diagnostics* are serviced inside NodeLib and never reach here.
+// (mapping per TemperatureNode-Spec.md §4.1). The readings are read-only -- the
+// node only measures (spec §2). The one writable pair is the per-probe
+// calibration, SupplyTempOffset / ReturnTempOffset (spec §4.3): a Set is range-
+// checked, persisted (Calibration) and answered with a Report of the stored
+// value. Transport / System* / Firmware / Diagnostics* are serviced inside
+// NodeLib and never reach here.
 class TemperatureHandler : public NodeLib::INodeHandler
 {
   public:
@@ -45,9 +49,12 @@ class TemperatureHandler : public NodeLib::INodeHandler
     };
 
     uint8_t SensorStatus() const;
+    void    HandleOffset(const NodeLib::Message& message, const Calibration::Probe probe, DuctChannel& channel);
+    void    ReportOffset(const NodeLib::Endpoint endpoint, const int16_t centiDegC);
 
     NodeLib::Node& node;
 
+    Calibration calibration;
     DuctChannel returnChannel;
     DuctChannel supplyChannel;
 };

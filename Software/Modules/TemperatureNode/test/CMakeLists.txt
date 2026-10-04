@@ -19,7 +19,15 @@ cc_add_test(DuctChannelTests
         FakeOneWire.cpp
         ${TN_DIR}/Ds18b20.cpp
         ${TN_DIR}/DuctChannel.cpp
+        ${TN_DIR}/Calibration.cpp
         ${TN_DIR}/TemperatureHandler.cpp
     INCLUDES ${TN_DIR}
 )
 target_compile_definitions(DuctChannelTests PRIVATE CC_BOARD_TemperatureNode)
+
+cc_add_test(CalibrationTests
+    SOURCES
+        CalibrationTests.cpp
+        ${TN_DIR}/Calibration.cpp
+    INCLUDES ${TN_DIR}
+)

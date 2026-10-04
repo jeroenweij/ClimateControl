@@ -35,9 +35,11 @@ const (
 	EndpointDamperActual Endpoint = 0x31
 	EndpointDamperMode   Endpoint = 0x32
 
-	EndpointSupplyTemp   Endpoint = 0x38
-	EndpointReturnTemp   Endpoint = 0x39
-	EndpointSensorStatus Endpoint = 0x3A
+	EndpointSupplyTemp       Endpoint = 0x38
+	EndpointReturnTemp       Endpoint = 0x39
+	EndpointSensorStatus     Endpoint = 0x3A
+	EndpointSupplyTempOffset Endpoint = 0x3B // RW, persisted on the TemperatureNode
+	EndpointReturnTempOffset Endpoint = 0x3C // RW, persisted on the TemperatureNode
 
 	EndpointRoomSetpoint Endpoint = 0x40
 	EndpointRoomTemp     Endpoint = 0x41
@@ -77,6 +79,8 @@ var endpointNames = map[Endpoint]string{
 	EndpointSupplyTemp:         "SupplyTemp",
 	EndpointReturnTemp:         "ReturnTemp",
 	EndpointSensorStatus:       "SensorStatus",
+	EndpointSupplyTempOffset:   "SupplyTempOffset",
+	EndpointReturnTempOffset:   "ReturnTempOffset",
 	EndpointRoomSetpoint:       "RoomSetpoint",
 	EndpointRoomTemp:           "RoomTemp",
 	EndpointRoomHumidity:       "RoomHumidity",

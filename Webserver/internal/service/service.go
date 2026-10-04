@@ -357,6 +357,12 @@ func (s *Service) keepDamperOverridesConsistent(ctx context.Context, node int, e
 	}
 }
 
+// persistedOnNode reports whether a writable endpoint is a setting the node
+// stores in its own flash, rather than state the server has to hold.
+func persistedOnNode(ep nodelib.Endpoint) bool {
+	return ep == nodelib.EndpointSupplyTempOffset || ep == nodelib.EndpointReturnTempOffset
+}
+
 // DamperMode wire value for Manual (Node-Message-Model-Spec.md §3).
 const damperModeManual = 3
 
@@ -383,7 +389,9 @@ func (s *Service) reassertOverrides(node int) {
 }
 
 // SendCommand issues an operator Set, logs it, and (for writable endpoints)
-// stores the value as an override.
+// stores the value as an override. Settings the node persists itself (the
+// probe calibration offsets) are not held: the node already keeps them across
+// resets, so there is nothing to re-assert after a rejoin.
 func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint, value float64, user string) error {
 	data, ok := nodelib.EncodeValue(ep, value)
 	if !ok {
@@ -395,7 +403,7 @@ func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint
 	if !s.send.SendSet(node, ep, data) {
 		return ErrDownlinkUnavailable
 	}
-	if ep != nodelib.EndpointSystemControl {
+	if ep != nodelib.EndpointSystemControl && !persistedOnNode(ep) {
 		_ = s.st.SetOverride(ctx, node, ep, value, user)
 	}
 	s.keepDamperOverridesConsistent(ctx, node, ep, value, user)

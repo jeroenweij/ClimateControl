@@ -18,6 +18,7 @@ var stateEndpoints = map[nodelib.Module][]nodelib.Endpoint{
 	},
 	nodelib.ModuleTemperatureNode: {
 		nodelib.EndpointSupplyTemp, nodelib.EndpointReturnTemp, nodelib.EndpointSystemStatus,
+		nodelib.EndpointSupplyTempOffset, nodelib.EndpointReturnTempOffset,
 	},
 }
 

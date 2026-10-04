@@ -19,7 +19,9 @@
 // publisher (Node-Message-Model-Spec.md §6.1): reported when it moves by
 // 0.1 degC, as a keepalive during a long stretch of unchanging duct air
 // (TemperatureNode-Spec.md §5 item 3), and not at all while the probe is
-// missing. Solicited Get is answered immediately via Report().
+// missing. Solicited Get is answered immediately via Report(). Every reading is
+// the raw probe value plus a per-probe calibration offset (SetOffset(),
+// TemperatureNode-Spec.md §4.3).
 //
 // The DS18B20 conversion (~750 ms) is not blocked on: the channel kicks it off,
 // returns to the caller, and reads the result on a later Loop(). The 1-Wire
@@ -37,6 +39,10 @@ class DuctChannel
     // Emit a Report with the current value (reply to a Get).
     void Report();
 
+    // Correction added to every raw reading, centi-degC. Takes effect at once:
+    // a present probe re-publishes its corrected value straight away.
+    void SetOffset(const int16_t centiDegC);
+
     bool    Present() const;
     int16_t Value() const;
 
@@ -48,12 +54,15 @@ class DuctChannel
     };
 
     void SetPresent(const bool present);
+    void Publish();
 
     NodeLib::Node&    node;
     NodeLib::Endpoint endpoint;
     Ds18b20           sensor;
 
     State   state;
+    int16_t raw;
+    int16_t offset;
     int16_t value;
     bool    present;
 

@@ -7,11 +7,13 @@
 
 #include "Ds18b20.h"
 #include "DuctChannel.h"
+#include "TemperatureHandler.h"
 
 #include "BusHelpers.h"
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
+#include "FakeFlash.h"
 #include "FakeOneWire.h"
 #include "Test.h"
 
@@ -45,6 +47,7 @@ namespace
         FakeClock::Reset();
         FakeConfig::Reset();
         FakeConfig::SetNodeId(nodeId);
+        FakeFlash::Reset();
         FakeOneWire::ResetAll();
     }
 
@@ -215,4 +218,118 @@ CC_TEST(DuctChannel, AMissingProbeStopsBeingReportedEvenAsAKeepalive)
     }
     CC_CHECK(!channel.Present());
     CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 0);
+}
+
+CC_TEST(DuctChannel, TheOffsetIsAddedToEveryReading)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+
+    DuctChannel channel(node, Endpoint::SupplyTemp, line);
+    channel.Init();
+    channel.SetOffset(-130);
+
+    uint8_t scratchpad[9];
+    MakeScratchpad(0x0190, scratchpad); // raw +25.00 degC
+    FakeOneWire::SetPresent(line, true);
+    FakeOneWire::QueueRead(line, scratchpad, 9);
+    RunSampleCycle(channel, node);
+
+    CC_CHECK_EQ(channel.Value(), 2370);
+    int16_t reported = 0;
+    CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
+    CC_CHECK_EQ(reported, 2370);
+}
+
+CC_TEST(DuctChannel, ANewOffsetIsPublishedWithoutWaitingForTheNextSample)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+
+    DuctChannel channel(node, Endpoint::SupplyTemp, line);
+    channel.Init();
+
+    uint8_t scratchpad[9];
+    MakeScratchpad(0x0190, scratchpad);
+    FakeOneWire::SetPresent(line, true);
+    FakeOneWire::QueueRead(line, scratchpad, 9);
+    RunSampleCycle(channel, node);
+    int16_t reported = 0;
+    CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
+
+    channel.SetOffset(-90);
+    CC_CHECK_EQ(ReportsOn(node, Endpoint::SupplyTemp, reported), 1);
+    CC_CHECK_EQ(reported, 2410);
+}
+
+namespace
+{
+    // The handler's reply to the last request: a Report (value out) or a Nack.
+    bool LastReply(Node& node, const Endpoint endpoint, Operation& op, int16_t& value)
+    {
+        Poll(node);
+        Poll(node);
+        Message   tx[32];
+        const int n     = bus::DecodeTx(tx, 32);
+        bool      found = false;
+        for (int i = 0; i < n; i++)
+        {
+            if (tx[i].id.endpoint == endpoint)
+            {
+                found = true;
+                op    = tx[i].id.operation;
+                value = tx[i].len >= 2 ? static_cast<int16_t>(tx[i].data[0] | (tx[i].data[1] << 8)) : 0;
+            }
+        }
+        FakeBus::TruncateTx(0);
+        return found;
+    }
+
+    Message OffsetSet(const Endpoint endpoint, const int16_t centiDegC)
+    {
+        Message m(NodeLib::Id(nodeId, endpoint, Operation::Set));
+        m.data[0] = static_cast<uint8_t>(centiDegC & 0xFF);
+        m.data[1] = static_cast<uint8_t>((centiDegC >> 8) & 0xFF);
+        m.len     = 2;
+        return m;
+    }
+} // namespace
+
+CC_TEST(TemperatureHandler, AnOffsetSetIsStoredAndEchoed)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+    TemperatureHandler handler(node);
+    handler.Init();
+
+    handler.ReceivedMessage(OffsetSet(Endpoint::ReturnTempOffset, -130));
+    Operation op    = Operation::Get;
+    int16_t   value = 0;
+    CC_CHECK(LastReply(node, Endpoint::ReturnTempOffset, op, value));
+    CC_CHECK(op == Operation::Report);
+    CC_CHECK_EQ(value, -130);
+
+    TemperatureHandler afterReset(node); // a fresh handler loads it back from flash
+    afterReset.Init();
+    afterReset.ReceivedMessage(Message(NodeLib::Id(nodeId, Endpoint::ReturnTempOffset, Operation::Get)));
+    CC_CHECK(LastReply(node, Endpoint::ReturnTempOffset, op, value));
+    CC_CHECK_EQ(value, -130);
+}
+
+CC_TEST(TemperatureHandler, AnOutOfRangeOffsetIsNacked)
+{
+    ResetWorld();
+    Node node;
+    node.Init();
+    TemperatureHandler handler(node);
+    handler.Init();
+
+    handler.ReceivedMessage(OffsetSet(Endpoint::SupplyTempOffset, 1500)); // +15 degC
+    Operation op    = Operation::Get;
+    int16_t   value = 0;
+    CC_CHECK(LastReply(node, Endpoint::SupplyTempOffset, op, value));
+    CC_CHECK(op == Operation::Nack);
 }

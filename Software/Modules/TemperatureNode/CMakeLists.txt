@@ -4,6 +4,7 @@ add_stm32_executable(temperatureNode
         ImageInfo.cpp
         TemperatureHandler.cpp
         DuctChannel.cpp
+        Calibration.cpp
         Ds18b20.cpp
         DebugLog.cpp
     LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/temperatureNode.ld

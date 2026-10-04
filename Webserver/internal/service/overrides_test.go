@@ -37,3 +37,28 @@ func TestSettingADamperTargetHoldsManualAndOtherModesDropTheTarget(t *testing.T)
 		t.Fatalf("after Auto: held %v, want DamperMode Auto and no DamperTarget", h)
 	}
 }
+
+func TestAProbeOffsetIsSentButNotHeld(t *testing.T) {
+	svc, fs := newTestService(t)
+	ctx := context.Background()
+
+	if err := svc.SendCommand(ctx, 3, nodelib.EndpointSupplyTempOffset, -1.3, "test"); err != nil {
+		t.Fatal(err)
+	}
+	sent := false
+	for _, f := range fs.Frames() {
+		if f.Endpoint == nodelib.EndpointSupplyTempOffset && f.Operation == nodelib.OpSet {
+			sent = true
+		}
+	}
+	if !sent {
+		t.Fatal("no Set frame for SupplyTempOffset")
+	}
+	ovs, err := svc.Store().Overrides(ctx, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ovs) != 0 {
+		t.Fatalf("offset held as an override: %v -- the node persists it itself", ovs)
+	}
+}

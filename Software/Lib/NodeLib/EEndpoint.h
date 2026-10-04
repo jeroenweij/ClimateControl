@@ -36,9 +36,11 @@ namespace NodeLib
         DamperBudget = 0x33, // RW  uint8 %  -- ceiling on DamperTarget while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md)
 
         // 0x3_  application, TemperatureNode
-        SupplyTemp   = 0x38, // RO  int16 centi-degC
-        ReturnTemp   = 0x39, // RO  int16 centi-degC
-        SensorStatus = 0x3A, // RO  bitfield
+        SupplyTemp       = 0x38, // RO  int16 centi-degC
+        ReturnTemp       = 0x39, // RO  int16 centi-degC
+        SensorStatus     = 0x3A, // RO  bitfield
+        SupplyTempOffset = 0x3B, // RW  int16 centi-degC, added to the raw supply probe reading; persisted on the node
+        ReturnTempOffset = 0x3C, // RW  int16 centi-degC, same for the return probe
 
         // 0x4_  room -- relayed from the paired Thermostat (ControllerNode only)
         RoomSetpoint = 0x40, // RO / RW*  int16 centi-degC
@@ -109,6 +111,12 @@ namespace NodeLib
                 break;
             case Endpoint::SensorStatus:
                 oStrStream << "SensorStatus";
+                break;
+            case Endpoint::SupplyTempOffset:
+                oStrStream << "SupplyTempOffset";
+                break;
+            case Endpoint::ReturnTempOffset:
+                oStrStream << "ReturnTempOffset";
                 break;
             case Endpoint::RoomSetpoint:
                 oStrStream << "RoomSetpoint";
