@@ -69,6 +69,8 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     enterBlDiscoverTimer(),
     bootloaderHintSeen(false),
     roomTempTimer(),
+    fwKnown(false),
+    fwQueryTimer(),
     pendingWriteLen(0),
     writeReplyPending(false),
     writeReplyNack(false),
@@ -121,6 +123,11 @@ void ThermostatLink::Loop()
             enterBlDiscoverTimer.ReStart();
         }
         return;
+    }
+
+    if (otaState != OtaState::Transferring)
+    {
+        QueryFirmwareVersion();
     }
 
     if (otaState != OtaState::Idle)
@@ -201,6 +208,8 @@ void ThermostatLink::ReceivedMessage(const Message& m)
                 if (m.len >= 6)
                 {
                     thermostatFw = static_cast<uint16_t>((ReadU16(&m.data[2]) << 8) | ReadU16(&m.data[4]));
+                    fwKnown      = true;
+                    fwQueryTimer.Stop();
                 }
                 break;
             case Endpoint::Firmware:
@@ -288,7 +297,25 @@ void ThermostatLink::SetPeerState(const uint8_t state)
     {
         peerState     = state;
         statusChanged = true;
+        if (state != StateApp)
+        {
+            fwKnown = false; // through the bootloader: ask the app again once it is back
+        }
     }
+}
+
+void ThermostatLink::QueryFirmwareVersion()
+{
+    if (fwKnown || !link.LinkUp() || link.PeerInBootloader())
+    {
+        return;
+    }
+    if (fwQueryTimer.IsRunning() && !fwQueryTimer.Finished())
+    {
+        return;
+    }
+    link.GetFromPeer(Endpoint::SystemInfo);
+    fwQueryTimer.Start(fwQueryMs);
 }
 
 void ThermostatLink::ConnectionLost()
@@ -298,6 +325,7 @@ void ThermostatLink::ConnectionLost()
     room.tempValid     = false;
     room.setpointValid = false;
     roomTempTimer.Stop();
+    fwKnown = false; // whatever comes back may be a different build
     // An OTA in flight is not failed here: the peer is silent for a moment
     // both while it resets into the bootloader and while Begin erases the app
     // slot (~0.5-1 s, longer than linkTimeoutMs). enterBlTimer bounds the

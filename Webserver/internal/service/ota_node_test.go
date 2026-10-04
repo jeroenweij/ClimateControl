@@ -254,3 +254,77 @@ func TestNodePushFailsWhenTheNodeNeverAnswersAgain(t *testing.T) {
 		t.Fatalf("state = %q msg = %q, want an error saying the node did not answer", state, msg)
 	}
 }
+
+// relayCN stands in for a ControllerNode relaying a Thermostat push. It
+// ignores the first `offline` Begins (the node is not on the bus -- still
+// rebooting after its own update) and answers the next with the Thermostat's
+// bootloader receiving; after that it stays quiet.
+type relayCN struct {
+	svc     *Service
+	mu      sync.Mutex
+	offline int
+	begins  int
+}
+
+func (c *relayCN) Connected() bool { return true }
+func (c *relayCN) SendGet(node int, e nodelib.Endpoint) bool {
+	return c.Send(nodelib.Frame{Node: uint8(node), Endpoint: e, Operation: nodelib.OpGet})
+}
+func (c *relayCN) SendSet(node int, e nodelib.Endpoint, d []byte) bool {
+	return c.Send(nodelib.Frame{Node: uint8(node), Endpoint: e, Operation: nodelib.OpSet, Data: d})
+}
+func (c *relayCN) Send(f nodelib.Frame) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if f.Endpoint != nodelib.EndpointThermostatFirmware || f.Operation != nodelib.OpSet ||
+		len(f.Data) == 0 || nodelib.FirmwareOp(f.Data[0]) != nodelib.FirmwareOpBegin {
+		return true
+	}
+	c.begins++
+	if c.begins <= c.offline {
+		return true // went nowhere
+	}
+	st := make([]byte, 9)
+	st[0] = byte(nodelib.FirmwareOpStatus)
+	st[1] = nodelib.BlReceiving
+	go c.svc.OnNodeFrame(nodelib.Frame{Node: f.Node, Endpoint: nodelib.EndpointThermostatFirmware, Operation: nodelib.OpReport, Data: st})
+	return true
+}
+
+func TestThermostatPushResendsBeginToAControllerNodeThatWasNotThere(t *testing.T) {
+	fastOtaTimers(t)
+	step := otaStepWait
+	otaStepWait = 150 * time.Millisecond
+	t.Cleanup(func() { otaStepWait = step })
+
+	svc, _ := newTestService(t)
+	cn := &relayCN{svc: svc, offline: 1}
+	svc.SetSender(cn)
+	id, err := svc.StartOTA(context.Background(), 3, "thermostat", "Thermostat_3.1.bin", mcImage(nodelib.ModuleThermostat), t.TempDir())
+	if err != nil {
+		t.Fatalf("StartOTA: %v", err)
+	}
+
+	// The first Begin is lost; the resend reaches it and the push moves on to
+	// writing (where this fake stops answering -- that later failure is not
+	// what is under test).
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.Store().OtaJob(context.Background(), id)
+		if err != nil {
+			t.Fatalf("OtaJob: %v", err)
+		}
+		if job.State == "done" || job.State == "error" {
+			if strings.Contains(job.Error, "did not enter bootloader") {
+				t.Fatalf("push gave up at Begin: %q", job.Error)
+			}
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
+	if cn.begins < 2 {
+		t.Fatalf("Begin sent %d time(s), want a resend", cn.begins)
+	}
+}

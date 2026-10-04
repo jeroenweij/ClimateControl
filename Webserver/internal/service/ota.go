@@ -14,9 +14,8 @@ import (
 const (
 	otaChunk = 32 // bytes per Write frame -- Node-Flash-Layout-and-Bootloader-Spec.md §6.2.1 (v2)
 
-	otaReportWait = 3 * time.Second  // per-report timeout (a "thermostat" push's Begin/End/Abort -- still Report/Poll-based)
-	otaStepWait   = 20 * time.Second // per-phase timeout
-	otaBootPoll   = 1 * time.Second  // Firmware Get cadence while waiting for the bootloader
+	otaReportWait = 3 * time.Second // per-report timeout (a "thermostat" push's Begin/End/Abort -- still Report/Poll-based)
+	otaBootPoll   = 1 * time.Second // Firmware Get cadence while waiting for the bootloader
 
 	// Per-write ack timeout. Write's reply is now a queued Ack/Nack tied to
 	// the specific offset (§6.2.1), not a raw progress counter -- but
@@ -50,6 +49,18 @@ var otaWriteWait = 3 * time.Second
 // mid-write: the MainController notices within ~20 s (an unanswered keepalive),
 // resets the NINA and reconnects in ~10 s. A var only so tests can shrink it.
 var otaResumeWait = 120 * time.Second
+
+// otaStepWait is the per-phase timeout (a var so tests can shorten it).
+var otaStepWait = 20 * time.Second
+
+// otaThermostatBeginTries is how often a "thermostat" push sends Begin before
+// giving up. Begin goes to the ControllerNode, which need not be on the bus
+// right then -- typically it is still rebooting after its own update, queued
+// just before this push -- and a Begin that reached nobody is never answered.
+// Each try waits otaStepWait, far longer than the ControllerNode's own
+// bootloader-entry attempt (ThermostatLink::enterBlTimeoutMs, 4 s), so a
+// resend never lands on one still in progress.
+var otaThermostatBeginTries = 3
 
 // otaNodeWindow is how many chunks a bus-node push keeps in flight. The
 // MainController relays them onto the bus back to back and the node's
@@ -413,11 +424,19 @@ func (d *otaDriver) run() {
 
 	d.progress("entering bootloader", 0)
 
+	var r nodelib.FirmwareStatusReport
+	ok := false
 	if d.target == "thermostat" {
 		// The ControllerNode does EnterBootloader + the bootloader-Announce
 		// wait itself (spec §5.4) -- Begin is the whole first step here.
 		d.begun = true
-		d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, d.force))
+		for try := 0; try < otaThermostatBeginTries && !ok; try++ {
+			if try > 0 {
+				d.svc.log.Info("ota: thermostat Begin unanswered, resending", "job", d.jobID, "try", try+1)
+			}
+			d.sendSet(nodelib.EncodeThermostatFirmwareBegin(uint32(len(d.image)), d.crc32, d.fw, d.force))
+			r, ok = d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlReceiving)
+		}
 	} else {
 		if !d.enterBootloader() {
 			d.done("error", "node did not enter bootloader", 0)
@@ -425,9 +444,8 @@ func (d *otaDriver) run() {
 		}
 		d.begun = true
 		d.sendSet(nodelib.EncodeFirmwareBegin(d.module, uint32(len(d.image)), d.crc32, d.fw))
+		r, ok = d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlReceiving)
 	}
-
-	r, ok := d.waitForWithProbe(otaStepWait, otaBootPoll, nodelib.BlReceiving)
 	if !ok {
 		d.done("error", "node did not enter bootloader / begin", 0)
 		return

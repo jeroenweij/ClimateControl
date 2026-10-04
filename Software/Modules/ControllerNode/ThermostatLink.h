@@ -96,6 +96,8 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Announces only in reply to a Discover, and LinkMaster's periodic one
     // (5 s) is slower than enterBlTimeoutMs.
     static const uint32_t enterBlDiscoverMs = 500;
+    // How often SystemInfo is asked for until the Thermostat answers.
+    static const uint32_t fwQueryMs = 5000;
 
     void SendFirmwareOp(const NodeLib::FirmwareOp op, const uint8_t* const payload, const uint8_t len);
     void SetPeerState(const uint8_t state);
@@ -130,6 +132,14 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Restarted by every RoomTemp report; on expiry the room temperature is
     // dropped (NodeLib::RoomTempStaleMs).
     Tools::DelayTimer roomTempTimer;
+
+    // The Thermostat's running version is only known from its SystemInfo (or
+    // its bootloader's Status during a push), and nothing reports SystemInfo
+    // unasked -- so it is asked for whenever the app is up on the link and
+    // hasn't answered since it (re)appeared.
+    void              QueryFirmwareVersion();
+    bool              fwKnown;
+    Tools::DelayTimer fwQueryTimer;
 
     // Outcome of the write currently (or most recently) in flight on the
     // link, awaiting relay up the main bus -- see ConsumeWriteReply().

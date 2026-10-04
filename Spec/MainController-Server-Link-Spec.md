@@ -148,7 +148,7 @@ It also tracks node presence from `Roster` / `NodePresence`, composes downlink f
 |---|---|---|
 | App bundle | `GET /`, `/assets/*` | The compiled single-page app (`index.html` + JS + CSS). Downloaded once per browser session. |
 | JSON API | `GET`/`POST /api/*` | Everything that is not a live value: history queries, commands, node status, config, map setup, the firmware repository + updates (`/api/firmware*`). Request/response over SQLite + the state cache. |
-| WebSocket | `GET /ws` | The live channel. On connect the server sends a full current-state snapshot; thereafter it pushes one message per value change for the life of the socket. |
+| WebSocket | `GET /ws` | The live channel. On connect the server sends a full current-state snapshot; thereafter it pushes one message per value change for the life of the socket. A measurement (`RoomTemp`, `RoomHumidity`, `SupplyTemp`, `ReturnTemp`) not refreshed for 4 minutes is dropped from the live state with an `expired` message: nodes stop sending a reading they no longer have rather than marking it invalid, and a live one repeats at least once a minute. |
 
 ### Data flow — a node value reaching the browser
 

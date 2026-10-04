@@ -4,6 +4,7 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -222,4 +223,62 @@ func (h *Hub) CurrentValue(node int, ep nodelib.Endpoint) (ValueEvent, bool) {
 	defer h.mu.RUnlock()
 	v, ok := h.values[stateKey{node, ep}]
 	return v, ok
+}
+
+// measurementEndpoints are readings a node stops reporting when it no longer
+// has a real value -- a Thermostat whose sensor died, a ControllerNode that
+// dropped its room temperature, a TemperatureNode with a probe gone -- rather
+// than sending an "invalid" marker. Live, each is re-sent at least every
+// 60 s (Node-Message-Model-Spec.md §6.1), so one that goes quiet is gone.
+var measurementEndpoints = map[nodelib.Endpoint]bool{
+	nodelib.EndpointRoomTemp:     true,
+	nodelib.EndpointRoomHumidity: true,
+	nodelib.EndpointSupplyTemp:   true,
+	nodelib.EndpointReturnTemp:   true,
+}
+
+// MeasurementStaleAfter is how long a measurement may go unrefreshed before
+// it is dropped from the live cache: past the ControllerNode's own 3 min drop
+// (NodeLib::RoomTempStaleMs) and well past the 60 s keepalive.
+const MeasurementStaleAfter = 4 * time.Minute
+
+// ExpiredEvent tells subscribers a cached value is gone.
+type ExpiredEvent struct {
+	Type     string `json:"type"` // "expired"
+	Node     int    `json:"node"`
+	Endpoint string `json:"endpoint"`
+}
+
+// ExpireStale drops every measurement older than maxAge at now from the live
+// cache and tells subscribers, so a dead sensor's last reading does not stay
+// on screen for ever. Returns how many were dropped.
+func (h *Hub) ExpireStale(now time.Time, maxAge time.Duration) int {
+	cutoff := now.Add(-maxAge).UnixMilli()
+	var gone []ExpiredEvent
+	h.mu.Lock()
+	for k, v := range h.values {
+		if measurementEndpoints[k.ep] && v.TS < cutoff {
+			delete(h.values, k)
+			gone = append(gone, ExpiredEvent{Type: "expired", Node: k.node, Endpoint: k.ep.String()})
+		}
+	}
+	h.mu.Unlock()
+	for _, ev := range gone {
+		h.broadcast(ev)
+	}
+	return len(gone)
+}
+
+// RunExpiry calls ExpireStale every interval until ctx is done.
+func (h *Hub) RunExpiry(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			h.ExpireStale(now, MeasurementStaleAfter)
+		}
+	}
 }

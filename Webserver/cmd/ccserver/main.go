@@ -92,6 +92,7 @@ func run(cfgPath string, log *slog.Logger) error {
 
 	// Raw readings past the retention window -> hourly rollup.
 	go st.RunRetention(ctx, cfg.RawRetention(), log)
+	go hb.RunExpiry(ctx, 30*time.Second) // drop measurements a node stopped sending
 
 	// Uplink TCP listener.
 	uplinkErr := make(chan error, 1)

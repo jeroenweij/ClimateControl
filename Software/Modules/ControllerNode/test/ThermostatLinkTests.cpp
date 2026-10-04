@@ -635,3 +635,43 @@ CC_TEST(ThermostatLink, ASetpointAloneIsNotAValidRoom)
     CC_CHECK(!w.thermostatLink.Room().valid);
     CC_CHECK(w.thermostatLink.Room().setpointValid);
 }
+
+CC_TEST(ThermostatLink, AsksTheThermostatForItsVersionUntilItAnswers)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false); // the app is up on the link
+    w.link.Loop();
+
+    FakeBus::Reset();
+    w.thermostatLink.Loop(); // queues Get SystemInfo
+    bus::InjectFrame(Message(peerId, Operation::Done));
+    w.link.Loop();
+    FakeClock::Advance(200); // next poll carries it
+    w.link.Loop();
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK(FindMessage(tx, n, Endpoint::SystemInfo, Operation::Get, nullptr));
+
+    Message info(Id(peerId, Endpoint::SystemInfo, Operation::Report));
+    info.data[0] = static_cast<uint8_t>(ModuleType::Thermostat);
+    info.data[1] = 1; // hwRev
+    info.data[2] = 0; // fwMajor 0
+    info.data[3] = 0;
+    info.data[4] = 16; // fwMinor 16
+    info.data[5] = 0;
+    info.len     = 6;
+    w.thermostatLink.ReceivedMessage(info);
+    CC_CHECK_EQ(w.thermostatLink.ThermostatFwVersion(), 16);
+
+    FakeBus::Reset();
+    FakeClock::Advance(10000); // well past the retry interval: known now, no more asking
+    w.thermostatLink.Loop();
+    bus::InjectFrame(Message(peerId, Operation::Done));
+    w.link.Loop();
+    FakeClock::Advance(200);
+    w.link.Loop();
+    const int n2 = bus::DecodeTx(tx, 8);
+    CC_CHECK(!FindMessage(tx, n2, Endpoint::SystemInfo, Operation::Get, nullptr));
+}

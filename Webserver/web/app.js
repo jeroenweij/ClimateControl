@@ -92,6 +92,10 @@ function handleEvent(msg) {
       state.values.set(key(msg.node, msg.endpoint), msg);
       onValue(msg);
       break;
+    case "expired": // a measurement the node stopped sending (dead sensor, dropped reading)
+      state.values.delete(key(msg.node, msg.endpoint));
+      onValue(msg);
+      break;
     case "presence":
       loadNodes().then(refreshCurrentView);
       if (currentView() === "firmware") loadFirmware();
@@ -636,7 +640,7 @@ function onValue(msg) {
   } else if (currentView() === "status") {
     if (msg.node === 0) renderMainStatus();
     else renderNodeTable();
-  } else if (currentView() === "overrides" && (msg.endpoint === "DumpRoom" || msg.endpoint === "DamperBudget")) {
+  } else if (currentView() === "overrides" && LIVE_CARD_ENDPOINTS.includes(msg.endpoint)) {
     refreshCardSettings(msg.node);
   }
 }
@@ -713,11 +717,15 @@ function dumpRoomButtons(nodeId) {
     .join("");
 }
 
-// Live update of a card's node-stored settings, without redrawing the card
-// (which would wipe half-typed override inputs).
+// Endpoints whose live value a card shows and refreshes in place.
+const LIVE_CARD_ENDPOINTS = ["DumpRoom", "DamperBudget", "RoomTemp"];
+
+// Live update of a card's node-stored settings and room reading, without
+// redrawing the card (which would wipe half-typed override inputs).
 function refreshCardSettings(nodeId) {
   const card = $(`.ov-card[data-node-card="${nodeId}"]`);
   if (!card) return;
+  $('[data-role="room"]', card).textContent = `room ${liveText(nodeId, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`)}`;
   $('[data-role="budget"]', card).textContent = `budget ${budgetText(nodeId) ?? "—"}`;
   $('[data-role="dump"]', card).innerHTML = dumpRoomButtons(nodeId);
   const msgEl = $('[data-role="ov-msg"]', card);
@@ -757,7 +765,7 @@ function renderOverrideCard(n) {
       <span class="pill ${STATUS_PILL[n.status] || "down"}">${esc(n.status)}</span>
     </div>
     <div class="ov-live">
-      <span>room ${roomTxt}</span><span>setpoint ${setTxt}</span>
+      <span data-role="room">room ${roomTxt}</span><span>setpoint ${setTxt}</span>
       <span>damper ${damperTxt}</span><span>mode ${modeTxt}</span>
       <span data-role="budget">budget ${budgetText(n.id) ?? "—"}</span>
     </div>
