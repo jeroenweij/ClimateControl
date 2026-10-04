@@ -56,13 +56,13 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 | 5.5 | Scope 5 V and 3.3 V during 5.2 | 5 V dips but recovers; 3.3 V stays in spec; MCU does not reset | Power-path issue (`Node-Bus-Power-Path-Spec.md` §3.1) |
 | 5.6 | Moves while the bus is busy | No bus CRC errors or dropped polls on this node or its neighbours | Rail noise into the RS-485 transceiver — decoupling / layout |
 
-## 6. With linkage and damper (2.2:1, ≈ 82° blade travel — `Damper-Mechanics-Spec.md`)
+## 6. With linkage and damper (2.1:1, ≈ 86° blade travel — `Damper-Mechanics-Spec.md`)
 
 | # | Do | Expect | If not |
 |---|---|---|---|
-| 6.1 | `DamperTarget` 0 | Blade at the minimum-ventilation position, not touching a stop | Mechanical adjustment, not firmware |
-| 6.2 | `DamperTarget` 100 | Blade at maximum opening, short of any hard stop | Mechanical adjustment |
-| 6.3 | 0 closes, 100 opens | Direction correct | Mount the servo the other way round. If mirrored mounting is ever needed in the field, add a single "reverse" setting then |
+| 6.1 | `DamperTarget` 0 | Blade about 2° short of closed (minimum ventilation), not touching a stop | Re-seat the pinion on the horn one spline or one tooth over — mechanical, not firmware |
+| 6.2 | `DamperTarget` 100 | Blade about 2° short of fully open, short of any hard stop | Same as 6.1 |
+| 6.3 | 0 closes, 100 opens | Direction correct | The keyed housing fixes the direction, so it cannot be mounted the other way round. Add a single firmware "reverse" setting (percent → 100 − percent) |
 | 6.4 | Sweep 0 → 100 in 10 % steps | No stall anywhere in the range | A stall inside the range is a binding linkage |
 | 6.5 | `DamperTarget` 50 | Sensible "neutral airflow" position — this is where the node parks before every reset | — |
 

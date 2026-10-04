@@ -3,7 +3,7 @@
 
 **Companion docs:** `Node-Bus-Hardware-Design-Spec.md` §4 (DS3225 servo, linkage summary), `Node-Bus-Power-Path-Spec.md` §3.1 (servo rail gating, stall detection), `ControllerNode-Bringup-Test-Plan.md` §6 (linkage and end-point checks), `Damper-Budget-Spec.md` (what drives the target position).
 
-Site photos of an installed damper: `Hardware/Damper/`.
+Design files in `Hardware/Damper/`: printable parts as STL in `3dFiles/` (modelled in Tinkercad), assembly renders in `Assembly images/`, site photos of an installed damper in `build/`.
 
 ---
 
@@ -28,92 +28,99 @@ Published data (Lindab DRU datasheet, DUCT-MC 17.11.002, and the Lindab dampers 
 | Lindab's own motorisation (small sizes) | Belimo CM24 / CM24-SR, **2 Nm** minimum. This is the torque Lindab considers sufficient for the blade |
 | Motor-ready variant | available to order. Its shaft end carries a notch that shows the blade position |
 
-Not published, and still to be measured on site (§5): the cup's outer diameter and wall thickness, the knob's disc diameter and wing-bar dimensions, and the arc-slot angle.
+Not published, measured on site: the cup is a Ø70 mm steel tube whose top edge is rolled out into a flange of up to about Ø88 mm, and that flange has a **cutout** at one point of its circumference. The cutout is a fixed reference on the damper body. Seen from above with the cutout at the bottom, the handle **vertical** (pointing at the cutout) is **closed** and the handle **horizontal** is **open**.
 
-## 2. Mounting: a ring clamped around the cup
+## 2. Mounting: a ring keyed onto the cup's rim
 
-The actuator mounts on the **damper's own cup**, not on the duct or the building structure:
+The actuator mounts on the **damper's own cup**, not on the duct or the building structure. The cup is rigid steel and belongs to the damper body, so the servo and the knob stay aligned however the insulated duct flexes or settles, and nothing bears on the insulation.
 
-- A **3D-printed ring** fits around the outside of the steel cup and is clamped to it, for example with a band or hose clip around the ring. The servo bracket is part of this ring.
-- The cup is rigid steel and belongs to the damper body, so the servo and the knob stay aligned however the insulated duct flexes or settles. Nothing bears on the insulation.
-- To give the ring a clamping surface on the cup's outer wall, a collar of insulation around the cup is cut away. The foil is re-taped up to the ring afterwards.
-- The ring slides off once the clamp is released. The knob is then free to set by hand again (manual fallback).
+Printed parts (`Hardware/Damper/3dFiles/`):
 
-## 3. Drive: a fork on the knob, geared 2.2:1
+| Part | File | Role |
+|---|---|---|
+| Main clamp | `DamperDrive_MainClamp_and_servo_mount.stl` | One half of the ring, with the plate that carries the servo and the ControllerNode PCB |
+| Clamp | `DamperDrive_Clamp.stl` | The other half of the ring |
+| Bearing retainer | `DamperDrive_Bearing_retainer.stl` | Holds the bearing's outer ring down onto the ring and ties the two halves together |
+| Fork | `DamperDrive_Pinoin.stl` | Shaft on the damper axis: fork on the knob below, bearing seat in the middle, key block for the driven gear on top |
+| Driven gear | `DamperDrive_BigGear.stl` | Toothed sector on the fork |
+| Pinion | `DamperDrive_SmallGear.stl` | On the servo horn |
 
-- A **fork** reaches down into the cup and straddles the knob's wing bar. The wing bar is the only drive interface, and the damper itself is not modified.
-- The fork carries the **driven gear** above the cup rim, on the damper's axis. It turns in a bearing in the ring, so the ring takes the gear-mesh side load and the knob only sees torque.
-- A **pinion on the servo horn** meshes with the driven gear at a **2.2:1 reduction**.
+**The ring.** Two halves close around the cup: outside Ø100 mm, 30 mm tall, Ø70 mm bore. Towards the top the bore opens into a conical groove, ending in a short Ø90 mm band, that takes the cup's rolled flange, and above it a lip (inside Ø59 mm) closes over the flange. The ring is therefore located on the flange rather than clamped by friction on the tube. The halves are bolted to each other across both split faces (two horizontal screws per face), and the bearing retainer's six M3 screws tie them together from above.
+
+**Anti-rotation key.** A half-round **nub** (about 7 mm wide) under the lip of the main clamp engages the flange **cutout**, like a key in a keyway. It takes the full reaction torque of the drive, about 120 N at its radius of 42.5 mm at servo stall (§3.2). It also fixes the whole actuator's orientation on the damper, and with it the relation between the servo, the gear sector and the blade scale (§3.1). The nub should fit the cutout closely, because any play there adds directly to the gear backlash when the drive reverses.
+
+Before the ring goes on, a collar of insulation around the cup is cut away. The foil is re-taped up to the ring afterwards. Once the ring is unbolted it comes off as two halves, and the knob is free to set by hand again (manual fallback).
+
+**Bearing.** The fork turns in a **6908ZZ** deep-groove ball bearing (40 × 62 × 12 mm, shields on both sides):
+
+- The outer ring sits in the retainer's Ø62.2 bore. It rests on the ring's top lip and is held down by the retainer's top lip. Both lips bear only on the outer ring's face and stay clear of the shields.
+- The inner ring is clamped between the fork's Ø43 flange below and the driven gear's Ø44.5 hub above.
+
+The ring and bearing take the gear-mesh side load, so the knob only sees torque.
+
+## 3. Drive: a fork on the knob, geared 2.1:1
+
+- The **fork** reaches down into the cup and straddles the knob's wing bar with a 10 mm wide slot. The wing bar is the only drive interface, and the damper itself is not modified. The fork is short enough that its underside stays clear of the PZD2 screw heads, which stay put while the knob turns under them.
+- The **driven gear** sits on the fork's 20 × 20 mm key block and is bolted to it with eight M3 screws. It runs above the ring, on the damper's axis.
+- The **pinion** is bolted to the DS3225's metal single-arm 25 T horn: the arm sits in a 6 mm recess, one M3 screw goes through the arm, and a Ø6 hole gives access to the horn screw. The pinion does not print the spline, which would wear out.
+- The **servo** drops through a 20.5 × 41.5 mm pocket in the plate. It is held on its rubber grommets with the metal inserts and screws supplied with it, on a 48 × 10 mm hole pattern that matches the servos as bought. The gear-mesh force pushes the servo sideways across the pocket, so the pocket walls (0.25 mm clearance) carry that load, not the rubber.
 - The **PZD2 lock screws are loosened** so that the knob turns. Left just snug, they add a little friction that helps the unpowered servo hold the blade against airflow.
 
 ### Gear set
 
-**20 T pinion : 44 T driven gear, module 2** (20° pressure angle, 3D-printed in PETG or ASA):
-
 | | Pinion (servo) | Driven gear (fork) |
 |---|---|---|
-| Teeth | 20 | 44 |
-| Pitch diameter | 40 mm | 88 mm |
-| Outside diameter | 44 mm | 92 mm |
-| Centre distance | 64 mm (print +0.2 mm for backlash) | |
-| Face width | 10–12 mm | |
+| Teeth | 20 | 42-tooth pitch, cut as a sector |
+| Tip diameter | 68.6 mm | 137.3 mm |
+| Module | ≈ 3.1 | ≈ 3.1 |
+| Face width | 12 mm | 12 mm |
+| Centre distance | 98.5 mm | |
+| Backlash | ≈ 0.5° of blade (≈ 0.55 mm at the mesh), constant over the travel | |
 
-The gear size is set by two limits, not by the ratio:
+The driven gear only needs teeth where the pinion runs. The toothed sector spans about ±64° around the mesh line, against ±43° of travel, which leaves about 21° of spare teeth at each end. The rest of the gear is a solid plate (Ø90 at the back) that also covers the cup.
 
-- **Centre distance.** The servo stands beside the cup, with the pinion in the plane of the driven gear above the rim. The centre distance must therefore clear the cup radius (about 35–40 mm, estimated), the ring wall (about 4 mm) and about 10 mm from the servo's output shaft to its body edge. That puts the minimum at about 55–60 mm, which 64 mm clears with room to spare.
-- **Tooth strength at stall.** Lewis bending stress at the pinion root, 10 mm face width, at the ≈ 5.4 Nm stall torque (§3.2):
+The gear size comes from two limits rather than the ratio:
 
-  | Module (20 : 44) | Centre distance | Root stress at 2 Nm | Root stress at 5.4 Nm stall |
-  |---|---|---|---|
-  | 1 | 32 mm | 28 MPa | 76 MPa, fails |
-  | 1.5 | 48 mm | 13 MPa | 34 MPa, marginal |
-  | **2** | **64 mm** | **7 MPa** | **19 MPa** |
+- **Centre distance.** The servo stands beside the cup, with the pinion in the plane of the driven gear above the ring. The centre distance therefore has to clear the ring (Ø100) and the servo body. 98.5 mm does that.
+- **Tooth strength at stall.** The Lewis bending stress at the pinion root, at the DS3225's 2.45 Nm stall torque, is about 6–7 MPa for this module and face width. Printed PETG or ASA holds about 30–40 MPa. For comparison, module 1.5 would sit at about 34 MPa and module 1 would fail.
 
-  Printed PETG or ASA holds about 30–40 MPa, so module 2 is the smallest size that survives a stall with margin. A larger module is stronger again and only moves the servo further out.
-
-Other properties of this gear set:
-
-- The driven gear's 92 mm outside diameter is larger than the cup, so it also works as a dust cover over the cup.
-- 20 teeth avoids undercut on the pinion.
-- 0.2–0.3 mm of printed backlash at the driven gear's 44 mm pitch radius is about 0.3° of blade, less than one 1 % step.
-- The pinion screws onto the DS3225's metal 25 T spline horn instead of printing the spline, which would wear out.
-
-Any gear set with a 2.2:1 ratio keeps the travel in §3.1. Printed gears need not use a standard module: for 20 : 44, module = centre distance / 32.
+The backlash above was checked by sweeping the meshing tooth profiles through the full travel. It is less than one 1 % step. Printing usually takes a little of it away rather than adding to it.
 
 ### 3.1 Travel and end points
 
 | Servo | Blade |
 |---|---|
-| 0–180° (0–100 %, 500–2500 µs) | **≈ 82°** (180° / 2.2) |
-| 1 % step | ≈ 0.82° |
+| 0–180° (0–100 %, 500–2500 µs) | **≈ 86°** (180° / 2.1) |
+| 1 % step | ≈ 0.86° |
 
-The damper's 0–90° range leaves about 8° of margin, which is split between the two ends when the fork is set on the knob:
+The nub fixes the housing to the flange cutout, and the sector is centred on the mesh with the knob at half-open: the wing bar at 45° to the cutout direction, midway between vertical (closed) and horizontal (open). With the pinion set to the servo's 50 % position there, full travel covers about 2° to 88° of the damper's 0–90°:
 
-- **0 % (`DamperTarget` 0):** blade short of closed. It still leaves the minimum ventilation gap and stays clear of the arc-slot end.
-- **100 %:** blade short of fully open, also clear of the slot end.
+- **0 % (`DamperTarget` 0):** blade about 2° short of closed. It still leaves the minimum ventilation gap and stays clear of the arc-slot end.
+- **100 %:** blade about 2° short of fully open, also clear of the slot end.
 
-The servo therefore never drives into a hard stop, and firmware has no per-unit trim or software end stops (`Modules/ControllerNode/Damper.h`). A stall anywhere in the range is a mechanical fault. The damper's own convention runs the other way from the firmware's (DRU α = 0° is open, `DamperTarget` 0 is closed). The fork is set so that 0 % closes, as checked by `ControllerNode-Bringup-Test-Plan.md` step 6.3.
+The servo therefore never drives into a hard stop, and firmware has no per-unit trim or software end stops (`Modules/ControllerNode/Damper.h`). A stall anywhere in the range is a mechanical fault. The damper's own convention runs the other way from the firmware's (DRU α = 0° is open, `DamperTarget` 0 is closed). The housing can only go on one way, so the direction is fixed by the design. `ControllerNode-Bringup-Test-Plan.md` step 6.3 checks it.
 
 ### 3.2 Torque
 
 | | Torque at the knob |
 |---|---|
 | Lindab's own actuator for this damper | 2 Nm |
-| DS3225 stall (25 kg·cm ≈ 2.45 Nm) × 2.2 | **≈ 5.4 Nm** |
+| DS3225 stall (25 kg·cm ≈ 2.45 Nm) × 2.1 | **≈ 5.1 Nm** |
 
-The reduction gives more than twice the torque the damper needs. It also means a misadjusted fork, or a knob run into its slot end, is loaded to about 5.4 Nm until stall detection cuts the rail (`stallConfirmMs`, about 200 ms). The printed fork and gear are sized to be the weakest link, so they fail before the damper's knob.
+The reduction gives more than twice the torque the damper needs. It also means that a knob run into its slot end is loaded to about 5.1 Nm until stall detection cuts the rail (`stallConfirmMs`, about 200 ms). The same torque comes back through the ring into the flange cutout (§2). The printed fork and gear are sized to be the weakest link, so they fail before the damper's knob.
 
 ## 4. Assembly on site
 
-1. Loosen the two PZD2 screws. Check that the knob turns freely across its range and note on the cup scale which way is open.
-2. Cut the insulation back around the cup and fit the ring. Do not tighten the clamp yet.
-3. Command `DamperTarget` 50. With the servo powered, set the knob to about half open (α ≈ 45° on the cup scale). Seat the fork on the wing bar and engage the gears.
-4. Tighten the ring clamp. Snug the PZD2 screws lightly as a friction brake, not as a lock.
-5. Run `ControllerNode-Bringup-Test-Plan.md` §6.
+1. Loosen the two PZD2 screws and check that the knob turns freely across its range.
+2. Cut the insulation back around the cup.
+3. Fit the two ring halves around the flange with the main clamp's nub in the cutout. Bolt the halves together across the split faces.
+4. Put the 6908ZZ bearing on the fork and drop the fork into the ring, engaging the knob's wing bar. Screw the bearing retainer down onto the ring.
+5. Set the knob to half-open (wing bar at 45° to the cutout direction). Bolt the driven gear onto the fork's key block.
+6. Command `DamperTarget` 50 with the servo in its pocket and the horn fitted. Fit the pinion onto the horn so that it meshes in the middle of the sector, and screw it down.
+7. Snug the PZD2 screws lightly as a friction brake, not as a lock.
+8. Run `ControllerNode-Bringup-Test-Plan.md` §6.
 
 ## 5. Open items
 
-1. **Site measurements:** cup outer diameter, wall thickness and height above the insulation; knob disc diameter; wing-bar width, thickness and height; arc-slot angle. Also the duct diameter of each branch (which DRU size), and the torque to turn the knob with the screws loosened.
-2. **Final gear geometry:** a larger module than 2 is intended for extra tooth strength in the printed parts. It is to be generated with a gear generator (tool not yet chosen) and checked against the servo's clearance from the cup once the cup diameter is measured.
-3. **Ring clamp detail:** band or hose clip around the printed ring, or grub screws. Also how much insulation has to be cut back.
-4. **Printed material:** PETG or ASA for duct temperatures and long-term creep under the clamp load.
+1. **Bearing fit:** the 6908ZZ pockets are drawn at the bearing's nominal sizes (12.00 mm deep, Ø40 shaft, Ø62.2 bore), with no axial play allowed for. Check the fit on the printed parts with real bearings and adjust the pocket depth or bores if it binds or rattles.
+2. **Printed material:** PETG or ASA, for duct temperatures and for long-term creep under the bolt and key loads. Not yet tried on a real damper.

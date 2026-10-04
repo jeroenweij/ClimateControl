@@ -89,5 +89,5 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
 | `Damper-Budget-Spec.md` | `ControllerNode`'s room control loop (setpoint/room-temp vs. shared duct `SupplyTemp`) and `MainController`'s fair-share `DamperBudget` allocation across online `ControllerNode`s |
-| `Damper-Mechanics-Spec.md` | The installed Lindab DRU damper (0–90°, 45 mm cup, PZD2 lock screws) and the actuator mechanics: ring clamped around the cup, fork on the knob, 2.2:1 gears (≈ 82° blade travel) |
+| `Damper-Mechanics-Spec.md` | The installed Lindab DRU damper (0–90°, 45 mm cup, PZD2 lock screws) and the printed actuator (`Hardware/Damper/`): two-part ring keyed onto the cup's flange cutout, 6908ZZ bearing, fork on the knob, 20 : 42 sector gears at 2.1:1 (≈ 86° blade travel) |
 | `ControllerNode-Bringup-Test-Plan.md` | Ordered hardware checks for the first real ControllerNode boards: servo PWM, stall-sense calibration, linkage end points, reset/OTA park, Thermostat link |
