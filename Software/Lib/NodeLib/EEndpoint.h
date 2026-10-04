@@ -33,7 +33,8 @@ namespace NodeLib
         DamperTarget = 0x30, // RW  uint8 %
         DamperActual = 0x31, // RO  uint8 %
         DamperMode   = 0x32, // RW  enum: 0 closed 1 open 2 auto 3 manual 4 stalled (RO fault code, Damper::ReportedMode -- never accepted by Set)
-        DamperBudget = 0x33, // RW  uint8 %  -- ceiling on DamperTarget while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md)
+        DamperBudget = 0x33, // RW  max(1) [min(1)] %  -- range DamperTarget stays in while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md); a 1-byte Set means min 0
+        DumpRoom     = 0x34, // RW  uint8 0/1  -- this room takes the surplus air when the others close; persisted on the node
 
         // 0x3_  application, TemperatureNode
         SupplyTemp       = 0x38, // RO  int16 centi-degC
@@ -102,6 +103,9 @@ namespace NodeLib
                 break;
             case Endpoint::DamperBudget:
                 oStrStream << "DamperBudget";
+                break;
+            case Endpoint::DumpRoom:
+                oStrStream << "DumpRoom";
                 break;
             case Endpoint::SupplyTemp:
                 oStrStream << "SupplyTemp";

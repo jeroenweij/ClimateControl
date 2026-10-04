@@ -12,7 +12,9 @@ RoomControlLoop::RoomControlLoop(ThermostatLink& thermostatLink, const NodeLib::
     thermostatLink(thermostatLink),
     supplyTemp(supplyTemp),
     damper(damper),
-    budget(defaultBudget),
+    budgetMax(defaultBudget),
+    budgetMin(0),
+    dumpRoom(false),
     connectionLost(false),
     rampTimer()
 {
@@ -39,12 +41,15 @@ void RoomControlLoop::Loop()
     {
         if (!thermostatLink.Room().valid)
         {
+            // No room data yet: hold where it is, but still inside the range.
+            ClampIntoRange();
             return;
         }
         desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint);
     }
 
-    const uint8_t target = desired < budget ? desired : budget;
+    uint8_t target = desired < budgetMax ? desired : budgetMax;
+    target         = target > budgetMin ? target : budgetMin;
     // SetTarget() (re)starts a move -- repeating the target the damper already
     // has on every pass would keep restarting it, so the move would never
     // settle and a stall would never be confirmed.
@@ -54,27 +59,67 @@ void RoomControlLoop::Loop()
     }
 }
 
-void RoomControlLoop::SetBudget(const uint8_t percent)
+void RoomControlLoop::SetBudget(const uint8_t max, const uint8_t min)
 {
-    budget         = percent > 100 ? 100 : percent;
+    budgetMin      = min > 100 ? 100 : min;
+    budgetMax      = max > 100 ? 100 : max;
+    budgetMax      = budgetMax > budgetMin ? budgetMax : budgetMin;
     connectionLost = false;
     rampTimer.Stop();
 
-    if (damper.GetMode() == Damper::Mode::Auto && damper.Target() > budget)
+    ClampIntoRange(); // at once, not just on the next Loop() tick
+}
+
+void RoomControlLoop::ClampIntoRange()
+{
+    if (damper.GetMode() != Damper::Mode::Auto)
     {
-        damper.SetTarget(budget); // re-clamp immediately, not just on the next Loop() tick
+        return;
+    }
+    if (damper.Target() > budgetMax)
+    {
+        damper.SetTarget(budgetMax);
+    }
+    else if (damper.Target() < budgetMin)
+    {
+        damper.SetTarget(budgetMin);
     }
 }
 
-uint8_t RoomControlLoop::Budget() const
+uint8_t RoomControlLoop::BudgetMax() const
 {
-    return budget;
+    return budgetMax;
+}
+
+uint8_t RoomControlLoop::BudgetMin() const
+{
+    return budgetMin;
+}
+
+void RoomControlLoop::SetDumpRoom(const bool isDumpRoom)
+{
+    dumpRoom = isDumpRoom;
+}
+
+bool RoomControlLoop::DumpRoom() const
+{
+    return dumpRoom;
 }
 
 void RoomControlLoop::ConnectionLost()
 {
     connectionLost = true;
     rampTimer.Start(rampIntervalMs);
+
+    // Without MainController nobody is watching the total airflow any more:
+    // the dump room opens fully, every other room drops its minimum.
+    budgetMin = dumpRoom ? 100 : 0;
+    budgetMax = budgetMax > budgetMin ? budgetMax : budgetMin;
+    if (dumpRoom)
+    {
+        LOG_WARN("Bus lost -- dump room opening fully");
+    }
+    ClampIntoRange();
 }
 
 void RoomControlLoop::StepBudgetRamp()
@@ -85,16 +130,19 @@ void RoomControlLoop::StepBudgetRamp()
     }
     rampTimer.Start(rampIntervalMs);
 
-    if (budget < defaultBudget)
+    // The dump room's max is pinned at 100 by its min (ConnectionLost()) and
+    // stays there; every other room ramps its ceiling back to the default.
+    if (budgetMax < defaultBudget)
     {
-        const uint8_t next = static_cast<uint8_t>(budget + rampStepPercent);
-        budget             = next > defaultBudget ? defaultBudget : next;
-        LOG_INFO("Damper budget ramping toward default: " << budget << "%");
+        const uint8_t next = static_cast<uint8_t>(budgetMax + rampStepPercent);
+        budgetMax          = next > defaultBudget ? defaultBudget : next;
+        LOG_INFO("Damper budget ramping toward default: " << budgetMax << "%");
     }
-    else if (budget > defaultBudget)
+    else if (budgetMax > defaultBudget && budgetMax > budgetMin)
     {
-        const uint8_t next = static_cast<uint8_t>(budget - rampStepPercent);
-        budget             = next < defaultBudget ? defaultBudget : next;
-        LOG_INFO("Damper budget ramping toward default: " << budget << "%");
+        const uint8_t next = static_cast<uint8_t>(budgetMax - rampStepPercent);
+        budgetMax          = next < defaultBudget ? defaultBudget : next;
+        budgetMax          = budgetMax > budgetMin ? budgetMax : budgetMin;
+        LOG_INFO("Damper budget ramping toward default: " << budgetMax << "%");
     }
 }

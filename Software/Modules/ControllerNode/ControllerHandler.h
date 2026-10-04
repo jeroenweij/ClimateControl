@@ -15,7 +15,8 @@
 // ControllerNode main-bus application logic (INodeHandler for the RS485 bus
 // Node). Serves:
 //   Damper*  (0x30..0x33)  -- this node's own damper, incl. the DamperBudget
-//                             ceiling RoomControlLoop enforces
+//                             range RoomControlLoop keeps it in
+//   DumpRoom (0x34)        -- persisted flag: this room takes the surplus air
 //   Room*    (0x40..0x44)  -- the paired Thermostat's state, from the link cache
 //   ThermostatFirmware (0x22) -- relays an image to the Thermostat over the link
 //
@@ -25,6 +26,8 @@ class ControllerHandler : public NodeLib::INodeHandler
   public:
     ControllerHandler(NodeLib::Node& node, Damper& damper, ThermostatLink& link);
 
+    // Loads the persisted settings (DumpRoom) -- once, before the bus starts.
+    void Init();
     void Loop();
 
     void ReceivedMessage(const NodeLib::Message& message) override;
@@ -41,6 +44,9 @@ class ControllerHandler : public NodeLib::INodeHandler
     };
 
     void HandleDamper(const NodeLib::Message& m);
+    // Persists a changed DumpRoom flag and answers with a Report of it (a
+    // Nack if the flash write fails).
+    void SetDumpRoom(const bool dumpRoom, const NodeLib::Message& m);
     void HandleRoom(const NodeLib::Message& m);
     void HandleThermostatFirmware(const NodeLib::Message& m);
     void ReportThermostatFirmwareStatus();

@@ -143,6 +143,29 @@ namespace
         return count;
     }
 
+    // The min byte of the DamperBudget Set to nodeId (0 if it carried none).
+    bool FindBudgetMin(Message* const tx, const int n, const uint8_t nodeId, uint8_t& min)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            if (tx[i].id.node == nodeId && tx[i].id.endpoint == Endpoint::DamperBudget &&
+                tx[i].id.operation == Operation::Set)
+            {
+                min = tx[i].len >= 2 ? tx[i].data[1] : 0;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void ObserveByte(BudgetAllocator& allocator, const uint8_t nodeId, const Endpoint endpoint, const uint8_t value)
+    {
+        Message m(Id(nodeId, endpoint, Operation::Report));
+        m.data[0] = value;
+        m.len     = 1;
+        allocator.Observe(m);
+    }
+
     void ObserveBudget(BudgetAllocator& allocator, const uint8_t nodeId, const uint8_t percent)
     {
         Message m(Id(nodeId, Endpoint::DamperBudget, Operation::Report));
@@ -230,7 +253,7 @@ CC_TEST(BudgetAllocator, WeightsByEachRoomsDemand)
     CC_CHECK(FindBudget(tx, n, 2, p2));
     CC_CHECK(FindBudget(tx, n, 3, p3));
     CC_CHECK_EQ(p2, 100); // all of the 2-node, 100%-total pool
-    CC_CHECK_EQ(p3, 0); // no floor -- Damper-Budget-Spec.md §5.2
+    CC_CHECK_EQ(p3, 0); // a max of 0 -- room 2 alone keeps enough open, so no min either (§5.5)
 }
 
 CC_TEST(BudgetAllocator, SplitRoundsToNearestRatherThanFlooring)
@@ -620,4 +643,109 @@ CC_TEST(BudgetAllocator, RecomputeDebouncesWithinTheInterval)
     Message   tx[8];
     const int n = bus::DecodeTx(tx, 8);
     CC_CHECK_EQ(CountBudgetMessages(tx, n), 2); // one Set per node, not two rounds' worth
+}
+
+namespace
+{
+    // Three online ControllerNodes (2, 3, 4), cold supply air, every room
+    // exactly at setpoint -- nobody wants air, every loop would close.
+    void ThreeSatisfiedRooms(NodeMaster& master, BudgetAllocator& allocator)
+    {
+        InitAndClearDiscover(master);
+        Announce(2, ModuleType::ControllerNode);
+        Announce(3, ModuleType::ControllerNode);
+        Announce(4, ModuleType::ControllerNode);
+        StartPolling(master);
+
+        ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+        for (uint8_t id = 2; id <= 4; id++)
+        {
+            ObserveReport(allocator, id, Endpoint::RoomTemp, 2000);
+            ObserveReport(allocator, id, Endpoint::RoomSetpoint, 2000);
+        }
+    }
+} // namespace
+
+CC_TEST(BudgetAllocator, WithEveryRoomSatisfiedTheDumpRoomTakesTheAir)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    ThreeSatisfiedRooms(master, allocator);
+    ObserveByte(allocator, 3, Endpoint::DumpRoom, 1);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n    = bus::DecodeTx(tx, 8);
+    uint8_t   min2 = 0xFF, min3 = 0xFF, min4 = 0xFF;
+    CC_CHECK(FindBudgetMin(tx, n, 2, min2));
+    CC_CHECK(FindBudgetMin(tx, n, 3, min3));
+    CC_CHECK(FindBudgetMin(tx, n, 4, min4));
+    CC_CHECK_EQ(min3, 100); // the dump room first, fully open
+    CC_CHECK_EQ(min2, 100); // the other 100 of the 200 total: rooms 2 and 4 tie, the lower id goes first
+    CC_CHECK_EQ(min4, 0);
+}
+
+CC_TEST(BudgetAllocator, WhatTheDumpRoomCantTakeGoesToTheLeastHarmedRoom)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+    ThreeSatisfiedRooms(master, allocator);
+    // The dump room is held at 30% by hand (Manual): it counts, but takes no min.
+    ObserveByte(allocator, 3, Endpoint::DumpRoom, 1);
+    ObserveByte(allocator, 3, Endpoint::DamperMode, 3);
+    ObserveByte(allocator, 3, Endpoint::DamperTarget, 30);
+    // Room 4 is already below setpoint -- more cold air hurts it more than room 2.
+    ObserveReport(allocator, 4, Endpoint::RoomTemp, 1950);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n    = bus::DecodeTx(tx, 8);
+    uint8_t   min2 = 0xFF, min3 = 0xFF, min4 = 0xFF;
+    CC_CHECK(FindBudgetMin(tx, n, 2, min2));
+    CC_CHECK(FindBudgetMin(tx, n, 3, min3));
+    CC_CHECK(FindBudgetMin(tx, n, 4, min4));
+    CC_CHECK_EQ(min3, 0);
+    CC_CHECK_EQ(min2, 100); // 200 total - 30 held open by hand: room 2 fills up first,
+    CC_CHECK_EQ(min4, 70); // and the colder room 4 takes the remaining 70
+}
+
+CC_TEST(BudgetAllocator, NoMinimumWhileTheRoomsKeepEnoughOpenThemselves)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    const uint8_t ids[] = {2, 3, 4, 6}; // 5 is the supply TemperatureNode
+    InitAndClearDiscover(master);
+    for (const uint8_t id : ids)
+    {
+        Announce(id, ModuleType::ControllerNode);
+    }
+    StartPolling(master);
+
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    for (const uint8_t id : ids)
+    {
+        ObserveReport(allocator, id, Endpoint::RoomTemp, 2500); // all far too warm -- full demand
+        ObserveReport(allocator, id, Endpoint::RoomSetpoint, 2000);
+    }
+    ObserveByte(allocator, 3, Endpoint::DumpRoom, 1);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[12];
+    const int n = bus::DecodeTx(tx, 12);
+    for (const uint8_t id : ids)
+    {
+        uint8_t min = 0xFF;
+        CC_CHECK(FindBudgetMin(tx, n, id, min));
+        CC_CHECK_EQ(min, 0); // 4 x 50 open already meets the 200 total
+    }
 }

@@ -88,6 +88,6 @@ When porting a class from `~/git/node/Software/lib/NodeLib` or `~/git/node/Softw
 | `MainController-Server-Link-Spec.md` | MainController ↔ server link: relay NodeLib frames verbatim over one LAN TCP socket; server decodes + stores to SQLite + serves an SPA (HTTP + WebSocket); `0x60` uplink endpoint block; OTA-over-uplink |
 | `TemperatureNode-Spec.md` | Duct temperature sensing node; sensor choice still open |
 | `ControllerNode-Thermostat-Link-Spec.md` | Per-room point-to-point link + Thermostat hardware (§4: G030 + I²C OLED + 2 buttons); link physical layer still open |
-| `Damper-Budget-Spec.md` | `ControllerNode`'s room control loop (setpoint/room-temp vs. shared duct `SupplyTemp`) and `MainController`'s fair-share `DamperBudget` allocation across online `ControllerNode`s |
+| `Damper-Budget-Spec.md` | `ControllerNode`'s room control loop (setpoint/room-temp vs. shared duct `SupplyTemp`) and `MainController`'s `DamperBudget` range per node: fair-share max, plus a min that keeps enough of the duct open (dump room first) |
 | `Damper-Mechanics-Spec.md` | The installed Lindab DRU damper (0–90°, 45 mm cup, PZD2 lock screws) and the printed actuator (`Hardware/Damper/`): two-part ring keyed onto the cup's flange cutout, 6908ZZ bearing, fork on the knob, 20 : 42 sector gears at 2.1:1 (≈ 86° blade travel) |
 | `ControllerNode-Bringup-Test-Plan.md` | Ordered hardware checks for the first real ControllerNode boards: servo PWM, stall-sense calibration, linkage end points, reset/OTA park, Thermostat link |

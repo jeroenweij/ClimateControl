@@ -67,6 +67,7 @@ add_library(nodelib_host STATIC
     ${CC_SW_ROOT}/Lib/NodeLib/LinkMaster.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/RoomDemand.cpp
     ${CC_SW_ROOT}/Lib/NodeLib/SupplyTemp.cpp
+    ${CC_SW_ROOT}/Lib/NodeLib/SettingsPage.cpp
 )
 target_link_libraries(nodelib_host PUBLIC test_fakes)
 

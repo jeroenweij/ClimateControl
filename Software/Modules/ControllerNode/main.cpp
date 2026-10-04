@@ -45,6 +45,7 @@ int main()
     ControllerHandler handler(busNode, damper, thermostatLink);
 
     damper.Init();
+    handler.Init();
 
     busNode.RegisterHandler(&handler);
     link.RegisterHandler(&thermostatLink);

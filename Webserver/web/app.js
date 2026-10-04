@@ -636,6 +636,8 @@ function onValue(msg) {
   } else if (currentView() === "status") {
     if (msg.node === 0) renderMainStatus();
     else renderNodeTable();
+  } else if (currentView() === "overrides" && (msg.endpoint === "DumpRoom" || msg.endpoint === "DamperBudget")) {
+    refreshCardSettings(msg.node);
   }
 }
 
@@ -686,6 +688,61 @@ function damperText(nodeId) {
   return `${actual.toFixed(0)}% → ${target.toFixed(0)}%`;
 }
 
+// The node's DamperBudget range from the MainController, "min–max%"; null if
+// it hasn't reported one.
+function budgetText(nodeId) {
+  const v = state.values.get(key(nodeId, "DamperBudget"));
+  if (!v || !v.value.fields) return null;
+  const { min, max } = v.value.fields;
+  return min > 0 ? `${min}–${max}%` : `≤ ${max}%`;
+}
+
+// 1 / 0 as the node last reported its DumpRoom flag; null if unknown.
+function dumpRoomState(nodeId) {
+  const v = state.values.get(key(nodeId, "DumpRoom"));
+  return v && v.value.kind === "enum" ? (v.value.num ? 1 : 0) : null;
+}
+
+function dumpRoomButtons(nodeId) {
+  const on = dumpRoomState(nodeId);
+  return [0, 1]
+    .map(
+      (v) => `<button type="button" class="ov-opt ov-dump${on === v ? " active" : ""}"
+        data-node="${nodeId}" data-value="${v}">${v ? "On" : "Off"}</button>`
+    )
+    .join("");
+}
+
+// Live update of a card's node-stored settings, without redrawing the card
+// (which would wipe half-typed override inputs).
+function refreshCardSettings(nodeId) {
+  const card = $(`.ov-card[data-node-card="${nodeId}"]`);
+  if (!card) return;
+  $('[data-role="budget"]', card).textContent = `budget ${budgetText(nodeId) ?? "—"}`;
+  $('[data-role="dump"]', card).innerHTML = dumpRoomButtons(nodeId);
+  const msgEl = $('[data-role="ov-msg"]', card);
+  if (msgEl.textContent === DUMP_WAITING) msgEl.textContent = ""; // the node confirmed
+}
+
+const DUMP_WAITING = "sent — waiting for the node";
+
+async function sendDumpRoom(nodeId, value, msgEl) {
+  msgEl.className = "msg";
+  msgEl.textContent = "sending…";
+  try {
+    await api("/api/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ node: nodeId, endpoint: "DumpRoom", value }),
+    });
+    // The buttons follow the node's own Report of the stored flag.
+    msgEl.textContent = DUMP_WAITING;
+  } catch (err) {
+    msgEl.className = "msg err";
+    msgEl.textContent = err.message;
+  }
+}
+
 function renderOverrideCard(n) {
   const ov = overridesForNode(n.id);
   const roomTxt = liveText(n.id, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`);
@@ -694,7 +751,7 @@ function renderOverrideCard(n) {
   const actualTxt = liveText(n.id, "DamperActual", (v) => `${v.num.toFixed(0)}%`);
   const modeTxt = liveText(n.id, "DamperMode", (v) => damperModeLabel(v.num));
 
-  return `<div class="ov-card">
+  return `<div class="ov-card" data-node-card="${n.id}">
     <div class="ov-head">
       <b>${n.id} — ${esc(n.name || n.module)}</b>
       <span class="pill ${STATUS_PILL[n.status] || "down"}">${esc(n.status)}</span>
@@ -702,6 +759,7 @@ function renderOverrideCard(n) {
     <div class="ov-live">
       <span>room ${roomTxt}</span><span>setpoint ${setTxt}</span>
       <span>damper ${damperTxt}</span><span>mode ${modeTxt}</span>
+      <span data-role="budget">budget ${budgetText(n.id) ?? "—"}</span>
     </div>
 
     <div class="ov-row">
@@ -735,6 +793,11 @@ function renderOverrideCard(n) {
         <button type="button" class="ov-set" data-node="${n.id}" data-endpoint="RoomSetpoint">Set &amp; hold</button>
       </div>
       ${heldBadge(n.id, ov.RoomSetpoint, (v) => `${Number(v).toFixed(1)}°C`)}
+    </div>
+
+    <div class="ov-row">
+      <div class="ov-label">Dump room <span class="hint">— takes the surplus air when the other rooms close; stored on the node</span></div>
+      <div class="ov-buttons" data-role="dump">${dumpRoomButtons(n.id)}</div>
     </div>
 
     <span class="msg" data-role="ov-msg"></span>
@@ -775,7 +838,9 @@ $("#override-cards").addEventListener("click", async (e) => {
   if (!nodeId) return;
   const msgEl = t.closest(".ov-card").querySelector('[data-role="ov-msg"]');
 
-  if (t.classList.contains("ov-opt")) {
+  if (t.classList.contains("ov-dump")) {
+    await sendDumpRoom(nodeId, parseInt(t.dataset.value, 10), msgEl);
+  } else if (t.classList.contains("ov-opt")) {
     await sendOverride(nodeId, t.dataset.endpoint, parseFloat(t.dataset.value), msgEl);
   } else if (t.classList.contains("ov-set")) {
     const input = t.closest(".ov-inline").querySelector(".ov-num");

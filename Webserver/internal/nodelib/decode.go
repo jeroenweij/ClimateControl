@@ -62,6 +62,25 @@ func DecodeValue(e Endpoint, data []byte) Value {
 		}
 		return Value{Kind: "enum", Num: float64(data[0]), Text: modeName(data[0])}
 
+	case EndpointDamperBudget:
+		if len(data) < 1 {
+			return raw
+		}
+		lo := 0
+		if len(data) >= 2 {
+			lo = int(data[1])
+		}
+		return Value{Kind: "struct", Num: float64(data[0]), Unit: "%", Fields: map[string]any{
+			"max": int(data[0]),
+			"min": lo,
+		}}
+
+	case EndpointDumpRoom:
+		if len(data) < 1 {
+			return raw
+		}
+		return Value{Kind: "enum", Num: float64(data[0]), Text: boolWord(data[0] != 0, "yes", "no")}
+
 	case EndpointRoomLink:
 		if len(data) < 1 {
 			return raw
@@ -159,6 +178,11 @@ func EncodeValue(e Endpoint, num float64) (data []byte, ok bool) {
 		return []byte{byte(num)}, true
 	case EndpointDamperMode, EndpointRoomMode, EndpointSystemControl:
 		return []byte{byte(num)}, true
+	case EndpointDumpRoom:
+		if num != 0 {
+			return []byte{1}, true
+		}
+		return []byte{0}, true
 	}
 	return nil, false
 }

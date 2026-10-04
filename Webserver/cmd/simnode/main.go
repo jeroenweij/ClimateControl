@@ -53,6 +53,7 @@ type simNode struct {
 	setpt  float64
 	supOff float64 // SupplyTempOffset, °C
 	retOff float64 // ReturnTempOffset, °C
+	dump   bool    // DumpRoom
 }
 
 func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fwMajor, fwMinor uint16) error {
@@ -211,6 +212,12 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 							nodes[i].setpt = float64(int16(uint16(f.Data[0])|uint16(f.Data[1])<<8)) / 100
 							log.Printf("node %d setpoint -> %.2f", f.Node, nodes[i].setpt)
 						}
+						// DumpRoom: stored and echoed back as a Report, like the real node.
+						if nodes[i].id == int(f.Node) && f.Endpoint == nodelib.EndpointDumpRoom && len(f.Data) >= 1 && f.Data[0] <= 1 {
+							nodes[i].dump = f.Data[0] == 1
+							log.Printf("node %d DumpRoom -> %v", f.Node, nodes[i].dump)
+							emit(write, nodes[i].id, nodelib.EndpointDumpRoom, f.Data[:1])
+						}
 						// Probe calibration: stored and echoed back as a Report, like the real node.
 						if nodes[i].id == int(f.Node) && len(f.Data) >= 2 &&
 							(f.Endpoint == nodelib.EndpointSupplyTempOffset || f.Endpoint == nodelib.EndpointReturnTempOffset) {
@@ -248,6 +255,12 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 					damper := clamp(50+(n.setpt-n.temp)*30, 0, 100)
 					emit(write, n.id, nodelib.EndpointDamperActual, []byte{byte(damper)})
 					emit(write, n.id, nodelib.EndpointRoomLink, []byte{1})
+					dump := byte(0)
+					if n.dump {
+						dump = 1
+					}
+					emit(write, n.id, nodelib.EndpointDumpRoom, []byte{dump})
+					emit(write, n.id, nodelib.EndpointDamperBudget, []byte{byte(clamp(damper+20, 0, 100)), 0})
 				} else {
 					supply := n.temp + 18
 					emit(write, n.id, nodelib.EndpointSupplyTemp, i16((supply+n.supOff)*100))

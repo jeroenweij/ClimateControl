@@ -9,11 +9,8 @@
 // Per-probe offset correction (TemperatureNode-Spec.md §4.3), added to every
 // raw DS18B20 reading before it goes on the bus. Set over the bus through the
 // SupplyTempOffset / ReturnTempOffset endpoints and kept in the runtime
-// settings page (Board::Flash::SettingsBase), so it survives resets, OTA and
-// re-provisioning.
-//
-// The page holds one small CRC-protected record. A blank or corrupt page reads
-// as zero offsets. The page is only erased and rewritten when a value actually
+// settings page (NodeLib::SettingsPage), so it survives resets, OTA and
+// re-provisioning. A blank or corrupt record reads as zero offsets. The page is only erased and rewritten when a value actually
 // changes -- a re-sent identical Set costs no flash cycle.
 class Calibration
 {
@@ -39,7 +36,5 @@ class Calibration
     bool SetOffset(const Probe probe, const int16_t centiDegC);
 
   private:
-    bool Save(const int16_t (&values)[2]);
-
     int16_t offsets[2];
 };

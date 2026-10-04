@@ -98,3 +98,23 @@ func TestEncodeValueOffsetRoundsToTheNearestCentiDegree(t *testing.T) {
 		}
 	}
 }
+
+func TestDamperBudgetDecodesMaxAndMin(t *testing.T) {
+	v := DecodeValue(EndpointDamperBudget, []byte{60, 25})
+	if v.Num != 60 || v.Fields["max"] != 60 || v.Fields["min"] != 25 {
+		t.Fatalf("DecodeValue(DamperBudget) = %+v", v)
+	}
+	v = DecodeValue(EndpointDamperBudget, []byte{40}) // an older node: max only
+	if v.Fields["min"] != 0 {
+		t.Fatalf("1-byte DamperBudget min = %v, want 0", v.Fields["min"])
+	}
+}
+
+func TestDumpRoomEncodesAsZeroOrOne(t *testing.T) {
+	for in, want := range map[float64]byte{0: 0, 1: 1, 5: 1} {
+		d, ok := EncodeValue(EndpointDumpRoom, in)
+		if !ok || len(d) != 1 || d[0] != want {
+			t.Errorf("EncodeValue(DumpRoom, %v) = %x ok=%v, want %d", in, d, ok, want)
+		}
+	}
+}

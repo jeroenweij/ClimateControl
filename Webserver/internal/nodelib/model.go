@@ -34,6 +34,8 @@ const (
 	EndpointDamperTarget Endpoint = 0x30
 	EndpointDamperActual Endpoint = 0x31
 	EndpointDamperMode   Endpoint = 0x32
+	EndpointDamperBudget Endpoint = 0x33 // max(1) [min(1)] %, set by the MainController
+	EndpointDumpRoom     Endpoint = 0x34 // RW 0/1, persisted on the ControllerNode
 
 	EndpointSupplyTemp       Endpoint = 0x38
 	EndpointReturnTemp       Endpoint = 0x39
@@ -76,6 +78,8 @@ var endpointNames = map[Endpoint]string{
 	EndpointDamperTarget:       "DamperTarget",
 	EndpointDamperActual:       "DamperActual",
 	EndpointDamperMode:         "DamperMode",
+	EndpointDamperBudget:       "DamperBudget",
+	EndpointDumpRoom:           "DumpRoom",
 	EndpointSupplyTemp:         "SupplyTemp",
 	EndpointReturnTemp:         "ReturnTemp",
 	EndpointSensorStatus:       "SensorStatus",

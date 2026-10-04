@@ -15,6 +15,7 @@ var stateEndpoints = map[nodelib.Module][]nodelib.Endpoint{
 	nodelib.ModuleControllerNode: {
 		nodelib.EndpointDamperTarget, nodelib.EndpointDamperActual, nodelib.EndpointDamperMode,
 		nodelib.EndpointRoomTemp, nodelib.EndpointRoomSetpoint, nodelib.EndpointSystemStatus,
+		nodelib.EndpointDamperBudget, nodelib.EndpointDumpRoom,
 	},
 	nodelib.ModuleTemperatureNode: {
 		nodelib.EndpointSupplyTemp, nodelib.EndpointReturnTemp, nodelib.EndpointSystemStatus,

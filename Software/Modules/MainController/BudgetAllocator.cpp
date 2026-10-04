@@ -8,6 +8,8 @@
 #include "EOperation.h"
 #include "RoomDemand.h"
 
+#include <stdint.h>
+
 #include "BudgetAllocator.h"
 
 using NodeLib::ConfigStore;
@@ -20,6 +22,14 @@ using NodeLib::Operation;
 
 namespace
 {
+    // DamperMode wire values (Node-Message-Model-Spec.md §3).
+    constexpr uint8_t AutoMode    = 2;
+    constexpr uint8_t StalledMode = 4;
+
+    // DamperBudget max when the supply reading is missing -- the room loops
+    // then sit at neutral (Damper-Budget-Spec.md §4.4).
+    constexpr uint8_t NeutralPercent = 50;
+
     int16_t ReadI16(const uint8_t* const p)
     {
         return static_cast<int16_t>(static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
@@ -38,9 +48,13 @@ BudgetAllocator::SRoom::SRoom() :
     sawTemp(false),
     sawSetpoint(false),
     sawBudget(false),
+    sawTarget(false),
+    dumpRoom(false),
     temp(0),
     setpoint(0),
-    budget(0)
+    budget(0),
+    mode(AutoMode),
+    target(0)
 {
 }
 
@@ -95,8 +109,30 @@ void BudgetAllocator::Observe(const Message& m)
         case Endpoint::DamperBudget:
             if (m.len >= 1)
             {
-                room[nodeIndex].budget    = m.data[0];
+                room[nodeIndex].budget    = m.data[0]; // max; the min is ours to choose
                 room[nodeIndex].sawBudget = true;
+            }
+            break;
+
+        case Endpoint::DamperMode:
+            if (m.len >= 1)
+            {
+                room[nodeIndex].mode = m.data[0];
+            }
+            break;
+
+        case Endpoint::DamperTarget:
+            if (m.len >= 1)
+            {
+                room[nodeIndex].target    = m.data[0];
+                room[nodeIndex].sawTarget = true;
+            }
+            break;
+
+        case Endpoint::DumpRoom:
+            if (m.len >= 1)
+            {
+                room[nodeIndex].dumpRoom = m.data[0] == 1;
             }
             break;
 
@@ -157,9 +193,11 @@ void BudgetAllocator::Recompute()
         return;
     }
 
+    uint8_t maxes[NodeLib::MAX_NODES];
     if (!supplyTemp.Valid())
     {
-        StepBudgetsTowardDefault(onlineIds, onlineCount);
+        StepBudgetsTowardDefault(onlineIds, onlineCount, maxes);
+        AssignMinimumsAndSend(onlineIds, onlineCount, maxes);
         return;
     }
 
@@ -219,8 +257,9 @@ void BudgetAllocator::Recompute()
 
     for (uint8_t i = 0; i < onlineCount; i++)
     {
-        SendBudget(onlineIds[i], static_cast<uint8_t>(give[i] > 100 ? 100 : give[i]));
+        maxes[i] = static_cast<uint8_t>(give[i] > 100 ? 100 : give[i]);
     }
+    AssignMinimumsAndSend(onlineIds, onlineCount, maxes);
 }
 
 // No supply reading: no room's demand can be judged, so no allocation --
@@ -228,7 +267,7 @@ void BudgetAllocator::Recompute()
 // it is, and its damper follows (Damper-Budget-Spec.md §4.4). Re-sent every
 // recompute even once there, which keeps the nodes' disconnect ramp cancelled
 // (§5.3). A node whose budget isn't known yet starts at the default.
-void BudgetAllocator::StepBudgetsTowardDefault(const uint8_t* const onlineIds, const uint8_t onlineCount)
+void BudgetAllocator::StepBudgetsTowardDefault(const uint8_t* const onlineIds, const uint8_t onlineCount, uint8_t* const maxes)
 {
     for (uint8_t i = 0; i < onlineCount; i++)
     {
@@ -246,13 +285,112 @@ void BudgetAllocator::StepBudgetsTowardDefault(const uint8_t* const onlineIds, c
         {
             next = defaultBudgetPerNode;
         }
-        SendBudget(onlineIds[i], next);
+        maxes[i] = next;
     }
 }
 
-void BudgetAllocator::SendBudget(const uint8_t nodeId, const uint8_t percent)
+// The fan always runs, so the dampers together must keep enough of the duct
+// open (Damper-Budget-Spec.md §5.5). Each room's loop picks a position inside
+// its max; if those together fall short of minTotalOpenPercent, the shortfall
+// is handed out as minimums -- to the dump room first, then to the rooms the
+// extra air harms least -- each filled up to 100 before the next takes any.
+// Nodes not in Auto keep their commanded position and take no minimum.
+void BudgetAllocator::AssignMinimumsAndSend(const uint8_t* const onlineIds, const uint8_t onlineCount, const uint8_t* const maxes)
 {
-    room[nodeId - 1].budget    = percent;
+    uint8_t  base[NodeLib::MAX_NODES];
+    uint8_t  mins[NodeLib::MAX_NODES];
+    uint32_t total = 0;
+    for (uint8_t i = 0; i < onlineCount; i++)
+    {
+        base[i] = Unfloored(onlineIds[i], maxes[i]);
+        mins[i] = 0;
+        total += base[i];
+    }
+
+    uint32_t shortfall                = total < minTotalOpenPercent ? minTotalOpenPercent - total : 0;
+    bool     used[NodeLib::MAX_NODES] = {};
+    while (shortfall > 0)
+    {
+        // Next room in SurplusRank() order -- a selection pass over at most
+        // MAX_NODES entries, so at most MAX_NODES passes in all.
+        int16_t best = -1;
+        for (uint8_t i = 0; i < onlineCount; i++)
+        {
+            const SRoom& r = room[onlineIds[i] - 1];
+            if (used[i] || r.mode != AutoMode)
+            {
+                continue;
+            }
+            if (best < 0 || SurplusRank(onlineIds[i]) < SurplusRank(onlineIds[best]))
+            {
+                best = static_cast<int16_t>(i);
+            }
+        }
+        if (best < 0)
+        {
+            break; // every Auto room is already fully open
+        }
+        used[best]         = true;
+        const uint32_t add = (100u - base[best]) < shortfall ? (100u - base[best]) : shortfall;
+        if (add > 0)
+        {
+            mins[best] = static_cast<uint8_t>(base[best] + add);
+            shortfall -= add;
+        }
+    }
+
+    for (uint8_t i = 0; i < onlineCount; i++)
+    {
+        // Sent as computed: a min above the fair-share max wins on the node
+        // (RoomControlLoop::SetBudget()), so max keeps meaning the share.
+        SendBudget(onlineIds[i], maxes[i], mins[i]);
+    }
+}
+
+uint8_t BudgetAllocator::Unfloored(const uint8_t nodeId, const uint8_t max) const
+{
+    const SRoom& r = room[nodeId - 1];
+    if (r.mode == StalledMode)
+    {
+        return 0; // no idea where it stopped -- count it as closed
+    }
+    if (r.mode != AutoMode)
+    {
+        return r.sawTarget ? r.target : 0; // Closed / Open / Manual: an explicit position
+    }
+    uint8_t desired = NeutralPercent;
+    if (supplyTemp.Valid())
+    {
+        if (!r.Known())
+        {
+            return 0; // its loop has no room data yet -- don't count on any opening
+        }
+        desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), r.temp, r.setpoint);
+    }
+    return desired < max ? desired : max;
+}
+
+int32_t BudgetAllocator::SurplusRank(const uint8_t nodeId) const
+{
+    const SRoom& r = room[nodeId - 1];
+    if (r.dumpRoom)
+    {
+        return INT32_MIN;
+    }
+    if (!supplyTemp.Valid() || !r.Known())
+    {
+        return INT32_MAX - 256 + nodeId; // nothing to judge by -- last, in id order
+    }
+    // How far the room already is past its setpoint in the direction the
+    // supply air pushes it: negative = the room still wants this air.
+    const int32_t past = supplyTemp.CentiDegC() >= r.temp ? r.temp - r.setpoint : r.setpoint - r.temp;
+    return past * 256 + nodeId; // id breaks ties
+}
+
+void BudgetAllocator::SendBudget(const uint8_t nodeId, const uint8_t max, const uint8_t min)
+{
+    room[nodeId - 1].budget    = max;
     room[nodeId - 1].sawBudget = true;
-    master.QueueMessage(Id(nodeId, Endpoint::DamperBudget, Operation::Set), percent);
+    const uint8_t payload[2]   = {max, min};
+    master.QueueMessage(Id(nodeId, Endpoint::DamperBudget, Operation::Set), payload, sizeof(payload));
 }

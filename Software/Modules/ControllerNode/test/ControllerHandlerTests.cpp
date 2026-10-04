@@ -10,6 +10,7 @@
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
+#include "FakeFlash.h"
 #include "Test.h"
 
 #include "ControllerHandler.h"
@@ -39,6 +40,7 @@ namespace
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(kNodeId);
         FakeConfig::SetModule(ModuleType::ControllerNode);
+        FakeFlash::Reset();
     }
 
     void PackI16(uint8_t* const out, const int16_t v)
@@ -434,4 +436,70 @@ CC_TEST(ControllerHandler, AStallSetsTheDamperStalledErrorFlag)
     SystemStatus after{};
     w.handler.FillStatus(after);
     CC_CHECK((after.errorFlags & 0x0002) != 0);
+}
+
+CC_TEST(ControllerHandler, ATwoByteBudgetSetsMaxAndMinAndReportsBoth)
+{
+    ResetWorld();
+    World w;
+
+    Message set(Id(kNodeId, Endpoint::DamperBudget, Operation::Set));
+    set.data[0] = 60;
+    set.data[1] = 25;
+    set.len     = 2;
+    bus::InjectFrame(set);
+    w.node.Loop();
+
+    FakeBus::Reset();
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DamperBudget, Operation::Get)));
+    Flush(w.node);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    uint8_t   value[2];
+    CC_CHECK(FindReport(tx, n, Endpoint::DamperBudget, value, 2));
+    CC_CHECK_EQ(value[0], 60);
+    CC_CHECK_EQ(value[1], 25);
+}
+
+CC_TEST(ControllerHandler, TheDumpRoomFlagIsStoredAndSurvivesARestart)
+{
+    ResetWorld();
+    {
+        World w;
+        w.handler.Init();
+        bus::InjectFrame(Message(Id(kNodeId, Endpoint::DumpRoom, Operation::Set), 1));
+        Flush(w.node);
+
+        Message   tx[8];
+        const int n     = bus::DecodeTx(tx, 8);
+        uint8_t   value = 0;
+        CC_CHECK(FindReport(tx, n, Endpoint::DumpRoom, &value, 1)); // echoed
+        CC_CHECK_EQ(value, 1);
+    }
+
+    FakeBus::Reset();
+    World restarted;
+    restarted.handler.Init(); // loads it back from the settings page
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DumpRoom, Operation::Get)));
+    Flush(restarted.node);
+
+    Message   tx[8];
+    const int n     = bus::DecodeTx(tx, 8);
+    uint8_t   value = 0;
+    CC_CHECK(FindReport(tx, n, Endpoint::DumpRoom, &value, 1));
+    CC_CHECK_EQ(value, 1);
+}
+
+CC_TEST(ControllerHandler, ADumpRoomValueOtherThanZeroOrOneIsNacked)
+{
+    ResetWorld();
+    World w;
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::DumpRoom, Operation::Set), 2));
+    Flush(w.node);
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK(AnyNack(tx, n, Endpoint::DumpRoom));
 }

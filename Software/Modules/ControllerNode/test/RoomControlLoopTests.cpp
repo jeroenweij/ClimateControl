@@ -69,7 +69,7 @@ CC_TEST(RoomControlLoop, DefaultsToTheFiftyPercentBudget)
     SupplyTemp      supplyTemp;
     RoomControlLoop loop(thermostatLink, supplyTemp, damper);
 
-    CC_CHECK_EQ(loop.Budget(), 50);
+    CC_CHECK_EQ(loop.BudgetMax(), 50);
 }
 
 CC_TEST(RoomControlLoop, DoesNothingUntilTheRoomIsValid)
@@ -161,7 +161,7 @@ CC_TEST(RoomControlLoop, DemandBelowBudgetDoesNotPinTheDamperAtTheCeiling)
     loop.Loop();
 
     CC_CHECK(damper.Target() > 0);
-    CC_CHECK(damper.Target() < loop.Budget()); // "any value between 0 and budget", not always at budget
+    CC_CHECK(damper.Target() < loop.BudgetMax()); // "any value between 0 and budget", not always at budget
 }
 
 CC_TEST(RoomControlLoop, FullDemandIsClampedToTheBudgetCeiling)
@@ -234,11 +234,11 @@ CC_TEST(RoomControlLoop, DisconnectRampReturnsTowardDefaultOnePointPerInterval)
 
     FakeClock::Advance(36000);
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 89);
+    CC_CHECK_EQ(loop.BudgetMax(), 89);
 
     FakeClock::Advance(36000);
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 88);
+    CC_CHECK_EQ(loop.BudgetMax(), 88);
 }
 
 CC_TEST(RoomControlLoop, RampNeverOvershootsPastTheDefault)
@@ -255,11 +255,11 @@ CC_TEST(RoomControlLoop, RampNeverOvershootsPastTheDefault)
 
     FakeClock::Advance(36000);
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 50);
+    CC_CHECK_EQ(loop.BudgetMax(), 50);
 
     FakeClock::Advance(360000); // plenty more time
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 50); // stays put, doesn't ramp past the default
+    CC_CHECK_EQ(loop.BudgetMax(), 50); // stays put, doesn't ramp past the default
 }
 
 CC_TEST(RoomControlLoop, AFreshSetBudgetCancelsTheRamp)
@@ -275,12 +275,12 @@ CC_TEST(RoomControlLoop, AFreshSetBudgetCancelsTheRamp)
     loop.ConnectionLost();
     FakeClock::Advance(36000);
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 89);
+    CC_CHECK_EQ(loop.BudgetMax(), 89);
 
     loop.SetBudget(70); // a live MainController is proven by this arriving at all
     FakeClock::Advance(360000);
     loop.Loop();
-    CC_CHECK_EQ(loop.Budget(), 70); // unchanged -- the ramp was cancelled, not just paused
+    CC_CHECK_EQ(loop.BudgetMax(), 70); // unchanged -- the ramp was cancelled, not just paused
 }
 
 CC_TEST(RoomControlLoop, RampRunsEvenWithoutRoomData)
@@ -297,7 +297,7 @@ CC_TEST(RoomControlLoop, RampRunsEvenWithoutRoomData)
 
     FakeClock::Advance(36000);
     loop.Loop(); // room never seeded -- the ramp must not depend on it
-    CC_CHECK_EQ(loop.Budget(), 11);
+    CC_CHECK_EQ(loop.BudgetMax(), 11);
 }
 
 namespace
@@ -349,4 +349,87 @@ CC_TEST(RoomControlLoop, AnUnchangedTargetLeavesStallDetectionWorking)
     RunFor(loop, damper, 400); // past Damper::stallConfirmMs (200 ms)
 
     CC_CHECK(damper.Stalled());
+}
+
+CC_TEST(RoomControlLoop, TheBudgetMinHoldsASatisfiedRoomOpen)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 2000, 2000); // at setpoint -- no demand, would close
+    SeedSupply(supplyTemp, 1500);
+    loop.SetBudget(60, 40);
+    loop.Loop();
+
+    CC_CHECK_EQ(damper.Target(), 40);
+}
+
+CC_TEST(RoomControlLoop, AMinAboveTheMaxWins)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    loop.SetBudget(20, 70); // dump room: fair share 20, but the total needs 70 here
+    CC_CHECK_EQ(loop.BudgetMin(), 70);
+    CC_CHECK_EQ(loop.BudgetMax(), 70);
+    CC_CHECK_EQ(damper.Target(), 70); // moved into range at once
+}
+
+CC_TEST(RoomControlLoop, TheDumpRoomOpensFullyWhenTheBusIsLost)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 2000, 2000);
+    SeedSupply(supplyTemp, 1500);
+    loop.SetDumpRoom(true);
+    loop.SetBudget(30, 0);
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 0);
+
+    loop.ConnectionLost();
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 100);
+
+    FakeClock::Advance(36000 * 3); // the ceiling ramp must not pull it back down
+    loop.Loop();
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 100);
+
+    loop.SetBudget(30, 0); // MainController back: its range rules again
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 0);
+}
+
+CC_TEST(RoomControlLoop, AnOrdinaryRoomDropsItsMinWhenTheBusIsLost)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedRoom(thermostatLink, 2000, 2000);
+    SeedSupply(supplyTemp, 1500);
+    loop.SetBudget(60, 40);
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 40);
+
+    loop.ConnectionLost();
+    loop.Loop();
+    CC_CHECK_EQ(loop.BudgetMin(), 0);
+    CC_CHECK_EQ(damper.Target(), 0);
 }

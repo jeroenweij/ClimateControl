@@ -7,6 +7,7 @@
 #include "EEndpoint.h"
 #include "EFirmware.h"
 #include "EOperation.h"
+#include "SettingsPage.h"
 
 #include "ControllerHandler.h"
 
@@ -22,6 +23,11 @@ namespace
     constexpr uint8_t NackReadOnly    = 0x01;
     constexpr uint8_t NackBadRequest  = 0x02;
     constexpr uint8_t NackUnsupported = 0x03;
+    constexpr uint8_t NackWriteFailed = 0x04;
+
+    // This node's runtime settings record (NodeLib::SettingsPage): payload
+    // byte 0 = DumpRoom flag.
+    constexpr uint32_t SettingsMagic = 0x54534E43; // 'CNST'
 
     constexpr uint8_t ForceFlag = 1u << 0;
 
@@ -57,12 +63,26 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     node.AddPublished(Endpoint::DamperTarget, 1);
     node.AddPublished(Endpoint::DamperActual, 1);
     node.AddPublished(Endpoint::DamperMode, 1);
-    node.AddPublished(Endpoint::DamperBudget, 1);
+    node.AddPublished(Endpoint::DamperBudget, 2); // max | min << 8
+    node.AddPublished(Endpoint::DumpRoom, 1);
     node.AddPublished(Endpoint::RoomSetpoint, 2);
     node.AddPublished(Endpoint::RoomTemp, 2, NodeLib::TempMinChange);
     node.AddPublished(Endpoint::RoomHumidity, 2, NodeLib::HumidityMinChange);
     node.AddPublished(Endpoint::RoomMode, 1);
     node.AddPublished(Endpoint::RoomLink, 1);
+}
+
+void ControllerHandler::Init()
+{
+    uint8_t settings[1];
+    if (NodeLib::SettingsPage::Load(SettingsMagic, settings, sizeof(settings)))
+    {
+        roomControlLoop.SetDumpRoom(settings[0] == 1);
+        if (roomControlLoop.DumpRoom())
+        {
+            LOG_INFO("This room is the dump room");
+        }
+    }
 }
 
 void ControllerHandler::Loop()
@@ -160,12 +180,29 @@ void ControllerHandler::HandleDamper(const Message& m)
         case Endpoint::DamperBudget:
             if (m.id.operation == Operation::Get)
             {
-                const uint8_t v = roomControlLoop.Budget();
-                Report(Endpoint::DamperBudget, &v, 1);
+                const uint8_t v[2] = {roomControlLoop.BudgetMax(), roomControlLoop.BudgetMin()};
+                Report(Endpoint::DamperBudget, v, 2);
             }
             else if (m.id.operation == Operation::Set && m.len >= 1)
             {
-                roomControlLoop.SetBudget(m.data[0]);
+                // max(1) [min(1)] -- a 1-byte Set is a plain ceiling, min 0.
+                roomControlLoop.SetBudget(m.data[0], m.len >= 2 ? m.data[1] : 0);
+            }
+            else
+            {
+                Nack(m, NackBadRequest);
+            }
+            break;
+
+        case Endpoint::DumpRoom:
+            if (m.id.operation == Operation::Get)
+            {
+                const uint8_t v = roomControlLoop.DumpRoom() ? 1 : 0;
+                Report(Endpoint::DumpRoom, &v, 1);
+            }
+            else if (m.id.operation == Operation::Set && m.len >= 1 && m.data[0] <= 1)
+            {
+                SetDumpRoom(m.data[0] == 1, m);
             }
             else
             {
@@ -287,7 +324,8 @@ void ControllerHandler::Publish()
     node.PublishIfChanged(Endpoint::DamperTarget, damper.Target());
     node.PublishIfChanged(Endpoint::DamperActual, damper.Actual());
     node.PublishIfChanged(Endpoint::DamperMode, damper.ReportedMode());
-    node.PublishIfChanged(Endpoint::DamperBudget, roomControlLoop.Budget());
+    node.PublishIfChanged(Endpoint::DamperBudget, roomControlLoop.BudgetMax() | (roomControlLoop.BudgetMin() << 8));
+    node.PublishIfChanged(Endpoint::DumpRoom, roomControlLoop.DumpRoom() ? 1 : 0);
     node.PublishIfChanged(Endpoint::RoomLink, thermostatLink.LinkUp() ? 1 : 0);
 
     const ThermostatLink::RoomState& room = thermostatLink.Room();
@@ -307,6 +345,24 @@ void ControllerHandler::Publish()
         node.ClearPublished(Endpoint::RoomHumidity);
         node.ClearPublished(Endpoint::RoomMode);
     }
+}
+
+void ControllerHandler::SetDumpRoom(const bool dumpRoom, const Message& m)
+{
+    if (dumpRoom != roomControlLoop.DumpRoom())
+    {
+        const uint8_t settings[1] = {static_cast<uint8_t>(dumpRoom ? 1 : 0)};
+        if (!NodeLib::SettingsPage::Save(SettingsMagic, settings, sizeof(settings)))
+        {
+            LOG_ERROR("DumpRoom write failed");
+            Nack(m, NackWriteFailed);
+            return;
+        }
+        roomControlLoop.SetDumpRoom(dumpRoom);
+        LOG_INFO("DumpRoom = " << (dumpRoom ? 1 : 0));
+    }
+    const uint8_t v = dumpRoom ? 1 : 0;
+    Report(Endpoint::DumpRoom, &v, 1);
 }
 
 void ControllerHandler::ConnectionLost()
