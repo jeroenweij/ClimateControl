@@ -169,7 +169,9 @@ void BudgetAllocator::Recompute()
 {
     uint8_t  onlineIds[NodeLib::MAX_NODES];
     uint32_t weight[NodeLib::MAX_NODES];
+    bool     known[NodeLib::MAX_NODES];
     uint8_t  onlineCount = 0;
+    uint8_t  knownCount  = 0;
     uint32_t weightSum   = 0;
 
     for (uint8_t id = 0; id < NodeLib::MAX_NODES; id++)
@@ -186,12 +188,18 @@ void BudgetAllocator::Recompute()
             room[id] = SRoom();
             continue;
         }
-        const uint8_t w        = (supplyTemp.Valid() && room[id].Known())
+        // A room without data (no Thermostat, or its temperature stopped
+        // arriving) can't claim or give up air by demand: its loop sits at
+        // neutral, so it keeps a fixed default share outside the split below
+        // (Damper-Budget-Spec.md §4.4, §5.2).
+        known[onlineCount]     = supplyTemp.Valid() && room[id].Known();
+        const uint8_t w        = known[onlineCount]
             ? NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), room[id].temp, room[id].setpoint)
             : 0;
         onlineIds[onlineCount] = nodeId;
         weight[onlineCount]    = w;
         weightSum += w;
+        knownCount += known[onlineCount] ? 1 : 0;
         onlineCount++;
     }
 
@@ -210,13 +218,20 @@ void BudgetAllocator::Recompute()
 
     // No demand anywhere -> split the pool evenly, which lands exactly back
     // on defaultBudgetPerNode with no special-casing (Damper-Budget-Spec.md §5.2).
-    const uint32_t pool = static_cast<uint32_t>(defaultBudgetPerNode) * onlineCount;
+    // Only the rooms with data share the pool; the rest hold the default.
+    const uint32_t pool = static_cast<uint32_t>(defaultBudgetPerNode) * knownCount;
 
     uint32_t give[NodeLib::MAX_NODES];
     bool     clamped[NodeLib::MAX_NODES];
     for (uint8_t i = 0; i < onlineCount; i++)
     {
-        give[i]    = weightSum > 0 ? DivRoundNearest(pool * weight[i], weightSum) : DivRoundNearest(pool, onlineCount);
+        if (!known[i])
+        {
+            give[i]    = defaultBudgetPerNode;
+            clamped[i] = true; // out of the water-fill below
+            continue;
+        }
+        give[i]    = weightSum > 0 ? DivRoundNearest(pool * weight[i], weightSum) : DivRoundNearest(pool, knownCount);
         clamped[i] = false;
     }
 
@@ -365,13 +380,10 @@ uint8_t BudgetAllocator::Unfloored(const uint8_t nodeId, const uint8_t max) cons
     {
         return r.sawTarget ? r.target : 0; // Closed / Open / Manual: an explicit position
     }
+    // Without a supply reading or room data its loop sits at neutral (§4.4).
     uint8_t desired = NeutralPercent;
-    if (supplyTemp.Valid())
+    if (supplyTemp.Valid() && r.Known())
     {
-        if (!r.Known())
-        {
-            return 0; // its loop has no room data yet -- don't count on any opening
-        }
         desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), r.temp, r.setpoint);
     }
     return desired < max ? desired : max;

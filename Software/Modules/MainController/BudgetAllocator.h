@@ -64,7 +64,8 @@ class BudgetAllocator
     int32_t SurplusRank(const uint8_t nodeId) const;
     void    SendBudget(const uint8_t nodeId, const uint8_t max, const uint8_t min);
 
-    // pool = defaultBudgetPerNode * onlineCount, split by weight
+    // pool = defaultBudgetPerNode * the rooms with data, split by weight; a
+    // room without data holds defaultBudgetPerNode
     // (Damper-Budget-Spec.md §5.2).
     static const uint8_t defaultBudgetPerNode = 50;
     // Sum of all online ControllerNodes' damper positions, in percent, that

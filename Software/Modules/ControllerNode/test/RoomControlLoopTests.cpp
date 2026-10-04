@@ -72,7 +72,7 @@ CC_TEST(RoomControlLoop, DefaultsToTheFiftyPercentBudget)
     CC_CHECK_EQ(loop.BudgetMax(), 50);
 }
 
-CC_TEST(RoomControlLoop, DoesNothingUntilTheRoomIsValid)
+CC_TEST(RoomControlLoop, GoesToTheNeutralPositionWithoutRoomData)
 {
     ResetWorld();
     LinkMaster      link;
@@ -81,10 +81,25 @@ CC_TEST(RoomControlLoop, DoesNothingUntilTheRoomIsValid)
     SupplyTemp      supplyTemp;
     RoomControlLoop loop(thermostatLink, supplyTemp, damper);
 
-    SeedSupply(supplyTemp, 1500); // with no supply reading the fail-safe applies instead
-    damper.SetTarget(30);
+    SeedSupply(supplyTemp, 1500); // a supply reading, but no Thermostat
+    damper.SetTarget(0); // e.g. squeezed shut by an earlier budget
     loop.Loop();
-    CC_CHECK_EQ(damper.Target(), 30);
+    CC_CHECK_EQ(damper.Target(), 50); // back to neutral, not left wherever it was
+}
+
+CC_TEST(RoomControlLoop, NeutralWithoutRoomDataStillRespectsTheBudget)
+{
+    ResetWorld();
+    LinkMaster      link;
+    Damper          damper;
+    ThermostatLink  thermostatLink(link, damper);
+    SupplyTemp      supplyTemp;
+    RoomControlLoop loop(thermostatLink, supplyTemp, damper);
+
+    SeedSupply(supplyTemp, 1500);
+    loop.SetBudget(30, 0);
+    loop.Loop();
+    CC_CHECK_EQ(damper.Target(), 30); // neutral, capped by the max
 }
 
 CC_TEST(RoomControlLoop, GoesToTheNeutralPositionWithoutASupplyReading)

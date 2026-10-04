@@ -175,14 +175,9 @@ void RoomControlLoop::Loop()
         return;
     }
 
-    uint8_t desired = Damper::NeutralPercent;  // no supply reading: the fail-safe position (§4.4)
-    if (supplyTemp.Valid())
+    uint8_t desired = Damper::NeutralPercent;  // no supply reading or no room data: the fail-safe position (§4.4)
+    if (supplyTemp.Valid() && thermostatLink.Room().valid)
     {
-        if (!thermostatLink.Room().valid)
-        {
-            ClampIntoRange();  // no room data yet: hold where it is, but still inside the range
-            return;
-        }
         desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint);
     }
 
@@ -220,7 +215,7 @@ While the main-bus connection is lost, a node's budget is not stuck wherever `Ma
 
 The budget **min** does not ramp. On losing the bus it drops to 0 at once, except on the dump room (§5.5), where it goes to 100 and stays there — with `MainController` gone nobody is watching the total opening any more, so the dump room makes sure the unit's air still has somewhere to go. The dump room's max is held up by that min and does not ramp down. The next `DamperBudget` Set from `MainController` replaces both.
 
-### 4.4 No supply reading — fail safe to 50%
+### 4.4 No supply reading or no room data — fail safe to 50%
 
 Without a valid `SupplyTemp` — the TemperatureNode is off the bus, or its supply probe failed (`DuctChannel` then stops reporting it and raises `SupplyTempSensorFault`), for `staleTimeoutMs` — no room's demand can be judged. The fail-safe is the building running as it would with no control at all: every damper at 50%. It is reached gradually and never above the budget:
 
@@ -229,6 +224,13 @@ Without a valid `SupplyTemp` — the TemperatureNode is off the bus, or its supp
 - **`MainController` gone too:** the disconnect ramp (§4.3) moves the budget to 50% the same way.
 
 A single failed probe therefore never leaves the building with every damper at its minimum stop, and never jumps a closed-down room wide open. When the supply reading returns, the next recompute allocates by demand again.
+
+**No room data — the same fail-safe, for one room.** A room whose `ControllerNode` has no valid room data — no Thermostat on the link, or its temperature stopped arriving (`ControllerNode-Thermostat-Link-Spec.md` §4.3) — can't be judged either, so it goes to neutral the same way:
+
+- **`ControllerNode`:** `desired` becomes `Damper::NeutralPercent` (50%), clamped into `[min, max]`, rather than being left wherever an earlier budget pushed it.
+- **`MainController`:** the room neither claims nor gives up air by demand. It keeps the default 50% max outside the demand split (§5.2), so another room's demand can never squeeze it shut, and it counts as sitting at `min(50, max)` in the minimum-opening total (§5.5).
+
+Once its room data arrives, the room joins the demand split at the next recompute.
 
 ---
 
@@ -269,7 +271,7 @@ class BudgetAllocator
     int32_t SurplusRank(uint8_t nodeId) const;              // §5.5
     void    SendBudget(uint8_t nodeId, uint8_t max, uint8_t min);
 
-    static const uint8_t  defaultBudgetPerNode = 50;   // pool = defaultBudgetPerNode * onlineCount
+    static const uint8_t  defaultBudgetPerNode = 50;   // pool = defaultBudgetPerNode * knownCount; an unknown room holds this
     static const uint16_t minTotalOpenPercent  = 200;  // §5.5
     static const uint32_t recomputeIntervalMs  = 30000;
     static const uint8_t  budgetStepPercent    = 1;    // per recompute, without a supply reading (§4.4)
@@ -281,14 +283,14 @@ class BudgetAllocator
 };
 ```
 
-`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` and `DamperBudget` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0. A room temperature not refreshed for `NodeLib::RoomTempStaleMs` (3 min, three missed keepalives) also makes the room unknown: that is how a dead Thermostat sensor shows up, since the Thermostat and the ControllerNode stop reporting it rather than repeating the last value (`ControllerNode-Thermostat-Link-Spec.md` §4.3). An unknown room weighs nothing and counts as closed in the minimum-opening total (§5.5).
+`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` and `DamperBudget` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0. A room temperature not refreshed for `NodeLib::RoomTempStaleMs` (3 min, three missed keepalives) also makes the room unknown: that is how a dead Thermostat sensor shows up, since the Thermostat and the ControllerNode stop reporting it rather than repeating the last value (`ControllerNode-Thermostat-Link-Spec.md` §4.3). An unknown room is held at neutral rather than allocated by demand (§4.4).
 
 ### 5.2 Allocation — `Recompute()`
 
-1. `pool = 50 * onlineCount` (`onlineCount` = nodes with `NodeMaster::NodeModule(id) == ControllerNode` that are `NodeActive()` and not `NodeInBootloader()`). `NodeMaster` keeps a lost node's module type, so the active check is what drops it; a node in its bootloader is excluded because it can't act on a budget. A node leaves the allocation at the next recompute (§5.3) after it is lost.
+1. The online nodes are those with `NodeMaster::NodeModule(id) == ControllerNode` that are `NodeActive()` and not `NodeInBootloader()`. A node whose room data is unknown (§4.4) gets the default 50% max and takes no part in the steps below; `pool = 50 * knownCount` over the rest. `NodeMaster` keeps a lost node's module type, so the active check is what drops it; a node in its bootloader is excluded because it can't act on a budget. A node leaves the allocation at the next recompute (§5.3) after it is lost.
    Without a valid supply reading the steps below are skipped: each online node's budget is stepped toward 50% instead (§4.4).
-2. `weight[i] = RoomDemandPercent(supplyTemp, room[i].temp, room[i].setpoint)` per online node (§2) — 0 for a room the current supply air can't help, exactly matching *"if the supply air is warm but setpoint is asking for cooling, budget can be low."*
-3. `weightSum == 0` (nobody has any demand) → split the pool evenly: `pool / onlineCount == 50` each — lands exactly back on the default, no special-casing needed.
+2. `weight[i] = RoomDemandPercent(supplyTemp, room[i].temp, room[i].setpoint)` per known node (§2) — 0 for a room the current supply air can't help, exactly matching *"if the supply air is warm but setpoint is asking for cooling, budget can be low."*
+3. `weightSum == 0` (nobody has any demand) → split the pool evenly: `pool / knownCount == 50` each — lands exactly back on the default, no special-casing needed.
 4. Otherwise `raw[i] = pool * weight[i] / weightSum`.
 5. **Water-fill** any node whose `raw[i]` would exceed 100: clamp it at 100, redistribute the excess proportionally by weight among the still-open nodes. Bounded to at most `onlineCount` passes (each pass clamps at least one more node, so this always terminates in a provable, small number of iterations — not an unbounded `while`, deliberately, given this runs on an 8 KB-RAM MCU).
 6. Size each node's min (§5.5), then `SendBudget(nodeId, max[i], min[i])` for every online node, via `master.QueueMessage(Id(nodeId, Endpoint::DamperBudget, Operation::Set), {max, min})` — the same mechanism `UplinkHandler` already uses for uplink→bus relay. Without a supply reading (step 1) the stepped maxes go through the same min sizing.
@@ -310,7 +312,7 @@ The HVAC unit's fan cannot be controlled: it always runs, and its air has to go 
 
 So after the maxes are allocated, `AssignMinimumsAndSend()` checks the total:
 
-1. **Where each damper would sit without a min** (`Unfloored()`): for a node in `Auto`, what its room loop would choose, `min(RoomDemandPercent, max)` (or `min(50, max)` without a supply reading, §4.4), and 0 while its room data is unknown. A node in `Closed`/`Open`/`Manual` counts its commanded `DamperTarget` and takes no min, since those modes are explicit overrides. A stalled node counts as 0.
+1. **Where each damper would sit without a min** (`Unfloored()`): for a node in `Auto`, what its room loop would choose, `min(RoomDemandPercent, max)` (or `min(50, max)` without a supply reading or without room data, §4.4). A node in `Closed`/`Open`/`Manual` counts its commanded `DamperTarget` and takes no min, since those modes are explicit overrides. A stalled node counts as 0.
 2. **Total** = the sum over all online ControllerNodes. If it is at least `minTotalOpenPercent`, every min is 0.
 3. **Otherwise the shortfall is handed out as mins**, filling one room to 100 % before the next takes any, in `SurplusRank()` order:
    - the **dump room** first — the ControllerNode whose `DumpRoom` flag is set, chosen at installation as the room that minds extra air least (a hallway, say);

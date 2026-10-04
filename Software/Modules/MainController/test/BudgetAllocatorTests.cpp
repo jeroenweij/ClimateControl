@@ -752,7 +752,7 @@ CC_TEST(BudgetAllocator, NoMinimumWhileTheRoomsKeepEnoughOpenThemselves)
     }
 }
 
-CC_TEST(BudgetAllocator, ARoomWhoseTemperatureStoppedArrivingWeighsNothing)
+CC_TEST(BudgetAllocator, ARoomWhoseTemperatureStoppedArrivingHoldsTheNeutralShare)
 {
     ResetWorld();
     NodeMaster      master;
@@ -782,6 +782,38 @@ CC_TEST(BudgetAllocator, ARoomWhoseTemperatureStoppedArrivingWeighsNothing)
     uint8_t   p2 = 0xFF, p3 = 0xFF;
     CC_CHECK(FindBudget(tx, n, 2, p2));
     CC_CHECK(FindBudget(tx, n, 3, p3));
-    CC_CHECK_EQ(p2, 0); // its frozen 25.00 degC no longer claims a share
-    CC_CHECK_EQ(p3, 100);
+    CC_CHECK_EQ(p2, 50); // its frozen 25.00 degC claims nothing, and it isn't squeezed shut either: neutral
+    CC_CHECK_EQ(p3, 50); // the pool of the one room with data
+}
+
+CC_TEST(BudgetAllocator, ARoomWithoutDataIsNotSqueezedByAnotherRoomsDemand)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode); // no Thermostat: never reports a room
+    Announce(3, ModuleType::ControllerNode);
+    Announce(4, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2500); // far too warm -- wants all it can get
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+    ObserveReport(allocator, 4, Endpoint::RoomTemp, 2000); // satisfied
+    ObserveReport(allocator, 4, Endpoint::RoomSetpoint, 2000);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n  = bus::DecodeTx(tx, 8);
+    uint8_t   p2 = 0xFF, p3 = 0xFF, p4 = 0xFF;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK(FindBudget(tx, n, 4, p4));
+    CC_CHECK_EQ(p2, 50); // keeps the default -- the bench case: shut to 0 by room 3's demand
+    CC_CHECK_EQ(p3, 100); // the two known rooms' pool (100) goes to the one that wants it
+    CC_CHECK_EQ(p4, 0);
 }

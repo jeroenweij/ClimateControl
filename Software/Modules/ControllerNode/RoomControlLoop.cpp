@@ -32,19 +32,14 @@ void RoomControlLoop::Loop()
         return;
     }
 
-    // Without a supply reading the room can't be controlled: fail safe to the
-    // neutral position, the same as having no control at all -- still under
-    // the budget, which MainController walks back to 50% meanwhile
-    // (Damper-Budget-Spec.md §4.4).
+    // Without a supply reading or without room data (no Thermostat, or its
+    // temperature stopped arriving) the room can't be controlled: fail safe
+    // to the neutral position, the same as having no control at all -- still
+    // inside the budget range, which MainController keeps at 50% for such a
+    // room (Damper-Budget-Spec.md §4.4).
     uint8_t desired = Damper::NeutralPercent;
-    if (supplyTemp.Valid())
+    if (supplyTemp.Valid() && thermostatLink.Room().valid)
     {
-        if (!thermostatLink.Room().valid)
-        {
-            // No room data yet: hold where it is, but still inside the range.
-            ClampIntoRange();
-            return;
-        }
         desired = NodeLib::RoomDemandPercent(supplyTemp.CentiDegC(), thermostatLink.Room().temp, thermostatLink.Room().setpoint);
     }
 
