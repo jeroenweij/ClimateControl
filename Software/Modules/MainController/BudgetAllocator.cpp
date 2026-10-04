@@ -2,6 +2,8 @@
  * Created by J. Weij
  *************************************************************/
 
+#include "Tick.h"
+
 #include "ConfigStore.h"
 #include "EEndpoint.h"
 #include "EModuleType.h"
@@ -51,6 +53,7 @@ BudgetAllocator::SRoom::SRoom() :
     sawTarget(false),
     dumpRoom(false),
     temp(0),
+    tempAtMs(0),
     setpoint(0),
     budget(0),
     mode(AutoMode),
@@ -60,7 +63,10 @@ BudgetAllocator::SRoom::SRoom() :
 
 bool BudgetAllocator::SRoom::Known() const
 {
-    return sawTemp && sawSetpoint;
+    // A room whose temperature stopped arriving -- its Thermostat's sensor
+    // died, the ControllerNode dropped it -- weighs nothing and counts as
+    // closed in the minimum-opening total, rather than living on frozen.
+    return sawTemp && sawSetpoint && Hal::Tick::Millis() - tempAtMs < NodeLib::RoomTempStaleMs;
 }
 
 BudgetAllocator::BudgetAllocator(NodeMaster& master) :
@@ -93,8 +99,9 @@ void BudgetAllocator::Observe(const Message& m)
         case Endpoint::RoomTemp:
             if (m.len >= 2)
             {
-                room[nodeIndex].temp    = ReadI16(m.data);
-                room[nodeIndex].sawTemp = true;
+                room[nodeIndex].temp     = ReadI16(m.data);
+                room[nodeIndex].tempAtMs = Hal::Tick::Millis();
+                room[nodeIndex].sawTemp  = true;
             }
             break;
 

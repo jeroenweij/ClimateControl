@@ -244,7 +244,7 @@ namespace
         ResetWorld();
         World w;
 
-        QueueSensorReading(2350, 5000); // outside the temp deadband from the 21.00 default
+        QueueSensorReading(2350, 5000); // the first real reading
         FakeClock::Advance(3000); // past sampleIntervalMs (2000)
         w.handler.Loop();
         w.FlushToPeer();
@@ -266,6 +266,7 @@ namespace
     CC_TEST(ThermostatHandler, GetRoomTempForcesAReport)
     {
         ResetWorld();
+        QueueSensorReading(2100, 4500); // Init()'s first sample -- a real reading exists
         World w;
         FakeBus::Reset();
 
@@ -275,6 +276,54 @@ namespace
         Message   tx[8];
         const int n = bus::DecodeTx(tx, 8);
         CC_CHECK(FindMessage(tx, n, Endpoint::RoomTemp, Operation::Report, nullptr));
+    }
+
+    CC_TEST(ThermostatHandler, WithoutASensorReadingNoRoomTempIsReported)
+    {
+        ResetWorld(); // nothing queued on the fake I2C: the sensor never answers
+        World w;
+        FakeClock::Advance(3000);
+        w.handler.Loop();
+        w.FlushToPeer();
+
+        Message   tx[8];
+        const int n = bus::DecodeTx(tx, 8);
+        CC_CHECK(!FindMessage(tx, n, Endpoint::RoomTemp, Operation::Report, nullptr)); // no placeholder 21.00
+        CC_CHECK(!FindMessage(tx, n, Endpoint::RoomHumidity, Operation::Report, nullptr));
+        CC_CHECK(FindMessage(tx, n, Endpoint::RoomSetpoint, Operation::Report, nullptr)); // the setpoint is real
+
+        FakeBus::Reset();
+        bus::InjectFrame(Message(Id(nodeId, Endpoint::RoomTemp, Operation::Get)));
+        w.FlushToPeer();
+        const int n2 = bus::DecodeTx(tx, 8);
+        CC_CHECK(FindMessage(tx, n2, Endpoint::RoomTemp, Operation::Nack, nullptr));
+    }
+
+    CC_TEST(ThermostatHandler, ASensorThatStopsAnsweringIsDroppedAfterThreeMisses)
+    {
+        ResetWorld();
+        QueueSensorReading(2100, 4500);
+        World w; // Init(): one good reading
+
+        for (int i = 0; i < 2; i++) // two misses: still a glitch, the reading stands
+        {
+            FakeClock::Advance(2100);
+            w.handler.Loop();
+        }
+        FakeBus::Reset();
+        bus::InjectFrame(Message(Id(nodeId, Endpoint::RoomTemp, Operation::Get)));
+        w.FlushToPeer();
+        Message   tx[8];
+        const int n = bus::DecodeTx(tx, 8);
+        CC_CHECK(FindMessage(tx, n, Endpoint::RoomTemp, Operation::Report, nullptr));
+
+        FakeClock::Advance(2100); // the third miss
+        w.handler.Loop();
+        FakeBus::Reset();
+        bus::InjectFrame(Message(Id(nodeId, Endpoint::RoomTemp, Operation::Get)));
+        w.FlushToPeer();
+        const int n2 = bus::DecodeTx(tx, 8);
+        CC_CHECK(FindMessage(tx, n2, Endpoint::RoomTemp, Operation::Nack, nullptr));
     }
 
     CC_TEST(ThermostatHandler, SetOnARoomTempEndpointIsRejected)

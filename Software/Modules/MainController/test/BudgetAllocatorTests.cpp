@@ -12,6 +12,8 @@
 #include "FakeConfigStore.h"
 #include "Test.h"
 
+#include "RoomDemand.h"
+
 #include "BudgetAllocator.h"
 
 using NodeLib::ConfigStore;
@@ -748,4 +750,38 @@ CC_TEST(BudgetAllocator, NoMinimumWhileTheRoomsKeepEnoughOpenThemselves)
         CC_CHECK(FindBudgetMin(tx, n, id, min));
         CC_CHECK_EQ(min, 0); // 4 x 50 open already meets the 200 total
     }
+}
+
+CC_TEST(BudgetAllocator, ARoomWhoseTemperatureStoppedArrivingWeighsNothing)
+{
+    ResetWorld();
+    NodeMaster      master;
+    BudgetAllocator allocator(master);
+
+    InitAndClearDiscover(master);
+    Announce(2, ModuleType::ControllerNode);
+    Announce(3, ModuleType::ControllerNode);
+    StartPolling(master);
+
+    // Both rooms far too warm for the cold supply air -- both want it.
+    ObserveReport(allocator, 2, Endpoint::RoomTemp, 2500);
+    ObserveReport(allocator, 2, Endpoint::RoomSetpoint, 2000);
+    ObserveReport(allocator, 3, Endpoint::RoomSetpoint, 2000);
+
+    // Room 2's sensor dies: no RoomTemp for longer than RoomTempStaleMs, while
+    // room 3 keeps reporting and the supply reading stays fresh.
+    FakeClock::Advance(NodeLib::RoomTempStaleMs + 1000);
+    ObserveReport(allocator, supplyNodeId, Endpoint::SupplyTemp, 1500);
+    ObserveReport(allocator, 3, Endpoint::RoomTemp, 2500);
+
+    allocator.Loop();
+    FlushQueuedBudgets(master, 2);
+
+    Message   tx[8];
+    const int n  = bus::DecodeTx(tx, 8);
+    uint8_t   p2 = 0xFF, p3 = 0xFF;
+    CC_CHECK(FindBudget(tx, n, 2, p2));
+    CC_CHECK(FindBudget(tx, n, 3, p3));
+    CC_CHECK_EQ(p2, 0); // its frozen 25.00 degC no longer claims a share
+    CC_CHECK_EQ(p3, 100);
 }

@@ -35,18 +35,20 @@ class BudgetAllocator
     {
         SRoom();
 
+        // temp + setpoint reported, the temp within NodeLib::RoomTempStaleMs.
         bool Known() const;
 
-        bool    sawTemp;
-        bool    sawSetpoint;
-        bool    sawBudget;
-        bool    sawTarget;
-        bool    dumpRoom; // the node's DumpRoom Report
-        int16_t temp; // centi-degC
-        int16_t setpoint; // centi-degC
-        uint8_t budget; // the node's DamperBudget max -- its own Report, else what was last sent
-        uint8_t mode; // the node's DamperMode Report; Auto until one arrives
-        uint8_t target; // the node's DamperTarget Report
+        bool     sawTemp;
+        bool     sawSetpoint;
+        bool     sawBudget;
+        bool     sawTarget;
+        bool     dumpRoom; // the node's DumpRoom Report
+        int16_t  temp; // centi-degC
+        uint32_t tempAtMs; // Hal::Tick::Millis() of the last RoomTemp Report
+        int16_t  setpoint; // centi-degC
+        uint8_t  budget; // the node's DamperBudget max -- its own Report, else what was last sent
+        uint8_t  mode; // the node's DamperMode Report; Auto until one arrives
+        uint8_t  target; // the node's DamperTarget Report
     };
 
     void Recompute();

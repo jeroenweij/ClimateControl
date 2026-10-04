@@ -24,6 +24,7 @@ namespace
     constexpr uint8_t NackBadRequest  = 0x02;
     constexpr uint8_t NackUnsupported = 0x03;
     constexpr uint8_t NackWriteFailed = 0x04;
+    constexpr uint8_t NackUnavailable = 0x05; // no reported value to give
 
     // This node's runtime settings record (NodeLib::SettingsPage): payload
     // byte 0 = DumpRoom flag.
@@ -235,6 +236,13 @@ void ControllerHandler::HandleRoom(const Message& m)
         return;
     }
 
+    const bool isReading = m.id.endpoint == Endpoint::RoomTemp || m.id.endpoint == Endpoint::RoomHumidity;
+    if ((isReading && !room.tempValid) || (!isReading && m.id.endpoint != Endpoint::RoomLink && !room.setpointValid))
+    {
+        Nack(m, NackUnavailable); // nothing real to report
+        return;
+    }
+
     uint8_t payload[2];
     switch (m.id.endpoint)
     {
@@ -328,22 +336,28 @@ void ControllerHandler::Publish()
     node.PublishIfChanged(Endpoint::DumpRoom, roomControlLoop.DumpRoom() ? 1 : 0);
     node.PublishIfChanged(Endpoint::RoomLink, thermostatLink.LinkUp() ? 1 : 0);
 
+    // Only what the Thermostat actually reported, and a temperature only while
+    // it keeps being refreshed -- never a placeholder or a frozen value.
     const ThermostatLink::RoomState& room = thermostatLink.Room();
-    if (room.valid)
+    if (room.setpointValid)
     {
         node.PublishIfChanged(Endpoint::RoomSetpoint, room.setpoint);
-        node.PublishIfChanged(Endpoint::RoomTemp, room.temp);
-        node.PublishIfChanged(Endpoint::RoomHumidity, room.humidity);
         node.PublishIfChanged(Endpoint::RoomMode, room.mode);
     }
     else
     {
-        // Nothing from the Thermostat yet (or its cache was dropped) -- don't
-        // report placeholder room values.
         node.ClearPublished(Endpoint::RoomSetpoint);
+        node.ClearPublished(Endpoint::RoomMode);
+    }
+    if (room.tempValid)
+    {
+        node.PublishIfChanged(Endpoint::RoomTemp, room.temp);
+        node.PublishIfChanged(Endpoint::RoomHumidity, room.humidity);
+    }
+    else
+    {
         node.ClearPublished(Endpoint::RoomTemp);
         node.ClearPublished(Endpoint::RoomHumidity);
-        node.ClearPublished(Endpoint::RoomMode);
     }
 }
 

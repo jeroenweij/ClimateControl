@@ -44,6 +44,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
         int16_t humidityPercent;
         uint8_t damperBar; // filled pixels of the damper bar
         bool    linkUp;
+        bool    roomValid; // false: temperature and humidity show as dashes
 
         bool operator==(const SView& other) const;
     };
@@ -67,9 +68,16 @@ class ThermostatHandler : public NodeLib::INodeHandler
 
     // Room* -- source of truth
     int16_t  setpoint; // centi-degC
-    int16_t  roomTemp; // centi-degC
-    uint16_t humidity; // centi-%RH
+    int16_t  roomTemp; // centi-degC, meaningful only while roomValid
+    uint16_t humidity; // centi-%RH, meaningful only while roomValid
     uint8_t  roomMode; // DamperMode coding
+
+    // A real sensor reading exists and the sensor still answers: false until
+    // the first good Measure(), and again after sensorFailLimit failures in a
+    // row. While false, RoomTemp/RoomHumidity are neither published nor
+    // answered -- a placeholder must never pass for a measurement.
+    bool    roomValid;
+    uint8_t sensorFailures;
 
     // display cache from the ControllerNode
     uint8_t damperActual;

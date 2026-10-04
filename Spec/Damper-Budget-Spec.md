@@ -253,7 +253,7 @@ class BudgetAllocator
   private:
     struct SRoom
     {
-        bool    known;      // temp + setpoint both reported
+        bool    known;      // temp + setpoint both reported, the temp within NodeLib::RoomTempStaleMs
         int16_t temp;
         int16_t setpoint;
         uint8_t budget;     // the node's DamperBudget max -- its own Report, else what was last sent (§4.4)
@@ -281,7 +281,7 @@ class BudgetAllocator
 };
 ```
 
-`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` and `DamperBudget` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0.
+`Observe()` caches `SupplyTemp`, `RoomTemp`, `RoomSetpoint` and `DamperBudget` `Report`s by source node id — no new bus traffic, just watching what already flows through `UplinkHandler`. A node that doesn't take part in an allocation (§5.2 step 1) has its cached room data cleared on that pass, so a node that drops off the bus and rejoins starts from fresh reports rather than its pre-loss demand; until they arrive (a node re-reports every value once the master polls it again, `Node-Message-Model-Spec.md` §6) its room is unknown and its weight 0. A room temperature not refreshed for `NodeLib::RoomTempStaleMs` (3 min, three missed keepalives) also makes the room unknown: that is how a dead Thermostat sensor shows up, since the Thermostat and the ControllerNode stop reporting it rather than repeating the last value (`ControllerNode-Thermostat-Link-Spec.md` §4.3). An unknown room weighs nothing and counts as closed in the minimum-opening total (§5.5).
 
 ### 5.2 Allocation — `Recompute()`
 

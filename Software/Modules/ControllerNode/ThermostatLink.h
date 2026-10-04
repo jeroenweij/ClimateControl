@@ -30,7 +30,9 @@ class ThermostatLink : public NodeLib::INodeHandler
         int16_t  temp; // centi-degC
         uint16_t humidity; // centi-%RH
         uint8_t  mode; // DamperMode coding
-        bool     valid;
+        bool     setpointValid;
+        bool     tempValid; // reported, and refreshed within NodeLib::RoomTempStaleMs
+        bool     valid; // both -- what the room loop needs
     };
 
     ThermostatLink(NodeLib::LinkMaster& link, Damper& damper);
@@ -118,6 +120,16 @@ class ThermostatLink : public NodeLib::INodeHandler
     bool                statusChanged;
     Tools::DelayTimer   enterBlTimer;
     Tools::DelayTimer   enterBlDiscoverTimer;
+    // EnteringBootloader: the first "in the bootloader" Announce has been seen.
+    // That first one is normally the app's own, sent just before it resets
+    // (Node::HandleFirmwareMessage()) while the bootloader is not listening
+    // yet -- so Begin waits for the next one, the bootloader's answer to a
+    // fresh Discover.
+    bool bootloaderHintSeen;
+
+    // Restarted by every RoomTemp report; on expiry the room temperature is
+    // dropped (NodeLib::RoomTempStaleMs).
+    Tools::DelayTimer roomTempTimer;
 
     // Outcome of the write currently (or most recently) in flight on the
     // link, awaiting relay up the main bus -- see ConsumeWriteReply().

@@ -13,6 +13,8 @@
 #include "FakeConfigStore.h"
 #include "Test.h"
 
+#include "RoomDemand.h"
+
 #include "Damper.h"
 #include "ThermostatLink.h"
 
@@ -162,7 +164,11 @@ CC_TEST(ThermostatLink, LoopAdvancesToTransferOncePeerAnnouncesBootloaderEntry)
     w.thermostatLink.OtaBegin(4, 512, 0, 0, false); // peer still in app -> EnteringBootloader
     Flush(w.link); // drain the queued EnterBootloader before the next step queues more
 
-    AnnouncePeer(true); // peer's own Announce, once it's actually reset into the bootloader
+    AnnouncePeer(true); // the app's own Announce, sent just before it resets
+    w.link.Loop();
+    w.thermostatLink.Loop(); // only a hint -- asks the bootloader itself
+
+    AnnouncePeer(true); // the bootloader's answer to that Discover
     w.link.Loop(); // LinkMaster learns PeerInBootloader()
     w.thermostatLink.Loop(); // ThermostatLink::Loop() reacts to it, queues Firmware[Begin]
     Flush(w.link);
@@ -194,7 +200,10 @@ CC_TEST(ThermostatLink, EnteringBootloaderRediscoversWellBeforeTheTimeout)
     const int n = bus::DecodeTx(tx, 4);
     CC_CHECK(FindMessage(tx, n, Endpoint::Transport, Operation::Discover, nullptr));
 
-    AnnouncePeer(true); // the bootloader's answer to that Discover
+    AnnouncePeer(true); // the bootloader's answer to that Discover -- taken as the hint
+    w.link.Loop();
+    w.thermostatLink.Loop(); // asks once more
+    AnnouncePeer(true); // and the bootloader answers again
     w.link.Loop();
     w.thermostatLink.Loop(); // queues Firmware[Begin]
     FakeBus::Reset();
@@ -205,6 +214,34 @@ CC_TEST(ThermostatLink, EnteringBootloaderRediscoversWellBeforeTheTimeout)
     int       idx = 0;
     CC_CHECK(FindMessage(tx, n2, Endpoint::Firmware, Operation::Set, &idx));
     CC_CHECK_EQ(tx[idx].data[0], static_cast<uint8_t>(FirmwareOp::Begin));
+}
+
+CC_TEST(ThermostatLink, TheAppsAnnounceBeforeItsResetDoesNotSendBegin)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false);
+    w.link.Loop();
+
+    w.thermostatLink.OtaBegin(4, 512, 0, 0, false);
+    Flush(w.link); // EnterBootloader goes out
+
+    // The app's reply: Ack + an Announce already claiming the bootloader +
+    // Done, then it resets. A Begin sent on that Announce would land
+    // mid-reset and be lost -- the bench failure "did not enter bootloader /
+    // begin" with the Thermostat sitting idle in its bootloader.
+    FakeBus::Reset();
+    AnnouncePeer(true);
+    bus::InjectFrame(Message(peerId, Operation::Done));
+    w.link.Loop();
+    w.thermostatLink.Loop();
+    w.link.Loop();
+
+    Message   tx[8];
+    const int n = bus::DecodeTx(tx, 8);
+    CC_CHECK(!FindMessage(tx, n, Endpoint::Firmware, Operation::Set, nullptr)); // no Begin yet
+    CC_CHECK(FindMessage(tx, n, Endpoint::Transport, Operation::Discover, nullptr)); // asks the bootloader instead
+    CC_CHECK(!w.link.PeerInBootloader());
 }
 
 CC_TEST(ThermostatLink, LoopFaultsIfThePeerNeverEntersTheBootloaderInTime)
@@ -555,4 +592,46 @@ CC_TEST(ThermostatLink, ABeginNackReportsTheErrorState)
     w.thermostatLink.FillOtaStatus(status);
     CC_CHECK_EQ(status[1], 5); // Error
     CC_CHECK_EQ(status[6], static_cast<uint8_t>(NodeLib::FirmwareError::WrongModule));
+}
+
+namespace
+{
+    void ReportToLink(ThermostatLink& link, const Endpoint endpoint, const int16_t value)
+    {
+        Message m(Id(peerId, endpoint, Operation::Report));
+        PackI16(m.data, value);
+        m.len = 2;
+        link.ReceivedMessage(m);
+    }
+} // namespace
+
+CC_TEST(ThermostatLink, ARoomTemperatureThatStopsArrivingIsDropped)
+{
+    ResetWorld();
+    World w;
+    ReportToLink(w.thermostatLink, Endpoint::RoomSetpoint, 2100);
+    ReportToLink(w.thermostatLink, Endpoint::RoomTemp, 2050);
+    CC_CHECK(w.thermostatLink.Room().valid);
+
+    FakeClock::Advance(NodeLib::RoomTempStaleMs - 1000); // still within the window
+    w.thermostatLink.Loop();
+    CC_CHECK(w.thermostatLink.Room().valid);
+
+    FakeClock::Advance(1001); // three keepalives missed: the sensor is gone
+    w.thermostatLink.Loop();
+    CC_CHECK(!w.thermostatLink.Room().valid);
+    CC_CHECK(!w.thermostatLink.Room().tempValid);
+    CC_CHECK(w.thermostatLink.Room().setpointValid); // the setpoint is still real
+
+    ReportToLink(w.thermostatLink, Endpoint::RoomTemp, 2060); // the sensor is back
+    CC_CHECK(w.thermostatLink.Room().valid);
+}
+
+CC_TEST(ThermostatLink, ASetpointAloneIsNotAValidRoom)
+{
+    ResetWorld();
+    World w;
+    ReportToLink(w.thermostatLink, Endpoint::RoomSetpoint, 2100); // a Thermostat without a sensor
+    CC_CHECK(!w.thermostatLink.Room().valid);
+    CC_CHECK(w.thermostatLink.Room().setpointValid);
 }

@@ -9,6 +9,8 @@
 #include "EEndpoint.h"
 #include "EOperation.h"
 
+#include "RoomDemand.h"
+
 #include "ThermostatLink.h"
 
 using NodeLib::Endpoint;
@@ -54,7 +56,7 @@ namespace
 ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     link(link),
     damper(damper),
-    room{0, 0, 0, 0, false},
+    room{0, 0, 0, 0, false, false, false},
     thermostatFw(0),
     otaState(OtaState::Idle),
     lastError(FirmwareError::None),
@@ -65,6 +67,8 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     statusChanged(false),
     enterBlTimer(),
     enterBlDiscoverTimer(),
+    bootloaderHintSeen(false),
+    roomTempTimer(),
     pendingWriteLen(0),
     writeReplyPending(false),
     writeReplyNack(false),
@@ -79,9 +83,26 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
 
 void ThermostatLink::Loop()
 {
+    if (room.tempValid && roomTempTimer.Finished())
+    {
+        LOG_WARN("Room temperature not refreshed -- dropped");
+        room.tempValid = false;
+        room.valid     = false;
+    }
+
     if (otaState == OtaState::EnteringBootloader)
     {
-        if (link.PeerInBootloader())
+        if (link.PeerInBootloader() && !bootloaderHintSeen)
+        {
+            // The app announces the bootloader before it actually resets: a
+            // Begin sent now lands mid-reset and is lost, leaving the
+            // bootloader idle. Ask again -- only the bootloader itself can
+            // answer this Discover (Rediscover() clears the flag until then).
+            bootloaderHintSeen = true;
+            link.Rediscover();
+            enterBlDiscoverTimer.ReStart();
+        }
+        else if (link.PeerInBootloader())
         {
             SendFirmwareOp(FirmwareOp::Begin, &beginPayload[1], sizeof(beginPayload) - 1);
             pendingOp = FirmwareOp::Begin;
@@ -149,15 +170,18 @@ void ThermostatLink::ReceivedMessage(const Message& m)
             case Endpoint::RoomSetpoint:
                 if (m.len >= 2)
                 {
-                    room.setpoint = static_cast<int16_t>(ReadU16(m.data));
-                    room.valid    = true;
+                    room.setpoint      = static_cast<int16_t>(ReadU16(m.data));
+                    room.setpointValid = true;
+                    room.valid         = room.tempValid;
                 }
                 break;
             case Endpoint::RoomTemp:
                 if (m.len >= 2)
                 {
-                    room.temp  = static_cast<int16_t>(ReadU16(m.data));
-                    room.valid = true;
+                    room.temp      = static_cast<int16_t>(ReadU16(m.data));
+                    room.tempValid = true;
+                    room.valid     = room.setpointValid;
+                    roomTempTimer.Start(NodeLib::RoomTempStaleMs);
                 }
                 break;
             case Endpoint::RoomHumidity:
@@ -270,7 +294,10 @@ void ThermostatLink::SetPeerState(const uint8_t state)
 void ThermostatLink::ConnectionLost()
 {
     LOG_WARN("Thermostat link down");
-    room.valid = false;
+    room.valid         = false;
+    room.tempValid     = false;
+    room.setpointValid = false;
+    roomTempTimer.Stop();
     // An OTA in flight is not failed here: the peer is silent for a moment
     // both while it resets into the bootloader and while Begin erases the app
     // slot (~0.5-1 s, longer than linkTimeoutMs). enterBlTimer bounds the
@@ -337,6 +364,7 @@ bool ThermostatLink::OtaBegin(const uint8_t module, const uint32_t imageSize, co
     else
     {
         SendFirmwareOp(FirmwareOp::EnterBootloader, nullptr, 0);
+        bootloaderHintSeen = false;
         enterBlTimer.Start(enterBlTimeoutMs);
         enterBlDiscoverTimer.Start(enterBlDiscoverMs);
         otaState = OtaState::EnteringBootloader;

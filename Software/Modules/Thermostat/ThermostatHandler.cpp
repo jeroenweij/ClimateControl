@@ -18,8 +18,14 @@ using NodeLib::Operation;
 
 namespace
 {
-    constexpr uint8_t NackReadOnly   = 0x01;
-    constexpr uint8_t NackBadRequest = 0x02;
+    constexpr uint8_t NackReadOnly    = 0x01;
+    constexpr uint8_t NackBadRequest  = 0x02;
+    constexpr uint8_t NackUnavailable = 0x05; // no valid sensor reading
+
+    // Failed samples in a row (one per sampleIntervalMs) before the room
+    // reading is dropped: rides out a glitch, but a dead sensor stops being
+    // reported within seconds.
+    constexpr uint8_t sensorFailLimit = 3;
 
     constexpr uint32_t sampleIntervalMs = 2000;
 
@@ -62,9 +68,11 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     buttonDown(Board::UserButton, Hal::Gpio::Mode::InputPullUp),
     buttonUp(Board::UserButton2, Hal::Gpio::Mode::InputPullUp),
     setpoint(2100), // 21.00 degC
-    roomTemp(2100),
-    humidity(4500),
+    roomTemp(0),
+    humidity(0),
     roomMode(2), // Auto
+    roomValid(false),
+    sensorFailures(0),
     damperActual(0),
     damperMode(0),
     downWasPressed(false),
@@ -125,10 +133,24 @@ void ThermostatHandler::SampleRoom()
     uint16_t centiHumidity;
     if (sensor.Measure(centiDegC, centiHumidity))
     {
-        roomTemp = centiDegC;
-        humidity = centiHumidity;
+        roomTemp       = centiDegC;
+        humidity       = centiHumidity;
+        roomValid      = true;
+        sensorFailures = 0;
+        return;
     }
-    // else: keep the last good reading -- retried on the next sampleTimer tick.
+
+    // Keep the last good reading through a glitch, retried on the next
+    // sampleTimer tick -- but not for ever.
+    if (sensorFailures < sensorFailLimit)
+    {
+        sensorFailures++;
+    }
+    if (roomValid && sensorFailures >= sensorFailLimit)
+    {
+        LOG_WARN("Room sensor not answering -- reading dropped");
+        roomValid = false;
+    }
 }
 
 void ThermostatHandler::ServiceButtons()
@@ -173,7 +195,8 @@ void ThermostatHandler::WakeDisplay()
 bool ThermostatHandler::SView::operator==(const SView& other) const
 {
     return tempTenths == other.tempTenths && setpointTenths == other.setpointTenths &&
-        humidityPercent == other.humidityPercent && damperBar == other.damperBar && linkUp == other.linkUp;
+        humidityPercent == other.humidityPercent && damperBar == other.damperBar && linkUp == other.linkUp &&
+        roomValid == other.roomValid;
 }
 
 ThermostatHandler::SView ThermostatHandler::CurrentView() const
@@ -184,6 +207,7 @@ ThermostatHandler::SView ThermostatHandler::CurrentView() const
     view.humidityPercent = static_cast<int16_t>(humidity / 100);
     view.damperBar       = static_cast<uint8_t>((DamperBarPx * damperActual) / 100);
     view.linkUp          = linkUp;
+    view.roomValid       = roomValid;
     return view;
 }
 
@@ -213,7 +237,18 @@ void ThermostatHandler::RenderDisplay()
     display.Clear();
 
     // Room temperature, big, top-left; degree mark; link status top-right.
-    display.DrawNumber(2, 2, 14, 24, 3, view.tempTenths, 1);
+    // Dashes while there is no sensor reading.
+    if (view.roomValid)
+    {
+        display.DrawNumber(2, 2, 14, 24, 3, view.tempTenths, 1);
+    }
+    else
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            display.FillRect(2 + i * 20, 13, 14, 3, true);
+        }
+    }
     display.FillCircle(72, 6, 2, true);
     if (view.linkUp)
     {
@@ -229,7 +264,15 @@ void ThermostatHandler::RenderDisplay()
     display.DrawNumber(10, 40, 7, 12, 1, view.setpointTenths, 1);
 
     // Humidity, bottom-middle.
-    display.DrawNumber(66, 40, 7, 12, 1, view.humidityPercent, 0);
+    if (view.roomValid)
+    {
+        display.DrawNumber(66, 40, 7, 12, 1, view.humidityPercent, 0);
+    }
+    else
+    {
+        display.FillRect(66, 45, 7, 2, true);
+        display.FillRect(76, 45, 7, 2, true);
+    }
     display.FillCircle(90, 44, 1, true);
     display.FillCircle(93, 47, 1, true);
 
@@ -247,14 +290,38 @@ void ThermostatHandler::RenderDisplay()
 void ThermostatHandler::PublishRoom()
 {
     node.PublishIfChanged(Endpoint::RoomSetpoint, setpoint);
-    node.PublishIfChanged(Endpoint::RoomTemp, roomTemp);
-    node.PublishIfChanged(Endpoint::RoomHumidity, humidity);
     node.PublishIfChanged(Endpoint::RoomMode, roomMode);
+    if (roomValid)
+    {
+        node.PublishIfChanged(Endpoint::RoomTemp, roomTemp);
+        node.PublishIfChanged(Endpoint::RoomHumidity, humidity);
+    }
+    else
+    {
+        // Silence, not a stale value: the ControllerNode drops a room
+        // reading that stops being refreshed.
+        node.ClearPublished(Endpoint::RoomTemp);
+        node.ClearPublished(Endpoint::RoomHumidity);
+    }
 }
 
 void ThermostatHandler::ReportRoom(const Endpoint endpoint)
 {
     uint8_t p[2];
+    switch (endpoint)
+    {
+        case Endpoint::RoomTemp:
+        case Endpoint::RoomHumidity:
+            if (!roomValid)
+            {
+                node.QueueMessage(Id(node.GetId(), endpoint, Operation::Nack), NackUnavailable);
+                return;
+            }
+            break;
+        default:
+            break;
+    }
+
     switch (endpoint)
     {
         case Endpoint::RoomTemp:

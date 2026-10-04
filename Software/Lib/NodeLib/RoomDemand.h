@@ -12,6 +12,13 @@
 // on the answer. Pure, allocation-free -- host-testable without any Hal.
 namespace NodeLib
 {
+    // A room temperature not refreshed for this long is dropped, by the
+    // ControllerNode (ThermostatLink) and by MainController (BudgetAllocator)
+    // alike: three missed 60 s keepalives (Publisher::keepaliveMs). The
+    // Thermostat stops reporting a sensor that has died rather than repeating
+    // its last reading, so silence is what a dead sensor looks like.
+    constexpr uint32_t RoomTempStaleMs = 3 * 60 * 1000;
+
     // True if supply air at supplyCentiC would move a room at roomTempCentiC
     // toward setpointCentiC -- evaluated per room, not against a house-wide
     // heating/cooling label. A room too warm needs supply colder than itself;
