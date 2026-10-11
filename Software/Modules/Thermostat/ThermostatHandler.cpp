@@ -102,20 +102,20 @@ namespace
         "#........#",
     };
     const char* const percentGlyph[] = {
-        ".##.....##",
-        "#..#....##",
+        ".##....##.",
         "#..#...##.",
-        "#..#...##.",
-        ".##...##..",
-        "......##..",
+        "#..#..##..",
+        "#..#..##..",
+        ".##..##...",
         ".....##...",
         "....##....",
+        "....##....",
         "...##.....",
-        "..##...##.",
+        "...##..##.",
+        "..##..#..#",
         "..##..#..#",
         ".##...#..#",
-        ".##...#..#",
-        "##.....##.",
+        ".##....##.",
     };
 
     template <int N>
@@ -236,8 +236,23 @@ void ThermostatHandler::ServiceButtons()
 {
     const bool downPressed = !buttonDown.Read(); // active-low
     const bool upPressed   = !buttonUp.Read();
+    const bool downEdge    = downPressed && !downWasPressed;
+    const bool upEdge      = upPressed && !upWasPressed;
+    downWasPressed         = downPressed;
+    upWasPressed           = upPressed;
 
-    if (downPressed && !downWasPressed)
+    // With the panel off, a press only wakes it -- the user can't see the
+    // setpoint yet, so it must not change it.
+    if (!displayOn)
+    {
+        if (downEdge || upEdge)
+        {
+            WakeDisplay();
+        }
+        return;
+    }
+
+    if (downEdge)
     {
         setpoint = static_cast<int16_t>(setpoint - SetpointStepCentiDegC);
         if (setpoint < SetpointMinCentiDegC)
@@ -246,7 +261,7 @@ void ThermostatHandler::ServiceButtons()
         }
         WakeDisplay();
     }
-    if (upPressed && !upWasPressed)
+    if (upEdge)
     {
         setpoint = static_cast<int16_t>(setpoint + SetpointStepCentiDegC);
         if (setpoint > SetpointMaxCentiDegC)
@@ -255,9 +270,6 @@ void ThermostatHandler::ServiceButtons()
         }
         WakeDisplay();
     }
-
-    downWasPressed = downPressed;
-    upWasPressed   = upPressed;
 }
 
 void ThermostatHandler::WakeDisplay()

@@ -34,7 +34,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
 
   private:
     void SampleRoom();
-    void ServiceButtons(); // +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
+    void ServiceButtons(); // panel off: a press only wakes it; on: +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
 
     // What the panel shows, quantized the way it is drawn -- a change the
     // eye can't see (a 0.01 degC step) doesn't cost a redraw.

@@ -107,6 +107,16 @@ namespace
         }
     };
 
+    // A press while the panel is off only wakes it: press + release once so
+    // the next press steps the setpoint.
+    void WakePanel(World& w)
+    {
+        PressButton(Board::UserButton2, true);
+        w.handler.Loop();
+        PressButton(Board::UserButton2, false);
+        w.handler.Loop();
+    }
+
     bool FindMessage(Message* const tx, const int n, const Endpoint endpoint, const Operation op, int* const outIndex)
     {
         for (int i = 0; i < n; i++)
@@ -152,6 +162,7 @@ namespace
     {
         ResetWorld();
         World w;
+        WakePanel(w);
 
         PressButton(Board::UserButton, true);
         w.handler.Loop();
@@ -171,6 +182,7 @@ namespace
     {
         ResetWorld();
         World w;
+        WakePanel(w);
 
         PressButton(Board::UserButton2, true);
         w.handler.Loop();
@@ -219,10 +231,60 @@ namespace
         }
     }
 
+    CC_TEST(ThermostatHandler, APressWhileThePanelIsOffOnlyWakesIt)
+    {
+        ResetWorld();
+        World w;
+        FakeI2c::ClearWritten(Ssd1306::DefaultAddress);
+
+        // Both buttons at once, panel asleep: wakes it, steps neither way.
+        PressButton(Board::UserButton, true);
+        PressButton(Board::UserButton2, true);
+        w.handler.Loop();
+        CC_CHECK(FakeI2c::WrittenLen(Ssd1306::DefaultAddress) > 0); // woke and drew
+        PressButton(Board::UserButton, false);
+        PressButton(Board::UserButton2, false);
+        w.handler.Loop();
+        w.FlushToPeer();
+
+        Message   tx[8];
+        const int n   = bus::DecodeTx(tx, 8);
+        int       idx = -1;
+        CC_CHECK(FindMessage(tx, n, Endpoint::RoomSetpoint, Operation::Report, &idx));
+        if (idx >= 0)
+        {
+            CC_CHECK_EQ(ReadI16(tx[idx].data), 2100); // still 21.00
+        }
+    }
+
+    CC_TEST(ThermostatHandler, OnceThePanelSleepsAgainTheNextPressOnlyWakesIt)
+    {
+        ResetWorld();
+        World w;
+        WakePanel(w);
+
+        FakeClock::Advance(61000); // past the 60 s awake time
+        w.handler.Loop(); // panel goes off
+
+        PressButton(Board::UserButton2, true);
+        w.handler.Loop();
+        w.FlushToPeer();
+
+        Message   tx[8];
+        const int n   = bus::DecodeTx(tx, 8);
+        int       idx = -1;
+        CC_CHECK(FindMessage(tx, n, Endpoint::RoomSetpoint, Operation::Report, &idx));
+        if (idx >= 0)
+        {
+            CC_CHECK_EQ(ReadI16(tx[idx].data), 2100);
+        }
+    }
+
     CC_TEST(ThermostatHandler, HoldingAButtonStepsOnlyOnce)
     {
         ResetWorld();
         World w;
+        WakePanel(w);
 
         PressButton(Board::UserButton2, true);
         w.handler.Loop();
@@ -404,6 +466,7 @@ namespace
         w.handler.ConnectionLost();
         w.handler.Snoop(Message());
 
+        WakePanel(w);
         PressButton(Board::UserButton2, true);
         w.handler.Loop();
         w.FlushToPeer();
@@ -431,7 +494,7 @@ namespace
         World w;
         DisplayWrites(); // Init()'s bring-up
 
-        PressButton(Board::UserButton2, true); // wakes the panel (and steps the setpoint)
+        PressButton(Board::UserButton2, true); // wakes the panel
         w.handler.Loop();
         CC_CHECK(DisplayWrites() > 1000); // one full frame (1 KB)
 
