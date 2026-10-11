@@ -35,6 +35,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
   private:
     void SampleRoom();
     void ServiceButtons(); // +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
+
     // What the panel shows, quantized the way it is drawn -- a change the
     // eye can't see (a 0.01 degC step) doesn't cost a redraw.
     struct SView
@@ -43,6 +44,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
         int16_t setpointTenths;
         int16_t humidityPercent;
         uint8_t damperBar; // filled pixels of the damper bar
+        uint8_t airMode; // NodeLib::AirMode coding
         bool    linkUp;
         bool    roomValid; // false: temperature and humidity show as dashes
 
@@ -82,6 +84,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
     // display cache from the ControllerNode
     uint8_t damperActual;
     uint8_t damperMode;
+    uint8_t airMode; // NodeLib::AirMode coding -- heating/cooling icon
 
     bool downWasPressed;
     bool upWasPressed;

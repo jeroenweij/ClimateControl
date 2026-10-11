@@ -36,6 +36,7 @@ const (
 	EndpointDamperMode   Endpoint = 0x32
 	EndpointDamperBudget Endpoint = 0x33 // max(1) [min(1)] %, set by the MainController
 	EndpointDumpRoom     Endpoint = 0x34 // RW 0/1, persisted on the ControllerNode
+	EndpointAirMode      Endpoint = 0x35 // 0 unknown 1 heating 2 cooling; ControllerNode -> Thermostat link only
 
 	EndpointSupplyTemp       Endpoint = 0x38
 	EndpointReturnTemp       Endpoint = 0x39
@@ -80,6 +81,7 @@ var endpointNames = map[Endpoint]string{
 	EndpointDamperMode:         "DamperMode",
 	EndpointDamperBudget:       "DamperBudget",
 	EndpointDumpRoom:           "DumpRoom",
+	EndpointAirMode:            "AirMode",
 	EndpointSupplyTemp:         "SupplyTemp",
 	EndpointReturnTemp:         "ReturnTemp",
 	EndpointSensorStatus:       "SensorStatus",

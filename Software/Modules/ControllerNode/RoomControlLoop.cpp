@@ -16,7 +16,8 @@ RoomControlLoop::RoomControlLoop(ThermostatLink& thermostatLink, const NodeLib::
     budgetMin(0),
     dumpRoom(false),
     connectionLost(false),
-    rampTimer()
+    rampTimer(),
+    airMode(NodeLib::AirMode::Unknown)
 {
 }
 
@@ -25,6 +26,17 @@ void RoomControlLoop::Loop()
     if (connectionLost)
     {
         StepBudgetRamp();
+    }
+
+    // Independent of DamperMode: the air is heating or cooling regardless of
+    // who positions the damper.
+    if (supplyTemp.Valid() && thermostatLink.Room().tempValid)
+    {
+        airMode = NodeLib::UpdateAirMode(airMode, supplyTemp.CentiDegC(), thermostatLink.Room().temp);
+    }
+    else
+    {
+        airMode = NodeLib::AirMode::Unknown;
     }
 
     if (damper.GetMode() != Damper::Mode::Auto)
@@ -52,6 +64,11 @@ void RoomControlLoop::Loop()
     {
         damper.SetTarget(target);
     }
+}
+
+NodeLib::AirMode RoomControlLoop::Air() const
+{
+    return airMode;
 }
 
 void RoomControlLoop::SetBudget(const uint8_t max, const uint8_t min)

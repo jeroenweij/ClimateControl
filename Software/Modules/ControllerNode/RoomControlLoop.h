@@ -9,6 +9,7 @@
 #include "DelayTimer.h"
 
 #include "Damper.h"
+#include "RoomDemand.h"
 #include "SupplyTemp.h"
 #include "ThermostatLink.h"
 
@@ -47,6 +48,10 @@ class RoomControlLoop
     // 100 on the dump room so the unit's air still has somewhere to go.
     void ConnectionLost();
 
+    // Heating/cooling as seen by this room: supply vs. room temperature,
+    // Unknown without both (ThermostatLink pushes it to the Thermostat).
+    NodeLib::AirMode Air() const;
+
   private:
     void StepBudgetRamp();
     // Moves the damper into [min, max] at once if it sits outside it.
@@ -68,4 +73,5 @@ class RoomControlLoop
     bool              dumpRoom;
     bool              connectionLost;
     Tools::DelayTimer rampTimer;
+    NodeLib::AirMode  airMode;
 };

@@ -6,7 +6,8 @@
  * host, against the unit-test fakes plus SimI2c (an emulated SSD1306 panel
  * and CHT40 sensor), and draws the panel in the terminal -- for working on
  * the UI without hardware. The paired ControllerNode is played by the
- * simulator: it polls the link every 200 ms and pushes DamperActual.
+ * simulator: it polls the link every 200 ms and pushes DamperActual and
+ * AirMode.
  *
  *   make -C Software sim-thermostat        (or: build-test/ThermostatSim [-2])
  *************************************************************/
@@ -23,6 +24,7 @@
 #include "BoardPins.h"
 #include "Logger.h"
 #include "Node.h"
+#include "RoomDemand.h"
 #include "stm32g0xx_hal.h"
 
 #include "Ssd1306.h"
@@ -55,6 +57,7 @@ namespace
     bool     sensorPresent = true;
     bool     linkEnabled   = true;
     uint8_t  damperPercent = 40;
+    uint8_t  airMode       = static_cast<uint8_t>(NodeLib::AirMode::Heating);
     bool     damperChanged = true;
     uint32_t upReleaseAt   = 0;
     uint32_t downReleaseAt = 0;
@@ -211,6 +214,10 @@ namespace
             m.data[0] = damperPercent;
             m.len     = 1;
             bus::InjectFrame(m);
+            Message air(Id(nodeId, Endpoint::AirMode, Operation::Set));
+            air.data[0] = airMode;
+            air.len     = 1;
+            bus::InjectFrame(air);
             damperChanged = false;
             nextDamper    = now + DamperResendMs;
         }
@@ -317,6 +324,8 @@ namespace
             sensorPresent ? "ok" : "MISSING",
             linkEnabled ? "up" : "DOWN",
             damperPercent);
+        static const char* const airNames[] = {"unknown", "heating", "cooling"};
+        Out(" air mode (from ControllerNode) %s\x1b[K\n", airMode < 3 ? airNames[airMode] : "?");
         Out(" ControllerNode last heard: setpoint %s  temp %s  RH %s\x1b[K\n",
             seenSetpoint ? FormatCenti(lastSetpoint, "C") : "-",
             seenTemp ? FormatCenti(lastTemp, "C") : "-",
@@ -325,6 +334,7 @@ namespace
 
         Out(" Up/Down or +/-  thermostat buttons (setpoint +/-0.5, wakes panel)\x1b[K\n");
         Out(" t/T room temp -/+0.1   h/H humidity -/+1%%   d/D damper -/+10%%\x1b[K\n");
+        Out(" a air mode: unknown -> heating -> cooling\x1b[K\n");
         Out(" s sensor present/missing   l link up/down   p snapshot (.pgm)   q quit\x1b[K\n\x1b[J");
 
         fwrite(frame, 1, frameLen, stdout);
@@ -400,6 +410,10 @@ namespace
                     break;
                 case 'D':
                     damperPercent = static_cast<uint8_t>(damperPercent <= 90 ? damperPercent + 10 : 100);
+                    damperChanged = true;
+                    break;
+                case 'a':
+                    airMode       = static_cast<uint8_t>((airMode + 1) % 3);
                     damperChanged = true;
                     break;
                 case 's':

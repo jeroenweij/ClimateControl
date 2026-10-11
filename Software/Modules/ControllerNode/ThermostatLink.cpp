@@ -79,7 +79,9 @@ ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     writeReplyProgramFailed(false),
     displayTimer(),
     lastPushedActual(0xFF),
-    lastPushedMode(0xFF)
+    lastPushedMode(0xFF),
+    airMode(static_cast<uint8_t>(NodeLib::AirMode::Unknown)),
+    lastPushedAirMode(0xFF)
 {
 }
 
@@ -160,6 +162,16 @@ void ThermostatLink::PushDisplay()
         link.SendToPeer(Endpoint::DamperMode, Operation::Set, &mode, 1);
         lastPushedMode = mode;
     }
+    if (airMode != lastPushedAirMode)
+    {
+        link.SendToPeer(Endpoint::AirMode, Operation::Set, &airMode, 1);
+        lastPushedAirMode = airMode;
+    }
+}
+
+void ThermostatLink::SetAirMode(const NodeLib::AirMode mode)
+{
+    airMode = static_cast<uint8_t>(mode);
 }
 
 void ThermostatLink::ReceivedMessage(const Message& m)
@@ -326,6 +338,10 @@ void ThermostatLink::ConnectionLost()
     room.setpointValid = false;
     roomTempTimer.Stop();
     fwKnown = false; // whatever comes back may be a different build
+    // ...and may have rebooted, losing its display cache: send it all again.
+    lastPushedActual  = 0xFF;
+    lastPushedMode    = 0xFF;
+    lastPushedAirMode = 0xFF;
     // An OTA in flight is not failed here: the peer is silent for a moment
     // both while it resets into the bootloader and while Begin erases the app
     // slot (~0.5-1 s, longer than linkTimeoutMs). enterBlTimer bounds the

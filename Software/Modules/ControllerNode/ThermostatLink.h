@@ -12,6 +12,7 @@
 #include "LinkMaster.h"
 
 #include "Damper.h"
+#include "RoomDemand.h"
 
 // The ControllerNode side of the point-to-point link to its paired Thermostat
 // (ControllerNode-Thermostat-Link-Spec.md §5). Registered as the LinkMaster's
@@ -48,6 +49,9 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Master setpoint override -- pushed down the link to the Thermostat
     // (ControllerNode-Thermostat-Link-Spec.md §5.3 / Node-Message-Model §3).
     void PushSetpoint(const int16_t centiDegC);
+    // Heating/cooling (RoomControlLoop::Air()), pushed with the display data
+    // for the Thermostat's icon.
+    void SetAirMode(const NodeLib::AirMode mode);
     // Packed (major << 8) | minor, matching the Firmware protocol's fwVersion.
     uint16_t ThermostatFwVersion() const;
     uint8_t  ThermostatBlState() const;
@@ -153,4 +157,6 @@ class ThermostatLink : public NodeLib::INodeHandler
     Tools::DelayTimer displayTimer;
     uint8_t           lastPushedActual;
     uint8_t           lastPushedMode;
+    uint8_t           airMode; // NodeLib::AirMode coding
+    uint8_t           lastPushedAirMode;
 };

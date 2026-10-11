@@ -26,7 +26,7 @@ MainController ──(main RS485 bus, many nodes)── ControllerNode ──(de
 | Protocol-spec concept | On this link | Why |
 |---|---|---|
 | `Id`/`Message` framing, CRC16, sync/resync (protocol spec §3–§5) | **Yes** | A clean, corruption-detected frame is worth having on a 2-endpoint link too — no reason for a different frame format. |
-| `Endpoint`/`Operation` enums (`Node-Message-Model-Spec.md`) | **A subset** | The **named-endpoint** blocks `System*`, `Room*` (`RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`), `DamperActual`/`DamperMode`, and `Firmware` — same values as the main bus. Never the `Transport` endpoint. Verbs: `Get`/`Set`/`Report`/`Ack`/`Nack`. The **`Thermostat` is the source of truth for `Room*`** and pushes `Report`s; the `ControllerNode` pushes `DamperActual`/`DamperMode` for the display. See `Node-Message-Model-Spec.md` §7. |
+| `Endpoint`/`Operation` enums (`Node-Message-Model-Spec.md`) | **A subset** | The **named-endpoint** blocks `System*`, `Room*` (`RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`), `DamperActual`/`DamperMode`/`AirMode`, and `Firmware` — same values as the main bus. Never the `Transport` endpoint. Verbs: `Get`/`Set`/`Report`/`Ack`/`Nack`. The **`Thermostat` is the source of truth for `Room*`** and pushes `Report`s; the `ControllerNode` pushes `DamperActual`/`DamperMode`/`AirMode` for the display. See `Node-Message-Model-Spec.md` §7. |
 | `Discover`/`Announce` | **Bring-up only** | The CN sends one `Discover` after reset / link loss to read the Thermostat's app-vs-bootloader `state` from its `Announce`. No periodic re-discovery. §5.3. |
 | `Poll`/`Done` transmit-window discipline | **Yes — single-peer** | There is nothing to arbitrate, but this is the discipline the bus-resident bootloader's `FirmwareSlave` speaks, so the same bootloader binary takes an image over this link with no OTA-specific code (§5). The CN runs `LinkMaster` — a single-peer master; the cost is one `Poll`/`Done` round-trip per cycle. |
 | Heartbeat / `ConnectionLost()` | **Yes** | Driven off the poll cycle (§5.3): 3 consecutive missed `Done` → `ConnectionLost()`. Surfaced on the main bus as `RoomLink` (0 down / 1 up). |
@@ -109,7 +109,9 @@ The `Thermostat` reuses the **STM32G031F8P6** (project MCU) and the node-core sc
 
 No motion/PIR sensor. The display is woken by a **button press**; after an inactivity timeout it dims (contrast register) then turns off (`0xAE`). Averaged over realistic use the OLED contributes < 0.1 mA — it effectively leaves the power budget, and the screen-off state also avoids burn-in of the static digits.
 
-While on, the panel is redrawn only when something it shows visibly changes (temperature/setpoint to 0.1 °C, humidity to 1 %, the damper bar's pixel width, link state), at most every 200 ms (`ThermostatHandler::RenderDisplay()`). A full redraw is a blocking 1 KB I²C transfer, ~0.1 s at 100 kHz, and the Thermostat serves its link from the same loop — the ControllerNode drops the link after 3 missed 200 ms polls — so redrawing every pass would put the link at risk.
+While on, the panel is redrawn only when something it shows visibly changes (temperature/setpoint to 0.1 °C, humidity to 1 %, the damper bar's pixel width, the status icon), at most every 200 ms (`ThermostatHandler::RenderDisplay()`). A full redraw is a blocking 1 KB I²C transfer, ~0.1 s at 100 kHz, and the Thermostat serves its link from the same loop — the ControllerNode drops the link after 3 missed 200 ms polls — so redrawing every pass would put the link at risk.
+
+Layout (128×64, `ThermostatHandler::RenderDisplay()`): the room temperature large and centred at the top (dashes while there is no sensor reading); a status icon in the top-right corner — an X while the ControllerNode link is down, otherwise a flame (heating) or snowflake (cooling) from the ControllerNode's `AirMode`, nothing while that is unknown; the setpoint bottom-left and the humidity with a % sign bottom-right; and the damper position as a 2 px bar along the bottom edge, full panel width at 100 %. Numbers are 7-segment digits; the icons and the % sign are string-art glyphs in the source. The PC simulator (`Software/Modules/Thermostat/sim`, `make -C Software sim-thermostat`) runs this code against an emulated panel for UI work without hardware.
 
 *Optional:* an ambient-light sensor (phototransistor on an ADC pin, or an I²C ALS on the shared bus) to drop OLED contrast in a dark room — near-zero added cost, not required.
 
@@ -210,7 +212,7 @@ The CN **bootloader never relays** — it only ever updates the CN itself. A The
 
 ### 5.2 The Thermostat runs full NodeLib
 
-The Thermostat application is an ordinary `NodeLib::Node` slave on its link USART (USART2, PA2/PA3 + PA1 DE), with `ConfigStore` giving it `module = Thermostat` and the fixed Thermostat `nodeId` (§5.2.1). It serves the §2 endpoint subset (`System*`; `Room*` as source of truth; `DamperActual`/`DamperMode` for the display; `Diagnostics*`; `Firmware`). The point-to-point nature of the link changes nothing on the slave side — it is effectively a `ControllerNode` app minus the damper, plus the OLED/sensor/buttons.
+The Thermostat application is an ordinary `NodeLib::Node` slave on its link USART (USART2, PA2/PA3 + PA1 DE), with `ConfigStore` giving it `module = Thermostat` and the fixed Thermostat `nodeId` (§5.2.1). It serves the §2 endpoint subset (`System*`; `Room*` as source of truth; `DamperActual`/`DamperMode`/`AirMode` for the display; `Diagnostics*`; `Firmware`). The point-to-point nature of the link changes nothing on the slave side — it is effectively a `ControllerNode` app minus the damper, plus the OLED/sensor/buttons.
 
 `Firmware` on the Thermostat is handled as on any node: a running app receiving `Firmware[EnterBootloader]` parks its UI, writes `Board::EnterBootloaderMagic` to the backup register and resets; the bootloader then serves the `Begin`/`Write`/`End`/`Activate` transfer.
 
@@ -238,7 +240,7 @@ The CN application instantiates, on its link USART, `NodeLib::LinkMaster` — a 
 | injects master `Set`/`Get` in the gaps | same |
 | `ConnectionLost()` from poll-cycle bookkeeping | **3** consecutive missed `Done` → `RoomLink = 0` + `ConnectionLost()` |
 
-Normal traffic: the Thermostat pushes `Room*` `Report`s in its poll window; the CN injects `Set DamperActual` / `Set DamperMode` for the display, and `Set RoomSetpoint` for a master override. One poll loop covers liveness, room-state relay and OTA.
+Normal traffic: the Thermostat pushes `Room*` `Report`s in its poll window; the CN injects `Set DamperActual` / `Set DamperMode` / `Set AirMode` for the display (each on change, and all again after the link comes back), and `Set RoomSetpoint` for a master override. One poll loop covers liveness, room-state relay and OTA.
 
 ### 5.4 `ThermostatFirmware` endpoint (`0x22`)
 

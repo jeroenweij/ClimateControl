@@ -31,6 +31,22 @@ namespace NodeLib
         const int16_t setpointCentiC,
         const int16_t deadbandCentiC = 30);
 
+    // What the duct air does for a room (Endpoint::AirMode coding).
+    enum class AirMode : uint8_t
+    {
+        Unknown = 0, // no supply or room temperature
+        Heating = 1, // supply warmer than the room
+        Cooling = 2, // supply colder than the room
+    };
+
+    // Supply more than bandCentiC above/below the room is Heating/Cooling;
+    // inside the band 'previous' is kept, so a tie doesn't flicker.
+    AirMode UpdateAirMode(
+        const AirMode previous,
+        const int16_t supplyCentiC,
+        const int16_t roomTempCentiC,
+        const int16_t bandCentiC = 30);
+
     // 0..100: magnitude of this room's unmet demand, scaled linearly from 0 at
     // deadbandCentiC to 100 at fullAuthorityCentiC past deadband. 0 whenever
     // !SupplyHelpsRoom().

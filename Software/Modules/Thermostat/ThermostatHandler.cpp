@@ -8,6 +8,7 @@
 
 #include "EEndpoint.h"
 #include "EOperation.h"
+#include "RoomDemand.h"
 
 #include "ThermostatHandler.h"
 
@@ -38,13 +39,90 @@ namespace
 
     // How long the panel stays lit after the last button press (§4.2:
     // "woken by a button press... after an inactivity timeout it... turns off").
-    constexpr uint32_t DisplayAwakeMs = 10000;
+    constexpr uint32_t DisplayAwakeMs = 60000;
 
     // Minimum time between display redraws (ThermostatHandler.h, shownView).
     constexpr uint32_t minRedrawMs = 200;
 
-    // Damper bar: 56 px inside a 60 px frame (RenderDisplay()).
-    constexpr int DamperBarPx = 56;
+    // Damper bar: the bottom DamperBarHeight rows, 100 % = the full panel width.
+    constexpr int DamperBarPx     = Ssd1306::Width;
+    constexpr int DamperBarHeight = 2;
+
+    // Digit boxes: {w, h, segment thickness}.
+    constexpr int BigW = 18, BigH = 30, BigT = 4; // room temperature
+    constexpr int BigY   = 6;
+    constexpr int SmallW = 8, SmallH = 14, SmallT = 2; // setpoint, humidity
+    constexpr int SmallY     = 42;
+    constexpr int SmallInset = 8; // setpoint / humidity distance from the panel edges
+
+    // Icons, '#' = lit (Ssd1306::DrawGlyph()).
+    const char* const flameGlyph[] = {
+        ".....#........",
+        ".....##.......",
+        "....###.......",
+        "....####......",
+        "...#####...#..",
+        "...######..##.",
+        "..#######.###.",
+        "..###########.",
+        ".#####.#######",
+        ".####...######",
+        ".###.....#####",
+        ".###..#...####",
+        ".###.###..####",
+        "..##.####.###.",
+        "...#########..",
+        ".....#####....",
+    };
+    const char* const snowflakeGlyph[] = {
+        "......#......",
+        ".#..#.#.#..#.",
+        "..#..###..#..",
+        "...#..#..#...",
+        ".#..#.#.#..#.",
+        "..#..###..#..",
+        "#############",
+        "..#..###..#..",
+        ".#..#.#.#..#.",
+        "...#..#..#...",
+        "..#..###..#..",
+        ".#..#.#.#..#.",
+        "......#......",
+    };
+    const char* const noLinkGlyph[] = {
+        "#........#",
+        "##......##",
+        ".##....##.",
+        "..##..##..",
+        "...####...",
+        "...####...",
+        "..##..##..",
+        ".##....##.",
+        "##......##",
+        "#........#",
+    };
+    const char* const percentGlyph[] = {
+        ".##.....##",
+        "#..#....##",
+        "#..#...##.",
+        "#..#...##.",
+        ".##...##..",
+        "......##..",
+        ".....##...",
+        "....##....",
+        "...##.....",
+        "..##...##.",
+        "..##..#..#",
+        ".##...#..#",
+        ".##...#..#",
+        "##.....##.",
+    };
+
+    template <int N>
+    constexpr int Rows(const char* const (&)[N])
+    {
+        return N;
+    }
 
     void PackU16(uint8_t* const p, const uint16_t v)
     {
@@ -75,6 +153,7 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     sensorFailures(0),
     damperActual(0),
     damperMode(0),
+    airMode(static_cast<uint8_t>(NodeLib::AirMode::Unknown)),
     downWasPressed(false),
     upWasPressed(false),
     linkUp(false),
@@ -195,7 +274,7 @@ void ThermostatHandler::WakeDisplay()
 bool ThermostatHandler::SView::operator==(const SView& other) const
 {
     return tempTenths == other.tempTenths && setpointTenths == other.setpointTenths &&
-        humidityPercent == other.humidityPercent && damperBar == other.damperBar && linkUp == other.linkUp &&
+        humidityPercent == other.humidityPercent && damperBar == other.damperBar && airMode == other.airMode && linkUp == other.linkUp &&
         roomValid == other.roomValid;
 }
 
@@ -205,7 +284,9 @@ ThermostatHandler::SView ThermostatHandler::CurrentView() const
     view.tempTenths      = static_cast<int16_t>(roomTemp / 10);
     view.setpointTenths  = static_cast<int16_t>(setpoint / 10);
     view.humidityPercent = static_cast<int16_t>(humidity / 100);
-    view.damperBar       = static_cast<uint8_t>((DamperBarPx * damperActual) / 100);
+    const int damper     = damperActual > 100 ? 100 : damperActual; // a bad Set can't overrun the panel
+    view.damperBar       = static_cast<uint8_t>((DamperBarPx * damper) / 100);
+    view.airMode         = airMode;
     view.linkUp          = linkUp;
     view.roomValid       = roomValid;
     return view;
@@ -236,49 +317,64 @@ void ThermostatHandler::RenderDisplay()
 
     display.Clear();
 
-    // Room temperature, big, top-left; degree mark; link status top-right.
-    // Dashes while there is no sensor reading.
+    // Room temperature, big, centred; dashes while there is no sensor reading.
     if (view.roomValid)
     {
-        display.DrawNumber(2, 2, 14, 24, 3, view.tempTenths, 1);
+        const int w = Ssd1306::NumberWidth(BigW, BigT, view.tempTenths, 1);
+        display.DrawNumber((Ssd1306::Width - w) / 2, BigY, BigW, BigH, BigT, view.tempTenths, 1);
     }
     else
     {
+        const int dashW = 14, dashGap = 6, w = 3 * dashW + 2 * dashGap;
         for (int i = 0; i < 3; i++)
         {
-            display.FillRect(2 + i * 20, 13, 14, 3, true);
+            display.FillRect((Ssd1306::Width - w) / 2 + i * (dashW + dashGap), BigY + BigH / 2 - 2, dashW, BigT, true);
         }
     }
-    display.FillCircle(72, 6, 2, true);
-    if (view.linkUp)
+
+    // Top-right: no link -> X; else what the duct air does for the room.
+    const char* const* icon     = nullptr;
+    int                iconRows = 0;
+    if (!view.linkUp)
     {
-        display.FillCircle(120, 6, 3, true);
+        icon     = noLinkGlyph;
+        iconRows = Rows(noLinkGlyph);
     }
-    else
+    else if (view.airMode == static_cast<uint8_t>(NodeLib::AirMode::Heating))
     {
-        display.DrawCircle(120, 6, 3, true);
+        icon     = flameGlyph;
+        iconRows = Rows(flameGlyph);
+    }
+    else if (view.airMode == static_cast<uint8_t>(NodeLib::AirMode::Cooling))
+    {
+        icon     = snowflakeGlyph;
+        iconRows = Rows(snowflakeGlyph);
+    }
+    if (icon != nullptr)
+    {
+        display.DrawGlyph(Ssd1306::Width - Ssd1306::GlyphWidth(icon) - 4, 4, icon, iconRows);
     }
 
-    // Setpoint, smaller, bottom-left, with a small square "target" marker.
-    display.DrawRect(2, 42, 5, 5, true);
-    display.DrawNumber(10, 40, 7, 12, 1, view.setpointTenths, 1);
+    // Setpoint, bottom-left.
+    display.DrawNumber(SmallInset, SmallY, SmallW, SmallH, SmallT, view.setpointTenths, 1);
 
-    // Humidity, bottom-middle.
+    // Humidity, bottom-right, with a % sign.
+    const int percentW = Ssd1306::GlyphWidth(percentGlyph);
+    const int percentX = Ssd1306::Width - SmallInset - percentW;
+    display.DrawGlyph(percentX, SmallY, percentGlyph, Rows(percentGlyph));
     if (view.roomValid)
     {
-        display.DrawNumber(66, 40, 7, 12, 1, view.humidityPercent, 0);
+        const int w = Ssd1306::NumberWidth(SmallW, SmallT, view.humidityPercent, 0);
+        display.DrawNumber(percentX - 3 - w, SmallY, SmallW, SmallH, SmallT, view.humidityPercent, 0);
     }
     else
     {
-        display.FillRect(66, 45, 7, 2, true);
-        display.FillRect(76, 45, 7, 2, true);
+        display.FillRect(percentX - 3 - 2 * SmallW - 3, SmallY + SmallH / 2 - 1, SmallW, SmallT, true);
+        display.FillRect(percentX - 3 - SmallW, SmallY + SmallH / 2 - 1, SmallW, SmallT, true);
     }
-    display.FillCircle(90, 44, 1, true);
-    display.FillCircle(93, 47, 1, true);
 
-    // Damper position, bottom row.
-    display.DrawRect(2, 58, 60, 5, true);
-    display.FillRect(4, 60, view.damperBar, 1, true);
+    // Damper position, bottom rows, edge to edge.
+    display.FillRect(0, Ssd1306::Height - DamperBarHeight, view.damperBar, DamperBarHeight, true);
 
     display.Flush();
 
@@ -385,6 +481,12 @@ void ThermostatHandler::ReceivedMessage(const Message& m)
             if (m.id.operation == Operation::Set && m.len >= 1)
             {
                 damperMode = m.data[0];
+            }
+            break;
+        case Endpoint::AirMode:
+            if (m.id.operation == Operation::Set && m.len >= 1)
+            {
+                airMode = m.data[0];
             }
             break;
 

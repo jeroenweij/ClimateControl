@@ -81,6 +81,19 @@ func DecodeValue(e Endpoint, data []byte) Value {
 		}
 		return Value{Kind: "enum", Num: float64(data[0]), Text: boolWord(data[0] != 0, "yes", "no")}
 
+	case EndpointAirMode:
+		if len(data) < 1 {
+			return raw
+		}
+		text := "unknown"
+		switch data[0] {
+		case 1:
+			text = "heating"
+		case 2:
+			text = "cooling"
+		}
+		return Value{Kind: "enum", Num: float64(data[0]), Text: text}
+
 	case EndpointRoomLink:
 		if len(data) < 1 {
 			return raw

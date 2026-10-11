@@ -53,3 +53,20 @@ uint8_t NodeLib::RoomDemandPercent(
     const int32_t numerator = static_cast<int32_t>(want) * 100;
     return static_cast<uint8_t>((numerator + span / 2) / span);
 }
+
+NodeLib::AirMode NodeLib::UpdateAirMode(
+    const AirMode previous,
+    const int16_t supplyCentiC,
+    const int16_t roomTempCentiC,
+    const int16_t bandCentiC)
+{
+    if (supplyCentiC > roomTempCentiC + bandCentiC)
+    {
+        return AirMode::Heating;
+    }
+    if (supplyCentiC < roomTempCentiC - bandCentiC)
+    {
+        return AirMode::Cooling;
+    }
+    return previous;
+}

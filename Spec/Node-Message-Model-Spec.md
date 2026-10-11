@@ -53,6 +53,7 @@ enum class Endpoint : uint8_t
     DamperMode     = 0x32,  // RW  enum: 0 closed 1 open 2 auto 3 manual; 4 stalled (RO fault code, Set never accepts it)
     DamperBudget   = 0x33,  // RW  max(1) [min(1)] %  -- range DamperTarget stays in while DamperMode == Auto, set by MainController (Damper-Budget-Spec.md §3.1, §5.5); 1-byte Set = min 0
     DumpRoom       = 0x34,  // RW  uint8 0/1  -- this room takes the surplus air when the others close (Damper-Budget-Spec.md §5.5); persisted on the node
+    AirMode        = 0x35,  // RO  enum: 0 unknown 1 heating 2 cooling -- supply vs. room temperature, with a 0.3 °C hysteresis band (NodeLib::UpdateAirMode); pushed to the Thermostat for its icon, not published on the main bus
 
     // 0x3_  application, TemperatureNode
     SupplyTemp     = 0x38,  // RO  int16 centi-degC
@@ -177,7 +178,7 @@ The `ControllerNode`↔`Thermostat` point-to-point link (`ControllerNode-Thermos
 |---|---|---|
 | `System*` | either | each end's own status / firmware / reset |
 | `Room*` (`RoomSetpoint`, `RoomTemp`, `RoomHumidity`, `RoomMode`) | Thermostat → ControllerNode | **Thermostat** (it has the sensor + UI) |
-| `DamperActual`, `DamperMode` | ControllerNode → Thermostat | ControllerNode (for the room display) |
+| `DamperActual`, `DamperMode`, `AirMode` | ControllerNode → Thermostat | ControllerNode (for the room display) |
 
 The `ControllerNode` does **not** forward frames between the two buses. Its `Room*` handler answers a main-bus `Get` from the cache its link handler keeps fresh; a main-bus `Set RoomSetpoint` (the master override) is applied by pushing it down the link.
 

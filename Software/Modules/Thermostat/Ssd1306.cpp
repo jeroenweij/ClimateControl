@@ -42,6 +42,33 @@ namespace
         0xA4, // resume to RAM content display
         0xA6, // normal (not inverted) display
     };
+
+    // Splits 'value' (>= 0) into decimal digits, least significant first,
+    // padded so there is at least one digit before the decimal point ("0.5",
+    // not ".5"). Returns the digit count.
+    int SplitDigits(int value, const int decimals, uint8_t (&digits)[6])
+    {
+        int n = 0;
+        if (value == 0)
+        {
+            digits[n++] = 0;
+        }
+        while (value > 0 && n < 6)
+        {
+            digits[n++] = static_cast<uint8_t>(value % 10);
+            value /= 10;
+        }
+        while (n <= decimals && n < 6)
+        {
+            digits[n++] = 0;
+        }
+        return n;
+    }
+
+    int DigitGap(const int w)
+    {
+        return w / 4 + 1;
+    }
 } // namespace
 
 Ssd1306::Ssd1306(Hal::I2c& bus, const uint8_t address7) :
@@ -229,23 +256,10 @@ void Ssd1306::DrawNumber(
         value = -value;
     }
 
-    uint8_t digits[6];
-    int     n = 0;
-    if (value == 0)
-    {
-        digits[n++] = 0;
-    }
-    while (value > 0 && n < static_cast<int>(sizeof(digits)))
-    {
-        digits[n++] = static_cast<uint8_t>(value % 10);
-        value /= 10;
-    }
-    while (n <= decimals && n < static_cast<int>(sizeof(digits)))
-    {
-        digits[n++] = 0; // e.g. "0.5", not ".5"
-    }
+    uint8_t   digits[6];
+    const int n = SplitDigits(value, decimals, digits);
 
-    const int gap    = w / 4 + 1;
+    const int gap    = DigitGap(w);
     int       cursor = x;
     if (negative)
     {
@@ -262,6 +276,43 @@ void Ssd1306::DrawNumber(
             cursor += t + gap;
         }
     }
+}
+
+int Ssd1306::NumberWidth(const int w, const int t, int value, const int decimals)
+{
+    const int gap   = DigitGap(w);
+    int       width = 0;
+    if (value < 0)
+    {
+        value = -value;
+        width += w / 2 + gap;
+    }
+    uint8_t digits[6];
+    width += SplitDigits(value, decimals, digits) * (w + gap);
+    if (decimals > 0)
+    {
+        width += t + gap;
+    }
+    return width - gap; // no gap after the last digit
+}
+
+void Ssd1306::DrawGlyph(const int x, const int y, const char* const* const rows, const int rowCount)
+{
+    for (int r = 0; r < rowCount; r++)
+    {
+        for (int c = 0; rows[r][c] != '\0'; c++)
+        {
+            if (rows[r][c] == '#')
+            {
+                SetPixel(x + c, y + r, true);
+            }
+        }
+    }
+}
+
+int Ssd1306::GlyphWidth(const char* const* const rows)
+{
+    return static_cast<int>(strlen(rows[0]));
 }
 
 void Ssd1306::Flush()

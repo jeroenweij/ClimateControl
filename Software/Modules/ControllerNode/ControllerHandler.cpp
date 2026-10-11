@@ -90,6 +90,7 @@ void ControllerHandler::Loop()
 {
     supplyTemp.Loop();
     roomControlLoop.Loop();
+    thermostatLink.SetAirMode(roomControlLoop.Air());
     damper.Loop();
     Publish();
 

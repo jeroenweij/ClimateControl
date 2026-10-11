@@ -6,8 +6,10 @@
 
 #include "Test.h"
 
+using NodeLib::AirMode;
 using NodeLib::RoomDemandPercent;
 using NodeLib::SupplyHelpsRoom;
+using NodeLib::UpdateAirMode;
 
 CC_TEST(SupplyHelpsRoom, ColdSupplyHelpsAWarmRoomWantingCooling)
 {
@@ -97,4 +99,20 @@ CC_TEST(RoomDemandPercent, RoundsToNearestRatherThanFlooring)
     // rounds DOWN to 10, same as floor would give -- confirms this weighs
     // the actual fractional part rather than just always adding one.
     CC_CHECK_EQ(RoomDemandPercent(1500, 2058, 2000), 10);
+}
+
+CC_TEST(UpdateAirMode, SupplyWarmerOrColderThanTheRoomPicksHeatingOrCooling)
+{
+    CC_CHECK(UpdateAirMode(AirMode::Unknown, 3000, 2100) == AirMode::Heating);
+    CC_CHECK(UpdateAirMode(AirMode::Unknown, 1500, 2100) == AirMode::Cooling);
+}
+
+CC_TEST(UpdateAirMode, InsideTheBandKeepsWhatItHad)
+{
+    CC_CHECK(UpdateAirMode(AirMode::Heating, 2110, 2100) == AirMode::Heating);
+    CC_CHECK(UpdateAirMode(AirMode::Cooling, 2110, 2100) == AirMode::Cooling);
+    CC_CHECK(UpdateAirMode(AirMode::Unknown, 2110, 2100) == AirMode::Unknown);
+    // exactly on the band edge is still inside it
+    CC_CHECK(UpdateAirMode(AirMode::Cooling, 2130, 2100) == AirMode::Cooling);
+    CC_CHECK(UpdateAirMode(AirMode::Cooling, 2131, 2100) == AirMode::Heating);
 }

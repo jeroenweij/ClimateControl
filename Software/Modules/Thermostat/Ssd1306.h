@@ -12,11 +12,10 @@
 // §4.1, Wisevision X096-2864KSWPG01-H30), page-addressing mode, internal
 // charge pump (the datasheet's I2C reference circuit).
 //
-// Deliberately no bitmap font: the whole UI is drawn from primitives (rects,
-// circles, 7-segment digits) so there is no glyph table to get subtly wrong
-// with no hardware to check it against -- every shape here is either a filled
-// rectangle or a standard, well-known algorithm (midpoint circle, 7-segment
-// truth table).
+// No bitmap font: numbers are 7-segment digits built from filled rectangles,
+// so they scale to any size. The few icons are drawn with DrawGlyph() from
+// '#'/'.' string art kept next to the code that uses them -- readable and
+// editable as-is, and checkable in the PC simulator (Modules/Thermostat/sim).
 class Ssd1306
 {
   public:
@@ -60,6 +59,15 @@ class Ssd1306
         const int t,
         int       value,
         const int decimals);
+
+    // The width in pixels DrawNumber() takes for the same arguments -- for
+    // centring or right-aligning a number.
+    static int NumberWidth(const int w, const int t, int value, const int decimals);
+
+    // String art: 'rows' are rowCount strings of equal length, '#' = pixel on,
+    // anything else left untouched; top-left at (x,y).
+    void       DrawGlyph(const int x, const int y, const char* const* const rows, const int rowCount);
+    static int GlyphWidth(const char* const* const rows);
 
     // Pushes the whole framebuffer to the panel (one page-addressed write per
     // page). Nothing appears on the physical panel before this is called.
