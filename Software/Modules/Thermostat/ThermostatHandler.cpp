@@ -56,23 +56,20 @@ namespace
     constexpr int SmallInset = 8; // setpoint / humidity distance from the panel edges
 
     // Icons, '#' = lit (Ssd1306::DrawGlyph()).
-    const char* const flameGlyph[] = {
-        ".....#........",
-        ".....##.......",
-        "....###.......",
-        "....####......",
-        "...#####...#..",
-        "...######..##.",
-        "..#######.###.",
-        "..###########.",
-        ".#####.#######",
-        ".####...######",
-        ".###.....#####",
-        ".###..#...####",
-        ".###.###..####",
-        "..##.####.###.",
-        "...#########..",
-        ".....#####....",
+    const char* const heatGlyph[] = {
+        "..##...##...##..",
+        ".##...##...##...",
+        "##...##...##....",
+        "##...##...##....",
+        "##...##...##....",
+        ".##...##...##...",
+        "..##...##...##..",
+        "...##...##...##.",
+        "....##...##...##",
+        "....##...##...##",
+        "....##...##...##",
+        "...##...##...##.",
+        "..##...##...##..",
     };
     const char* const snowflakeGlyph[] = {
         "......#......",
@@ -354,8 +351,8 @@ void ThermostatHandler::RenderDisplay()
     }
     else if (view.airMode == static_cast<uint8_t>(NodeLib::AirMode::Heating))
     {
-        icon     = flameGlyph;
-        iconRows = Rows(flameGlyph);
+        icon     = heatGlyph;
+        iconRows = Rows(heatGlyph);
     }
     else if (view.airMode == static_cast<uint8_t>(NodeLib::AirMode::Cooling))
     {
