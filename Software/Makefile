@@ -5,6 +5,8 @@
 #   make release   shorthand for `make build BUILD_TYPE=Release`, into build/release/
 #   make rebuild   wipe the current BUILD_TYPE's build dir and build from scratch
 #   make test      configure + build the host unit tests and run ctest
+#   make sim-thermostat   run the Thermostat UI simulator in this terminal
+#                  (host build; SIM_ARGS=-2 for a double-size panel)
 #   make check     verify formatting  (clang-format, non-mutating)
 #   make all       check, then test, then build
 #   make flash-full MODULE=<name>   flash bootloader+app (bench factory programming;
@@ -50,7 +52,7 @@ TIDY_ARGS   := $(shell $(CROSS) -E -x c++ -v /dev/null 2>&1 \
                  | sed -n 's|^ /|--extra-arg=-isystem/|p') \
                --extra-arg=--target=arm-none-eabi
 
-.PHONY: help build release configure rebuild test all clean check format tidy flash flash-full
+.PHONY: help build release configure rebuild test sim-thermostat all clean check format tidy flash flash-full
 .DEFAULT_GOAL := help
 
 help:
@@ -105,6 +107,14 @@ test:
 	$(CMAKE) -S test -B $(TEST_BUILD_DIR)
 	$(CMAKE) --build $(TEST_BUILD_DIR) -j $(JOBS)
 	$(CMAKE) -E chdir $(TEST_BUILD_DIR) ctest --output-on-failure
+
+# Real ThermostatHandler/Ssd1306 code on the host against an emulated panel +
+# sensor (Modules/Thermostat/sim/), drawn in the terminal -- UI work without
+# hardware.
+sim-thermostat:
+	$(CMAKE) -S test -B $(TEST_BUILD_DIR)
+	$(CMAKE) --build $(TEST_BUILD_DIR) -j $(JOBS) --target ThermostatSim
+	$(TEST_BUILD_DIR)/Thermostat_sim/ThermostatSim $(SIM_ARGS)
 
 all: check test build
 

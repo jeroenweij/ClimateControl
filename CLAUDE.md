@@ -31,7 +31,7 @@ ClimateControl/
         ├── MainController/   # RS485 bus master + server uplink + BudgetAllocator
         ├── ControllerNode/   # damper actuator slave: Damper, RoomControlLoop, ThermostatLink (link master)
         ├── TemperatureNode/  # duct temperature slave node (DS18B20 1-Wire driver, DuctChannel/TemperatureHandler)
-        └── Thermostat/       # room unit on the point-to-point link: CHT40 sensor, SSD1306 OLED, ThermostatHandler
+        └── Thermostat/       # room unit on the point-to-point link: CHT40 sensor, SSD1306 OLED, ThermostatHandler; sim/ = host terminal simulator of the UI (`make -C Software sim-thermostat`)
 ```
 
 Full rationale for this layout is in `Spec/Software-Architecture-Spec.md`. All six modules build (`make -C Software build`, or the `Software/` CMake project directly). The message model (`channel`→`endpoint`, redesigned `operation`) is `Spec/Node-Message-Model-Spec.md`.
