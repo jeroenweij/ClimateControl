@@ -53,6 +53,13 @@
 // position falls back to where it was when the overcurrent began -- the best
 // estimate of the jam point -- so a retry does not first snap the horn back
 // into the jam at full speed.
+//
+// Every powered move ends with one log line (DiagLog) of what the current
+// sense saw, for setting stallThresholdCounts on real hardware without a
+// debugger: "Srv <from>><to> pk<peak> av<mean> ov<ms>" -- peak and mean are
+// raw ADC counts like the threshold, over every sample while powered; ov is
+// the longest unbroken stretch at or above the threshold, in ms, the quantity
+// the stall decision itself rests on (a stall is ov reaching stallConfirmMs).
 class Damper
 {
   public:
@@ -150,6 +157,7 @@ class Damper
     void Slew();
     bool CheckStall();
     void PowerOff(const State next);
+    void LogSense() const;
 
     static uint16_t PulseFor(const uint8_t percent);
 
@@ -163,6 +171,13 @@ class Damper
     uint16_t          positionUs; // last commanded pulse, kept while unpowered
     uint16_t          stallStartUs; // positionUs when the overcurrent began
     uint32_t          lastSlewMs;
+    uint8_t           moveFrom; // Actual() when the rail came up, for the sense log line
+    uint16_t          sensePeak; // highest reading while powered
+    uint32_t          overSinceMs; // when the current run at/above the threshold began
+    bool              overRunning;
+    uint32_t          overLongestMs; // longest such run this move
+    uint32_t          senseSum; // sum and count of every reading while powered
+    uint32_t          senseSamples;
     Tools::DelayTimer settleTimer;
     Tools::DelayTimer stallTimer;
 };

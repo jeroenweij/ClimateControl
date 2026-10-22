@@ -2,9 +2,12 @@
  * Created by J. Weij
  *************************************************************/
 
+#include <string.h>
+
 #include "FakeAdc.h"
 #include "FakeClock.h"
 #include "FakePwm.h"
+#include "LogRing.h"
 #include "Test.h"
 #include "Tick.h"
 
@@ -20,6 +23,28 @@ namespace
         FakeClock::Reset();
         FakeAdc::Reset();
         FakePwm::Reset();
+        Tools::LogRing::Clear();
+    }
+
+    // The newest DiagLog line, without its "I: " level prefix ("" if none).
+    const char* LastLogLine()
+    {
+        static char last[Tools::LogRing::LineSize + 1];
+        last[0] = '\0';
+        uint8_t  buf[Tools::LogRing::LineSize];
+        uint32_t at = 0;
+        size_t   n;
+        while ((n = Tools::LogRing::Pop(buf, sizeof(buf), at)) > 0)
+        {
+            memcpy(last, buf, n);
+            last[n] = '\0';
+        }
+        return strlen(last) > 3 ? last + 3 : last;
+    }
+
+    bool StartsWith(const char* const text, const char* const prefix)
+    {
+        return strncmp(text, prefix, strlen(prefix)) == 0;
     }
 
     // Damper's timing constants are private; mirrored here from Damper.h so
@@ -400,4 +425,55 @@ CC_TEST(Damper, ResendingTheSameTargetDoesNotRestartTheMove)
 
     damper.SetTarget(77);
     CC_CHECK(!damper.Moving()); // already there -- no pointless servo power-up
+}
+
+CC_TEST(Damper, AMoveEndsWithOneLineOfWhatTheCurrentSenseSaw)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(100);
+    FakeAdc::SetValue(100);
+    RunFor(damper, SlewMs(25));
+    FakeAdc::SetValue(stallThresholdCounts + 100); // a harder stretch: 60 ms over, short of a stall
+    RunFor(damper, 70);
+    FakeAdc::SetValue(100);
+    RunFor(damper, SlewMs(25) + settleMs + 20);
+
+    CC_CHECK(!damper.Moving());
+    CC_CHECK(!damper.Stalled());
+    const char* const line = LastLogLine();
+    CC_CHECK(StartsWith(line, "Srv 50>100 pk600 av1")); // mean a shade over 100
+    CC_CHECK(strstr(line, " ov60") != nullptr);
+}
+
+CC_TEST(Damper, AFreeMoveLogsNoTimeOverTheThreshold)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    FakeAdc::SetValue(stallThresholdCounts - 1);
+    damper.SetTarget(0);
+    RunFor(damper, SlewMs(50) + settleMs + 20);
+
+    CC_CHECK(!damper.Moving());
+    CC_CHECK(strstr(LastLogLine(), " ov0") != nullptr);
+}
+
+CC_TEST(Damper, AStalledMoveLogsItsSenseLineToo)
+{
+    ResetWorld();
+    Damper damper;
+    damper.Init();
+
+    damper.SetTarget(0);
+    RunFor(damper, 100);
+    Stall(damper);
+
+    CC_CHECK(damper.Stalled());
+    const char* const line = LastLogLine();
+    CC_CHECK(StartsWith(line, "Srv 50>0 pk500 "));
+    CC_CHECK(strstr(line, " ov201") != nullptr); // the whole confirm window
 }

@@ -32,6 +32,13 @@ Damper::Damper() :
     positionUs(PulseFor(NeutralPercent)),
     stallStartUs(positionUs),
     lastSlewMs(0),
+    moveFrom(NeutralPercent),
+    sensePeak(0),
+    overSinceMs(0),
+    overRunning(false),
+    overLongestMs(0),
+    senseSum(0),
+    senseSamples(0),
     settleTimer(),
     stallTimer()
 {
@@ -161,6 +168,12 @@ void Damper::StartMove()
         // has been holding the horn -- so the servo sees no jump the moment
         // its rail comes up.
         pwm.SetPulseUs(positionUs);
+        moveFrom      = actual;
+        sensePeak     = 0;
+        senseSum      = 0;
+        senseSamples  = 0;
+        overRunning   = false;
+        overLongestMs = 0;
         enable.Write(true);
         stallTimer.Stop(); // no stale overcurrent window carried over from last time
     }
@@ -201,10 +214,30 @@ void Damper::Slew()
 
 bool Damper::CheckStall()
 {
-    if (currentSense.Read() < stallThresholdCounts)
+    const uint16_t counts = currentSense.Read();
+    if (counts > sensePeak)
     {
+        sensePeak = counts;
+    }
+    senseSum += counts;
+    senseSamples++;
+
+    if (counts < stallThresholdCounts)
+    {
+        overRunning = false;
         stallTimer.Stop(); // current dropped back down -- not a sustained stall
         return false;
+    }
+
+    const uint32_t now = Hal::Tick::Millis();
+    if (!overRunning)
+    {
+        overRunning = true;
+        overSinceMs = now;
+    }
+    if (now - overSinceMs > overLongestMs)
+    {
+        overLongestMs = now - overSinceMs;
     }
 
     if (!stallTimer.IsRunning())
@@ -226,11 +259,24 @@ bool Damper::CheckStall()
 
 void Damper::PowerOff(const State next)
 {
-    state = next;
+    const bool wasPowered = Moving();
+    state                 = next;
     enable.Write(false);
     pwm.SetPulseUs(0); // signal low -- never drive an unpowered servo's input
     settleTimer.Stop();
     stallTimer.Stop();
+    if (wasPowered)
+    {
+        LogSense();
+    }
+}
+
+void Damper::LogSense() const
+{
+    // Fits one 32-character DiagLog line ("I: " included) for any realistic
+    // reading; Tools::LogRing truncates the rare longer one.
+    const uint32_t mean = senseSamples > 0 ? senseSum / senseSamples : 0;
+    LOG_INFO("Srv " << moveFrom << ">" << target << " pk" << sensePeak << " av" << mean << " ov" << overLongestMs);
 }
 
 uint16_t Damper::PulseFor(const uint8_t percent)

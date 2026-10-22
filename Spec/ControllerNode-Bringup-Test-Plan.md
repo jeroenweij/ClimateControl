@@ -16,8 +16,8 @@ Everything below is implemented in firmware and covered by host unit tests, but 
   ```
   `DamperMode` `2` returns it to `Auto` (and drops the held target).
 - **Watch it on the Status page:** the damper shows `actual → target` until a move lands, and the **Fault** column shows an active stall in red, then "last: Damper stalled <time>" after it clears.
-- **Read the stall-sense ADC while a move runs:** J-Link `mem32 0x40012440 1` reads `ADC1_DR`, the last conversion. J-Link reads memory without halting, and `Damper::Loop()` samples every pass while the servo is powered.
-- **Node log:** `GET /api/nodes/<id>/log` drains the node's DiagLog ring (move, stall and park messages from `Damper`).
+- **Node log:** `GET /api/nodes/<id>/log` (or the Logs page) drains the node's DiagLog ring (move, stall and park messages from `Damper`).
+- **Read the stall-sense ADC:** every powered move ends with one log line, `Srv <from>><to> pk<peak> av<mean> ov<ms>`: the highest and the mean reading over every sample while the servo was powered, in raw ADC counts like `stallThresholdCounts`, and the longest unbroken stretch at or above that threshold in ms. `ov` is what the stall decision rests on: a move stalls when it reaches `stallConfirmMs` (200), so a free move's `ov` is its margin. `pk` alone is a single sample and can pass the threshold without coming near a stall. A stalled move logs it too, right after "Damper stall detected". Don't poll `ADC1_DR` over J-Link instead: each J-Link attach briefly halts the MCU, which pauses the slew and the stall timer and misses bus polls.
 
 ## 2. Board power-up (no servo connected)
 
@@ -49,7 +49,7 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 
 | # | Do | Expect | If not |
 |---|---|---|---|
-| 5.1 | Read `ADC1_DR` idle-powered, while moving freely, and with the horn blocked by hand (briefly) | Roughly ~90–240 counts running, ~830 stalled (`Node-Bus-Power-Path-Spec.md` §3.1.1) | Adjust `stallThresholdCounts` (now 500) in `Damper.h` so it sits clearly between the two |
+| 5.1 | Full moves with the horn free (several, both directions), then one with the horn blocked by hand (briefly); read each move's `Srv … pk av ov` log line | Free moves `ov0` or a few tens of ms at most; the blocked one stalls (`ov` ≈ 200) with `pk` well above the free moves' (`Node-Bus-Power-Path-Spec.md` §3.1.1 estimates ~90–240 running, ~830 stalled) | Free moves with `ov` near 200 → raise `stallThresholdCounts` (now 500) in `Damper.h`; a blocked move that doesn't stall → lower it |
 | 5.2 | Block the horn, command a move | Rail cut within ~200 ms (`stallConfirmMs`); `DamperMode` reports `4`; Fault column shows "Damper stalled"; log line "Damper stall detected" | — |
 | 5.3 | Next `DamperTarget` after a stall, also the same value | Stall clears, servo tries again; Fault column drops to "last: Damper stalled" | — |
 | 5.4 | 20× full 0 ↔ 100 moves, horn free | Never reports a stall (start-of-move current step doesn't false-trigger) | Raise `stallConfirmMs`, or check the switched-side reservoir cap |
