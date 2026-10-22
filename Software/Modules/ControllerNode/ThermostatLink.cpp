@@ -169,6 +169,13 @@ void ThermostatLink::PushDisplay()
     }
 }
 
+void ThermostatLink::ForgetPushedDisplay()
+{
+    lastPushedActual  = 0xFF;
+    lastPushedMode    = 0xFF;
+    lastPushedAirMode = 0xFF;
+}
+
 void ThermostatLink::SetAirMode(const NodeLib::AirMode mode)
 {
     airMode = static_cast<uint8_t>(mode);
@@ -180,7 +187,17 @@ void ThermostatLink::ReceivedMessage(const Message& m)
     {
         // Handed over by LinkMaster: the bootloader's carries its state byte
         // at data[1], the app's has none.
-        SetPeerState(m.len >= 2 ? m.data[1] : StateApp);
+        const uint8_t state = m.len >= 2 ? m.data[1] : StateApp;
+        SetPeerState(state);
+        if (state == StateApp)
+        {
+            // The app answers every Discover, including the first after it
+            // (re)booted -- an OTA or reset quicker than linkTimeoutMs never
+            // reaches ConnectionLost(), and the fresh app's display cache is
+            // empty. Send it all again; an unchanged damper would otherwise
+            // never be pushed.
+            ForgetPushedDisplay();
+        }
     }
     else if (m.id.operation == Operation::Report)
     {
@@ -339,9 +356,7 @@ void ThermostatLink::ConnectionLost()
     roomTempTimer.Stop();
     fwKnown = false; // whatever comes back may be a different build
     // ...and may have rebooted, losing its display cache: send it all again.
-    lastPushedActual  = 0xFF;
-    lastPushedMode    = 0xFF;
-    lastPushedAirMode = 0xFF;
+    ForgetPushedDisplay();
     // An OTA in flight is not failed here: the peer is silent for a moment
     // both while it resets into the bootloader and while Begin erases the app
     // slot (~0.5-1 s, longer than linkTimeoutMs). enterBlTimer bounds the

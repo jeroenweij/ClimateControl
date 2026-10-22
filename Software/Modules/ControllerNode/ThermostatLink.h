@@ -107,6 +107,7 @@ class ThermostatLink : public NodeLib::INodeHandler
     void SetPeerState(const uint8_t state);
     void OnOpReply(const bool nack, const uint8_t error);
     void PushDisplay();
+    void ForgetPushedDisplay(); // next PushDisplay() sends every value, changed or not
 
     NodeLib::LinkMaster& link;
     Damper&              damper;

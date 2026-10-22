@@ -675,3 +675,37 @@ CC_TEST(ThermostatLink, AsksTheThermostatForItsVersionUntilItAnswers)
     const int n2 = bus::DecodeTx(tx, 8);
     CC_CHECK(!FindMessage(tx, n2, Endpoint::SystemInfo, Operation::Get, nullptr));
 }
+
+CC_TEST(ThermostatLink, AFreshAppAnnounceGetsTheUnchangedDisplayValuesAgain)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false);
+    w.link.Loop();
+
+    // One display round: ThermostatLink queues, the peer's Done releases the
+    // queue, the next poll carries it. Returns whether DamperActual went out.
+    auto damperPushed = [&w]()
+    {
+        FakeBus::Reset();
+        w.thermostatLink.Loop();
+        bus::InjectFrame(Message(peerId, Operation::Done));
+        w.link.Loop();
+        FakeClock::Advance(200);
+        w.link.Loop();
+        Message tx[8];
+        return FindMessage(tx, bus::DecodeTx(tx, 8), Endpoint::DamperActual, Operation::Set, nullptr);
+    };
+
+    CC_CHECK(damperPushed()); // first push
+
+    FakeClock::Advance(1000); // past displayPushMs, nothing changed: no repeat
+    CC_CHECK(!damperPushed());
+
+    // The Thermostat rebooted (OTA, reset) faster than the link timeout --
+    // its fresh Announce is all the ControllerNode sees of it.
+    FakeClock::Advance(1000);
+    AnnouncePeer(false);
+    w.link.Loop();
+    CC_CHECK(damperPushed());
+}

@@ -240,7 +240,7 @@ The CN application instantiates, on its link USART, `NodeLib::LinkMaster` — a 
 | injects master `Set`/`Get` in the gaps | same |
 | `ConnectionLost()` from poll-cycle bookkeeping | **3** consecutive missed `Done` → `RoomLink = 0` + `ConnectionLost()` |
 
-Normal traffic: the Thermostat pushes `Room*` `Report`s in its poll window; the CN injects `Set DamperActual` / `Set DamperMode` / `Set AirMode` for the display (each on change, and all again after the link comes back), and `Set RoomSetpoint` for a master override. One poll loop covers liveness, room-state relay and OTA.
+Normal traffic: the Thermostat pushes `Room*` `Report`s in its poll window; the CN injects `Set DamperActual` / `Set DamperMode` / `Set AirMode` for the display (each on change, and all again after the link comes back or the Thermostat app answers a `Discover` — a reboot shorter than the link timeout never drops the link, and the fresh app's display cache is empty), and `Set RoomSetpoint` for a master override. One poll loop covers liveness, room-state relay and OTA.
 
 ### 5.4 `ThermostatFirmware` endpoint (`0x22`)
 
