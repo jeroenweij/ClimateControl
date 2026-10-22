@@ -32,7 +32,7 @@ namespace
     // explicitly mark both released before exercising anything else.
     void ReleaseBothButtons()
     {
-        GPIOA->IDR |= Board::UserButton.pin | Board::UserButton2.pin;
+        GPIOA->IDR |= Board::UserButton2.pin | Board::UserButton.pin;
     }
 
     void PressButton(const Hal::Pin& button, const bool pressed)
@@ -111,9 +111,9 @@ namespace
     // the next press steps the setpoint.
     void WakePanel(World& w)
     {
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
-        PressButton(Board::UserButton2, false);
+        PressButton(Board::UserButton, false);
         w.handler.Loop();
     }
 
@@ -164,7 +164,7 @@ namespace
         World w;
         WakePanel(w);
 
-        PressButton(Board::UserButton, true);
+        PressButton(Board::UserButton2, true);
         w.handler.Loop();
         w.FlushToPeer();
 
@@ -184,7 +184,7 @@ namespace
         World w;
         WakePanel(w);
 
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
         w.FlushToPeer();
 
@@ -206,9 +206,9 @@ namespace
         // Way more presses than needed to hit the floor from 21.00.
         for (int i = 0; i < 10; i++)
         {
-            PressButton(Board::UserButton, true);
+            PressButton(Board::UserButton2, true);
             w.handler.Loop();
-            PressButton(Board::UserButton, false);
+            PressButton(Board::UserButton2, false);
             w.handler.Loop();
         }
         w.FlushToPeer();
@@ -238,12 +238,12 @@ namespace
         FakeI2c::ClearWritten(Ssd1306::DefaultAddress);
 
         // Both buttons at once, panel asleep: wakes it, steps neither way.
-        PressButton(Board::UserButton, true);
         PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
         CC_CHECK(FakeI2c::WrittenLen(Ssd1306::DefaultAddress) > 0); // woke and drew
-        PressButton(Board::UserButton, false);
         PressButton(Board::UserButton2, false);
+        PressButton(Board::UserButton, false);
         w.handler.Loop();
         w.FlushToPeer();
 
@@ -266,7 +266,7 @@ namespace
         FakeClock::Advance(61000); // past the 60 s awake time
         w.handler.Loop(); // panel goes off
 
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
         w.FlushToPeer();
 
@@ -286,7 +286,7 @@ namespace
         World w;
         WakePanel(w);
 
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
         w.handler.Loop(); // still held -- must not step again
         w.FlushToPeer();
@@ -319,8 +319,8 @@ namespace
         {
             // 2349, not 2350 -- QueueSensorReading()'s encode and Cht40::Measure()'s
             // decode each truncate independently, same as the real 16-bit ADC ticks
-            // would; not an exact round trip.
-            CC_CHECK_EQ(ReadI16(tx[idx].data), 2349);
+            // would; not an exact round trip. Then the self-heating offset.
+            CC_CHECK_EQ(ReadI16(tx[idx].data), 2349 + ThermostatHandler::RoomTempOffsetCentiDegC);
         }
         CC_CHECK(FindMessage(tx, n, Endpoint::RoomHumidity, Operation::Report, nullptr));
     }
@@ -439,7 +439,7 @@ namespace
         // No public getter -- a button press wakes the display, which then
         // renders (and Flush()es) using the cached values; absence of a crash
         // plus a non-trivial write to the OLED is the observable contract here.
-        PressButton(Board::UserButton, true);
+        PressButton(Board::UserButton2, true);
         w.handler.Loop();
         CC_CHECK(FakeI2c::WrittenLen(0x3C) > 0);
     }
@@ -453,7 +453,7 @@ namespace
         w.handler.Loop(); // no button activity -- panel stays off, nothing drawn
         CC_CHECK_EQ(FakeI2c::WrittenLen(0x3C), 0);
 
-        PressButton(Board::UserButton, true);
+        PressButton(Board::UserButton2, true);
         w.handler.Loop();
         CC_CHECK(FakeI2c::WrittenLen(0x3C) > 0); // On() + a rendered frame went out
     }
@@ -467,7 +467,7 @@ namespace
         w.handler.Snoop(Message());
 
         WakePanel(w);
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop();
         w.FlushToPeer();
 
@@ -494,11 +494,11 @@ namespace
         World w;
         DisplayWrites(); // Init()'s bring-up
 
-        PressButton(Board::UserButton2, true); // wakes the panel
+        PressButton(Board::UserButton, true); // wakes the panel
         w.handler.Loop();
         CC_CHECK(DisplayWrites() > 1000); // one full frame (1 KB)
 
-        PressButton(Board::UserButton2, false);
+        PressButton(Board::UserButton, false);
         for (int i = 0; i < 20; i++)
         {
             FakeClock::Advance(50);
@@ -511,14 +511,14 @@ namespace
     {
         ResetWorld();
         World w;
-        PressButton(Board::UserButton2, true);
+        PressButton(Board::UserButton, true);
         w.handler.Loop(); // wake + first frame
-        PressButton(Board::UserButton2, false);
+        PressButton(Board::UserButton, false);
         w.handler.Loop();
         DisplayWrites();
 
         FakeClock::Advance(50);
-        PressButton(Board::UserButton2, true); // another setpoint step, 50 ms after the last frame
+        PressButton(Board::UserButton, true); // another setpoint step, 50 ms after the last frame
         w.handler.Loop();
         CC_CHECK_EQ(DisplayWrites(), 0u); // too soon -- waits
 

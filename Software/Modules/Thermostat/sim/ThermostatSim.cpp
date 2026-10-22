@@ -147,16 +147,23 @@ namespace
         releaseAt = FakeClock::Now() + ButtonHoldMs;
     }
 
+    // The sensor reads the room plus the board's self-heating, which the
+    // handler's RoomTempOffsetCentiDegC takes back out.
+    void SetSensorRoom()
+    {
+        SimI2c::SetRoom(static_cast<int16_t>(roomCentiDegC - ThermostatHandler::RoomTempOffsetCentiDegC), roomCentiRH);
+    }
+
     void ReleaseDueButtons()
     {
         if (upReleaseAt != 0 && FakeClock::Now() >= upReleaseAt)
         {
-            SetButton(Board::UserButton2, false);
+            SetButton(Board::UserButton, false);
             upReleaseAt = 0;
         }
         if (downReleaseAt != 0 && FakeClock::Now() >= downReleaseAt)
         {
-            SetButton(Board::UserButton, false);
+            SetButton(Board::UserButton2, false);
             downReleaseAt = 0;
         }
     }
@@ -386,11 +393,11 @@ namespace
             {
                 case '+':
                 case '=':
-                    Press(Board::UserButton2, upReleaseAt);
+                    Press(Board::UserButton, upReleaseAt);
                     break;
                 case '-':
                 case '_':
-                    Press(Board::UserButton, downReleaseAt);
+                    Press(Board::UserButton2, downReleaseAt);
                     break;
                 case 't':
                     roomCentiDegC = static_cast<int16_t>(roomCentiDegC - 10);
@@ -433,7 +440,7 @@ namespace
                     break;
             }
         }
-        SimI2c::SetRoom(roomCentiDegC, roomCentiRH);
+        SetSensorRoom();
         SimI2c::SetSensorPresent(sensorPresent);
         return true;
     }
@@ -468,9 +475,9 @@ int main(int argc, char** argv)
     FakeConfig::SetValid(true);
     FakeConfig::SetNodeId(nodeId);
     FakeConfig::SetModule(NodeLib::ModuleType::Thermostat);
-    SetButton(Board::UserButton, false);
     SetButton(Board::UserButton2, false);
-    SimI2c::SetRoom(roomCentiDegC, roomCentiRH);
+    SetButton(Board::UserButton, false);
+    SetSensorRoom();
 
     // Wired exactly as Modules/Thermostat/main.cpp does.
     NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart, 0);

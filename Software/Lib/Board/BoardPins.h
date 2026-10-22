@@ -72,7 +72,7 @@ namespace Board
     inline const Hal::Pin ErrorLed{GPIOB, GPIO_PIN_0}; // pin 15  net "LED_ERROR"   (NodeLib errorLedPin)
                                                        //   pin 15 bonds PB0/PB1/PB2/PA8 -- configure PB0 only
     inline const Hal::Pin UserButton{GPIOA, GPIO_PIN_11}; // pin 16  net "USER_BUTTON" active-low, InputPullUp
-                                                          //   Thermostat board: this is "button 1" (see UserButton2) --
+                                                          //   Thermostat board: this is "button 1", setpoint up (see UserButton2) --
                                                           //   driven by BS212C-1 KOUT1 (pin 3) there, not a switch;
                                                           //   NMOS-with-internal-pullup output, same polarity as a
                                                           //   plain switch-to-GND, so no firmware difference.
@@ -177,7 +177,7 @@ namespace Board
                                                      //   pin 1 bonds PB7/PB8; pin 20 bonds PB3/PB4/PB5/PB6.
     constexpr uint8_t     I2cAf = 6;
 
-    inline const Hal::Pin UserButton2{GPIOA, GPIO_PIN_12}; // pin 17  UI set/adjust, active-low, InputPullUp
+    inline const Hal::Pin UserButton2{GPIOA, GPIO_PIN_12}; // pin 17  UI setpoint down, active-low, InputPullUp
                                                            //   (button 1 is UserButton / PA11 above -- ErrorHandler ack
                                                            //    + clear link-lost). PA12 is USART1_DE on the other boards.
                                                            //   Thermostat board: driven by BS212C-1 KOUT2 (pin 4), same

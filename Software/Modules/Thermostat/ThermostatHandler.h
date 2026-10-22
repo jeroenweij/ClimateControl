@@ -24,6 +24,11 @@ class ThermostatHandler : public NodeLib::INodeHandler
   public:
     explicit ThermostatHandler(NodeLib::Node& node);
 
+    // Added to every CHT40 reading: the board's own heat (MCU, regulators,
+    // OLED) warms the sensor above the room air (spec §4.3). Measured on the
+    // first boards at ~2 degC high.
+    static constexpr int16_t RoomTempOffsetCentiDegC = -200;
+
     void Init();
     void Loop();
 
@@ -65,8 +70,8 @@ class ThermostatHandler : public NodeLib::INodeHandler
     Ssd1306   display;
     Hal::Gpio oledPower; // VBAT load-switch gate -- HIGH = OLED powered
     Hal::Gpio oledReset; // active-low, pulsed once at bring-up
-    Hal::Gpio buttonDown; // Board::UserButton  (PA11) -- setpoint -0.5
-    Hal::Gpio buttonUp; // Board::UserButton2 (PA12) -- setpoint +0.5
+    Hal::Gpio buttonUp; // Board::UserButton  (PA11) -- setpoint +0.5
+    Hal::Gpio buttonDown; // Board::UserButton2 (PA12) -- setpoint -0.5
 
     // Room* -- source of truth
     int16_t  setpoint; // centi-degC

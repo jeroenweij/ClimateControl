@@ -140,8 +140,8 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     display(i2c),
     oledPower(Board::OledPowerEnable, Hal::Gpio::Mode::Output),
     oledReset(Board::OledReset, Hal::Gpio::Mode::Output),
-    buttonDown(Board::UserButton, Hal::Gpio::Mode::InputPullUp),
-    buttonUp(Board::UserButton2, Hal::Gpio::Mode::InputPullUp),
+    buttonUp(Board::UserButton, Hal::Gpio::Mode::InputPullUp),
+    buttonDown(Board::UserButton2, Hal::Gpio::Mode::InputPullUp),
     setpoint(2100), // 21.00 degC
     roomTemp(0),
     humidity(0),
@@ -209,7 +209,7 @@ void ThermostatHandler::SampleRoom()
     uint16_t centiHumidity;
     if (sensor.Measure(centiDegC, centiHumidity))
     {
-        roomTemp       = centiDegC;
+        roomTemp       = static_cast<int16_t>(centiDegC + RoomTempOffsetCentiDegC);
         humidity       = centiHumidity;
         roomValid      = true;
         sensorFailures = 0;
