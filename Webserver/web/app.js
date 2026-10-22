@@ -174,17 +174,23 @@ async function loadPlacements() {
 // ---- map view -------------------------------------------------------
 
 function tempColor(c) {
-  // piecewise blue(16) -> green(21) -> red(26)
+  // piecewise blue(16) -> green(21) -> amber(23.5) -> red(26). The amber stop
+  // keeps the warm half from blending green into red through brown-grey,
+  // which is exactly where real rooms sit.
   const stops = [
     [16, [47, 111, 219]],
     [21, [63, 157, 90]],
+    [23.5, [230, 160, 40]],
     [26, [209, 72, 58]],
   ];
+  const last = stops.length - 1;
   if (c <= stops[0][0]) return rgb(stops[0][1]);
-  if (c >= stops[2][0]) return rgb(stops[2][1]);
-  const seg = c < stops[1][0] ? [stops[0], stops[1]] : [stops[1], stops[2]];
-  const t = (c - seg[0][0]) / (seg[1][0] - seg[0][0]);
-  return rgb(seg[0][1].map((v, i) => Math.round(v + t * (seg[1][1][i] - v))));
+  if (c >= stops[last][0]) return rgb(stops[last][1]);
+  let i = 0;
+  while (c > stops[i + 1][0]) i++;
+  const [lo, hi] = [stops[i], stops[i + 1]];
+  const t = (c - lo[0]) / (hi[0] - lo[0]);
+  return rgb(lo[1].map((v, j) => Math.round(v + t * (hi[1][j] - v))));
 }
 const rgb = ([r, g, b]) => `rgb(${r} ${g} ${b})`;
 
@@ -264,6 +270,7 @@ function paintOverlay(svg, floor, editable) {
   const selectedNode = editable ? parseInt($("#setup-node-select").value, 10) : null;
   let defs = `<defs>`;
   let blobs = "";
+  let mutedBlobs = ""; // rooms without a reading, drawn first so they never veil one that has
   let markers = "";
 
   for (const p of state.placements.filter((p) => p.floorId === floor.id)) {
@@ -278,14 +285,17 @@ function paintOverlay(svg, floor, editable) {
       <stop offset="0%" stop-color="${col}" stop-opacity="0.55"/>
       <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
     </radialGradient>`;
+    let blob = "";
     if (p.polyJson) {
       try {
         const pts = JSON.parse(p.polyJson).map((pt) => pt.join(",")).join(" ");
-        blobs += `<polygon points="${pts}" fill="${col}" fill-opacity="0.28"/>`;
+        blob = `<polygon points="${pts}" fill="${col}" fill-opacity="0.28"/>`;
       } catch {}
     } else {
-      blobs += `<circle cx="${p.xPx}" cy="${p.yPx}" r="${r}" fill="url(#${gid})"/>`;
+      blob = `<circle cx="${p.xPx}" cy="${p.yPx}" r="${r}" fill="url(#${gid})"/>`;
     }
+    if (temp == null) mutedBlobs += blob;
+    else blobs += blob;
     const current = temp == null ? "—" : temp.toFixed(1);
     const label = set && set.value.kind === "number" ? `${current} - ${set.value.num.toFixed(1)}` : current;
     const node = state.nodes.find((n) => n.id === p.nodeId);
@@ -316,7 +326,7 @@ function paintOverlay(svg, floor, editable) {
       draftMarkup += `<circle class="draft-vertex" cx="${draft.seed.x}" cy="${draft.seed.y}" r="${5 * k}"/>`;
     }
   }
-  svg.innerHTML = defs + blobs + markers + draftMarkup;
+  svg.innerHTML = defs + mutedBlobs + blobs + markers + draftMarkup;
 
   if (editable) {
     svg.onclick = (ev) => {
