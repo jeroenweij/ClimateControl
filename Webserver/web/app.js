@@ -1207,6 +1207,14 @@ function renderFirmwareNodes() {
     .join("");
 }
 
+// "5 · Bedrock Front" for the queue's Node column, from the node table's
+// targets; the bare id while the node has no name (or isn't listed).
+function jobNodeLabel(nodeId) {
+  const t = fwState.targets.find((t) => t.nodeId === nodeId && t.target !== "thermostat");
+  const id = nodeId === 0 ? "MC" : nodeId;
+  return t && t.name ? `${id} · ${esc(t.name)}` : `${id}`;
+}
+
 function renderFirmwareJobs(jobs) {
   fwState.jobs = jobs || [];
   const hidden = Math.max(0, fwState.jobs.length - FW_JOBS_SHOWN);
@@ -1220,7 +1228,7 @@ function renderFirmwareJobs(jobs) {
     .map((j) => {
       const pct = j.size ? Math.round((j.lastOffset / j.size) * 100) : 0;
       return `<tr>
-        <td>${j.id}</td><td>${j.nodeId}</td><td>${esc(j.target || "node")}</td><td>${esc(j.filename)}</td>
+        <td>${j.id}</td><td>${jobNodeLabel(j.nodeId)}</td><td>${esc(j.target || "node")}</td><td>${esc(j.filename)}</td>
         <td>${esc(j.state)}${j.error ? " – " + esc(j.error) : ""}</td>
         <td>${pct}%</td>
       </tr>`;
