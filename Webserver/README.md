@@ -189,7 +189,7 @@ cycle.
 | Page | Use |
 |---|---|
 | Map | live floor-plan heatmap of room temperatures |
-| Overrides | change a setpoint / damper mode; the value is held and re-applied if the node reboots |
+| Overrides | damper mode / target, held and re-applied if the node reboots; room setpoint and node-stored settings (dump room, thermostat offset), sent once |
 | Status | per-node status (online / offline / unexpected) and bus counters |
 | Logs | the MainController's log, live; a bus node's log, read over the bus on demand or followed |
 | Firmware | installed firmware per node, upload new images, push updates |
@@ -322,7 +322,7 @@ the wire protocol changes.
 | `GET /api/readings?node=&endpoint=&from=&to=&limit=` | history series, newest first: raw points, then hourly points (`min`/`max`/`n` set, `num` = mean) beyond the raw retention window |
 | `GET /api/nodes/{id}/log` | drain a node's `DiagLog` ring over the bus — its last few log lines, oldest first, each as `{text, ageSec}` (how long before the read the node logged it, from the node's uptime); reading empties the ring on the node |
 | `GET /api/main/log` | the MainController log lines the server holds (last 500, in memory), oldest first, each as `{ts, text}` (`ts` = unix ms when it was logged) |
-| `POST /api/commands` `{node,endpoint,value}` | queue a `Set`; held as an override |
+| `POST /api/commands` `{node,endpoint,value}` | queue a `Set`; `DamperTarget` / `DamperMode` are held as an override |
 | `GET/DELETE /api/overrides[/{node}/{endpoint}]` | held values |
 | `GET/POST/DELETE /api/floors[/{id}]`, `GET /api/floors/{id}/image` | floor plans |
 | `GET /api/placements`, `PUT/DELETE /api/placements/{node}` | node map positions |

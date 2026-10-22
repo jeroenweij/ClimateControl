@@ -62,3 +62,41 @@ func TestAProbeOffsetIsSentButNotHeld(t *testing.T) {
 		t.Fatalf("offset held as an override: %v -- the node persists it itself", ovs)
 	}
 }
+
+func TestARoomSetpointIsSentEveryTimeButNeverHeld(t *testing.T) {
+	svc, fs := newTestService(t)
+	ctx := context.Background()
+
+	// One held the old way must neither stay nor be re-asserted.
+	if err := svc.Store().SetOverride(ctx, 5, nodelib.EndpointRoomSetpoint, 10.5, "test"); err != nil {
+		t.Fatal(err)
+	}
+	svc.reassertOverrides(5)
+	for _, f := range fs.Frames() {
+		if f.Endpoint == nodelib.EndpointRoomSetpoint {
+			t.Fatal("a held RoomSetpoint was re-asserted")
+		}
+	}
+
+	for _, v := range []float64{21, 21} { // the same value twice: both go out
+		if err := svc.SendCommand(ctx, 5, nodelib.EndpointRoomSetpoint, v, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sets := 0
+	for _, f := range fs.Frames() {
+		if f.Endpoint == nodelib.EndpointRoomSetpoint && f.Operation == nodelib.OpSet {
+			sets++
+		}
+	}
+	if sets != 2 {
+		t.Fatalf("%d RoomSetpoint Sets sent, want 2", sets)
+	}
+	ovs, err := svc.Store().Overrides(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ovs) != 0 {
+		t.Fatalf("RoomSetpoint held as an override: %v", ovs)
+	}
+}

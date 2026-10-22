@@ -364,6 +364,14 @@ func persistedOnNode(ep nodelib.Endpoint) bool {
 		ep == nodelib.EndpointDumpRoom || ep == nodelib.EndpointRoomTempOffset
 }
 
+// heldByServer reports whether an operator Set is kept as an override and
+// re-asserted after a rejoin. Not for settings the node persists itself, and
+// not for RoomSetpoint: the Thermostat is the source of truth for it and its
+// own buttons change it, so a server-side hold would only fight them.
+func heldByServer(ep nodelib.Endpoint) bool {
+	return ep != nodelib.EndpointSystemControl && ep != nodelib.EndpointRoomSetpoint && !persistedOnNode(ep)
+}
+
 // DamperMode wire value for Manual (Node-Message-Model-Spec.md §3).
 const damperModeManual = 3
 
@@ -378,8 +386,8 @@ func (s *Service) reassertOverrides(node int) {
 	}
 	for _, o := range ovs {
 		ep, ok := nodelib.EndpointByName(o.Endpoint)
-		if !ok {
-			continue
+		if !ok || !heldByServer(ep) {
+			continue // e.g. a RoomSetpoint held before setpoints stopped being held
 		}
 		data, ok := nodelib.EncodeValue(ep, o.Value)
 		if !ok {
@@ -389,10 +397,11 @@ func (s *Service) reassertOverrides(node int) {
 	}
 }
 
-// SendCommand issues an operator Set, logs it, and (for writable endpoints)
-// stores the value as an override. Settings the node persists itself (the
-// probe calibration offsets, the dump-room flag) are not held: the node already keeps them across
-// resets, so there is nothing to re-assert after a rejoin.
+// SendCommand issues an operator Set, logs it, and stores the value as an
+// override when heldByServer(): settings the node persists itself (the
+// calibration offsets, the dump-room flag) need no re-asserting after a
+// rejoin, and a RoomSetpoint is a one-off Set the Thermostat's buttons may
+// change again.
 func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint, value float64, user string) error {
 	data, ok := nodelib.EncodeValue(ep, value)
 	if !ok {
@@ -404,8 +413,10 @@ func (s *Service) SendCommand(ctx context.Context, node int, ep nodelib.Endpoint
 	if !s.send.SendSet(node, ep, data) {
 		return ErrDownlinkUnavailable
 	}
-	if ep != nodelib.EndpointSystemControl && !persistedOnNode(ep) {
+	if heldByServer(ep) {
 		_ = s.st.SetOverride(ctx, node, ep, value, user)
+	} else if ep == nodelib.EndpointRoomSetpoint {
+		_ = s.st.DeleteOverride(ctx, node, ep) // one held before setpoints stopped being held
 	}
 	s.keepDamperOverridesConsistent(ctx, node, ep, value, user)
 	return nil

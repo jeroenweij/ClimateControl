@@ -27,7 +27,7 @@ function damperModeLabel(v) {
 // Model-Spec.md §5) and SystemControl is a one-shot action rather than a
 // held value (Service.SendCommand skips storing it as an override) -- only
 // these three are genuine, holdable overrides.
-const OVERRIDABLE_ENDPOINTS = ["RoomSetpoint", "DamperTarget", "DamperMode"];
+const OVERRIDABLE_ENDPOINTS = ["DamperTarget", "DamperMode"];
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -678,8 +678,23 @@ function overridesForNode(nodeId) {
 function renderOverrideCards() {
   const nodes = state.nodes.filter(isControllerLike);
   $("#override-empty").hidden = nodes.length > 0;
+  // A redraw (presence, faults) must not throw away what the user is typing.
+  const typed = new Map();
+  for (const input of $$("#override-cards input.ov-num[data-dirty]")) {
+    typed.set(`${input.closest(".ov-card").dataset.nodeCard}/${input.dataset.endpoint}`, input.value);
+  }
   $("#override-cards").innerHTML = nodes.map(renderOverrideCard).join("");
+  for (const input of $$("#override-cards input.ov-num")) {
+    const k = `${input.closest(".ov-card").dataset.nodeCard}/${input.dataset.endpoint}`;
+    if (!typed.has(k)) continue;
+    input.value = typed.get(k);
+    input.dataset.dirty = "1";
+  }
 }
+
+$("#override-cards").addEventListener("input", (e) => {
+  if (e.target.classList.contains("ov-num")) e.target.dataset.dirty = "1";
+});
 
 function liveText(nodeId, endpoint, fmt) {
   const v = state.values.get(key(nodeId, endpoint));
@@ -728,7 +743,23 @@ function dumpRoomButtons(nodeId) {
 }
 
 // Endpoints whose live value a card shows and refreshes in place.
-const LIVE_CARD_ENDPOINTS = ["DumpRoom", "DamperBudget", "RoomTemp", "RoomTempOffset"];
+const LIVE_CARD_ENDPOINTS = ["DumpRoom", "DamperBudget", "RoomTemp", "RoomSetpoint", "RoomTempOffset"];
+
+// Inputs that show a node's current value (data-live="<endpoint>", with the
+// decimals in data-digits): what the node last reported, for editing from
+// there -- an empty field would make the spinner start at its min. Once the
+// user edits one it is "dirty" and left alone until they send it.
+function liveInputValue(nodeId, endpoint, digits) {
+  const v = state.values.get(key(nodeId, endpoint));
+  return v && v.value.kind === "number" ? v.value.num.toFixed(digits) : "";
+}
+
+function refreshLiveInputs(card, nodeId) {
+  for (const input of $$("input[data-live]", card)) {
+    if (input.dataset.dirty || input === document.activeElement) continue;
+    input.value = liveInputValue(nodeId, input.dataset.live, parseInt(input.dataset.digits, 10));
+  }
+}
 
 // The Thermostat's stored sensor offset as "-0.90°C"; "—" while unknown.
 function tempOffsetText(nodeId) {
@@ -741,17 +772,20 @@ function refreshCardSettings(nodeId) {
   const card = $(`.ov-card[data-node-card="${nodeId}"]`);
   if (!card) return;
   $('[data-role="room"]', card).textContent = `room ${liveText(nodeId, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`)}`;
+  $('[data-role="setpoint"]', card).textContent = `setpoint ${liveText(nodeId, "RoomSetpoint", (v) => `${v.num.toFixed(1)}°C`)}`;
   $('[data-role="budget"]', card).textContent = `budget ${budgetText(nodeId) ?? "—"}`;
   $('[data-role="dump"]', card).innerHTML = dumpRoomButtons(nodeId);
   $('[data-role="offset"]', card).textContent = `now ${tempOffsetText(nodeId)}`;
+  refreshLiveInputs(card, nodeId);
   const msgEl = $('[data-role="ov-msg"]', card);
   if (msgEl.textContent === STORED_WAITING) msgEl.textContent = ""; // the node confirmed
 }
 
 const STORED_WAITING = "sent — waiting for the node";
 
-// A setting the node keeps in its own flash (DumpRoom, RoomTempOffset): no
-// override is held, the card follows the node's own Report of what it stored.
+// A plain Set with no override held -- settings the node keeps in its own
+// flash (DumpRoom, RoomTempOffset) and the Thermostat-owned RoomSetpoint: the
+// card follows the node's own Report of the value.
 async function sendStoredSetting(nodeId, endpoint, value, msgEl) {
   msgEl.className = "msg";
   msgEl.textContent = "sending…";
@@ -782,7 +816,7 @@ function renderOverrideCard(n) {
       <span class="pill ${STATUS_PILL[n.status] || "down"}">${esc(n.status)}</span>
     </div>
     <div class="ov-live">
-      <span data-role="room">room ${roomTxt}</span><span>setpoint ${setTxt}</span>
+      <span data-role="room">room ${roomTxt}</span><span data-role="setpoint">setpoint ${setTxt}</span>
       <span>damper ${damperTxt}</span><span>mode ${modeTxt}</span>
       <span data-role="budget">budget ${budgetText(n.id) ?? "—"}</span>
     </div>
@@ -810,14 +844,13 @@ function renderOverrideCard(n) {
     </div>
 
     <div class="ov-row">
-      <div class="ov-label">Room setpoint</div>
+      <div class="ov-label">Room setpoint <span class="hint">— sent to the Thermostat once; its own buttons can change it again</span></div>
       <div class="ov-inline">
         <input type="number" min="10" max="30" step="0.5" class="ov-num" data-endpoint="RoomSetpoint"
-          value="${ov.RoomSetpoint ? ov.RoomSetpoint.value : ""}" placeholder="${setTxt}">
+          data-live="RoomSetpoint" data-digits="1" value="${liveInputValue(n.id, "RoomSetpoint", 1)}">
         <span class="ov-unit">°C</span>
-        <button type="button" class="ov-set" data-node="${n.id}" data-endpoint="RoomSetpoint">Set &amp; hold</button>
+        <button type="button" class="ov-store" data-node="${n.id}" data-endpoint="RoomSetpoint">Set</button>
       </div>
-      ${heldBadge(n.id, ov.RoomSetpoint, (v) => `${Number(v).toFixed(1)}°C`)}
     </div>
 
     <div class="ov-row">
@@ -828,7 +861,8 @@ function renderOverrideCard(n) {
     <div class="ov-row">
       <div class="ov-label">Thermostat sensor offset <span class="hint">— added to every reading to take out the board's self-heating; stored on the Thermostat</span></div>
       <div class="ov-inline">
-        <input type="number" min="-10" max="10" step="0.1" class="ov-num" placeholder="${tempOffsetText(n.id)}">
+        <input type="number" min="-10" max="10" step="0.1" class="ov-num" data-endpoint="RoomTempOffset"
+          data-live="RoomTempOffset" data-digits="2" value="${liveInputValue(n.id, "RoomTempOffset", 2)}">
         <span class="ov-unit">°C</span>
         <button type="button" class="ov-store" data-node="${n.id}" data-endpoint="RoomTempOffset">Store</button>
         <span class="hint" data-role="offset">now ${tempOffsetText(n.id)}</span>
@@ -878,13 +912,14 @@ $("#override-cards").addEventListener("click", async (e) => {
   } else if (t.classList.contains("ov-store")) {
     const input = t.closest(".ov-inline").querySelector(".ov-num");
     if (input.value === "") return;
+    delete input.dataset.dirty; // sent: follow the node's Report again
     await sendStoredSetting(nodeId, t.dataset.endpoint, parseFloat(input.value), msgEl);
-    input.value = "";
   } else if (t.classList.contains("ov-opt")) {
     await sendOverride(nodeId, t.dataset.endpoint, parseFloat(t.dataset.value), msgEl);
   } else if (t.classList.contains("ov-set")) {
     const input = t.closest(".ov-inline").querySelector(".ov-num");
     if (input.value === "") return;
+    delete input.dataset.dirty;
     await sendOverride(nodeId, t.dataset.endpoint, parseFloat(input.value), msgEl);
   } else if (t.classList.contains("ov-clear")) {
     msgEl.className = "msg";
