@@ -11,6 +11,11 @@ void Hal::System::Init()
     HAL_Init();
 }
 
+void Hal::System::Sleep()
+{
+    __WFI();
+}
+
 bool Hal::System::ClockTo64MHz()
 {
     // The regulator resets into Range 1, which 64 MHz needs -- nothing to

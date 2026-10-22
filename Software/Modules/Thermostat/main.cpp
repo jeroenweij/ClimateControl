@@ -10,7 +10,6 @@
 #include "BoardPins.h"
 #include "BootHealth.h"
 #include "Fault.h"
-#include "Logger.h"
 #include "MemoryMap.h"
 #include "System.h"
 #include "Watchdog.h"
@@ -25,13 +24,10 @@ int main()
     Hal::System::Init();
     Hal::Fault::Init(); // records a watchdog reset before anything else runs
 
-    // 64 MHz from the HSI16 through the PLL -- before any peripheral comes
-    // up, since UART baud and the rest are derived from the clock. Still
-    // fully working at 16 MHz if the PLL won't lock.
-    if (!Hal::System::ClockTo64MHz())
-    {
-        LOG_WARN("PLL did not lock -- running at 16 MHz");
-    }
+    // Stays at the reset-default 16 MHz HSI and sleeps between loop passes,
+    // unlike the other boards' 64 MHz: the MCU's heat lands on the room
+    // sensor a few centimetres away (ControllerNode-Thermostat-Link-Spec.md
+    // §4.3), and a 2 s sensor read plus a small display need no more.
 
     NodeLib::Node     node(Hal::Uart::Instance::Usart2, Board::LinkUart, 0);
     ThermostatHandler handler(node);
@@ -47,5 +43,6 @@ int main()
         handler.Loop();
         node.Loop();
         Tools::BootHealth::ConfirmBootHealthy();
+        Hal::System::Sleep(); // until the 1 ms SysTick or a link byte
     }
 }

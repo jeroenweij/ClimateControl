@@ -31,6 +31,8 @@ class ThermostatLink : public NodeLib::INodeHandler
         int16_t  temp; // centi-degC
         uint16_t humidity; // centi-%RH
         uint8_t  mode; // DamperMode coding
+        int16_t  tempOffset; // centi-degC, the Thermostat's stored RoomTempOffset
+        bool     tempOffsetValid;
         bool     setpointValid;
         bool     tempValid; // reported, and refreshed within NodeLib::RoomTempStaleMs
         bool     valid; // both -- what the room loop needs
@@ -49,6 +51,9 @@ class ThermostatLink : public NodeLib::INodeHandler
     // Master setpoint override -- pushed down the link to the Thermostat
     // (ControllerNode-Thermostat-Link-Spec.md §5.3 / Node-Message-Model §3).
     void PushSetpoint(const int16_t centiDegC);
+    // RoomTempOffset Set relayed to the Thermostat, which stores it and
+    // Reports it back -- Room().tempOffset follows that Report.
+    void PushTempOffset(const int16_t centiDegC);
     // Heating/cooling (RoomControlLoop::Air()), pushed with the display data
     // for the Thermostat's icon.
     void SetAirMode(const NodeLib::AirMode mode);

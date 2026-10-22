@@ -68,6 +68,7 @@ enum class Endpoint : uint8_t
     RoomHumidity   = 0x42,  // RO  uint16 centi-%RH
     RoomMode       = 0x43,  // RO  enum (same coding as DamperMode)
     RoomLink       = 0x44,  // RO  0 down / 1 up
+    RoomTempOffset = 0x45,  // RW  int16 centi-degC, ±10.00 -- added to the raw room sensor reading; persisted on the Thermostat, Set relayed by the ControllerNode (link spec §4.3)
 
     // 0x5_  diagnostics — every node; NodeLib-owned (§6)
     DiagRxCounters = 0x50,  // RO  rxFrames(4) crcErrors(4) resyncs(4) interByteTimeouts(4)   -- from Frame
@@ -137,7 +138,7 @@ On-change push + slow keepalive + `Get` on demand:
 - The master may `Set`/`Get` any endpoint at any time — `Get` covers cold-start sync and forced refresh; the node answers with a `Report` in its next poll window.
 - **Faults:** `NodeLib` pushes `SystemStatus` itself whenever the app's `FillStatus()` `state` / `errorFlags` change (and once at start and after a lost connection), so a fault is visible upstream when it happens, not on the next `Get`. The `errorFlags` bit meanings are per module (`ControllerHandler.h`: bit 0 Thermostat link down, bit 1 damper stalled; `TemperatureHandler.h`: bit 0 return sensor, bit 1 supply sensor), mirrored by the server's `nodelib.FaultNames`.
 - `NodeLib` provides the plumbing (`Lib/NodeLib/Publisher`, owned by `Node`): the app declares each self-reported endpoint once — `Node::AddPublished(endpoint, size, minChange)`, 1- or 2-byte values — and hands in its current value every loop with `Node::PublishIfChanged(endpoint, value)`. `Node::Loop()` sends what is due: when first known, on a change of at least `minChange` from what was last reported (`TempMinChange` 0.1 °C, `HumidityMinChange` 1 %RH; 1 = any change for enums, setpoints and percentages), a keepalive every 60 s per value — staggered, one value per `60 s / count` — and everything again after the master was lost. Nothing is queued while the master isn't polling the node. `Node::ClearPublished(endpoint)` stops reporting a value that is no longer known (e.g. a missing probe), keepalives included. Composite payloads (`SystemStatus`, `ThermostatFirmware` status) are sent by their own code.
-- What each module publishes: **ControllerNode** — `DamperTarget`/`DamperActual`/`DamperMode`/`DamperBudget`/`DumpRoom`, `RoomLink`, and the paired Thermostat's `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode` once the Thermostat has supplied them (the MainController's `BudgetAllocator` and the server rely on these arriving unasked). **TemperatureNode** — `SupplyTemp`/`ReturnTemp` while their probe is present, `SensorStatus`. **Thermostat** (on its link) — `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`.
+- What each module publishes: **ControllerNode** — `DamperTarget`/`DamperActual`/`DamperMode`/`DamperBudget`/`DumpRoom`, `RoomLink`, and the paired Thermostat's `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`/`RoomTempOffset` once the Thermostat has supplied them (the MainController's `BudgetAllocator` and the server rely on these arriving unasked). **TemperatureNode** — `SupplyTemp`/`ReturnTemp` while their probe is present, `SensorStatus`. **Thermostat** (on its link) — `RoomSetpoint`/`RoomTemp`/`RoomHumidity`/`RoomMode`/`RoomTempOffset`.
 
 ### 6.2 Dispatch
 

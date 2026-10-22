@@ -728,7 +728,12 @@ function dumpRoomButtons(nodeId) {
 }
 
 // Endpoints whose live value a card shows and refreshes in place.
-const LIVE_CARD_ENDPOINTS = ["DumpRoom", "DamperBudget", "RoomTemp"];
+const LIVE_CARD_ENDPOINTS = ["DumpRoom", "DamperBudget", "RoomTemp", "RoomTempOffset"];
+
+// The Thermostat's stored sensor offset as "-0.90°C"; "—" while unknown.
+function tempOffsetText(nodeId) {
+  return liveText(nodeId, "RoomTempOffset", (v) => `${v.num > 0 ? "+" : ""}${v.num.toFixed(2)}°C`);
+}
 
 // Live update of a card's node-stored settings and room reading, without
 // redrawing the card (which would wipe half-typed override inputs).
@@ -738,23 +743,25 @@ function refreshCardSettings(nodeId) {
   $('[data-role="room"]', card).textContent = `room ${liveText(nodeId, "RoomTemp", (v) => `${v.num.toFixed(1)}°C`)}`;
   $('[data-role="budget"]', card).textContent = `budget ${budgetText(nodeId) ?? "—"}`;
   $('[data-role="dump"]', card).innerHTML = dumpRoomButtons(nodeId);
+  $('[data-role="offset"]', card).textContent = `now ${tempOffsetText(nodeId)}`;
   const msgEl = $('[data-role="ov-msg"]', card);
-  if (msgEl.textContent === DUMP_WAITING) msgEl.textContent = ""; // the node confirmed
+  if (msgEl.textContent === STORED_WAITING) msgEl.textContent = ""; // the node confirmed
 }
 
-const DUMP_WAITING = "sent — waiting for the node";
+const STORED_WAITING = "sent — waiting for the node";
 
-async function sendDumpRoom(nodeId, value, msgEl) {
+// A setting the node keeps in its own flash (DumpRoom, RoomTempOffset): no
+// override is held, the card follows the node's own Report of what it stored.
+async function sendStoredSetting(nodeId, endpoint, value, msgEl) {
   msgEl.className = "msg";
   msgEl.textContent = "sending…";
   try {
     await api("/api/commands", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ node: nodeId, endpoint: "DumpRoom", value }),
+      body: JSON.stringify({ node: nodeId, endpoint, value }),
     });
-    // The buttons follow the node's own Report of the stored flag.
-    msgEl.textContent = DUMP_WAITING;
+    msgEl.textContent = STORED_WAITING;
   } catch (err) {
     msgEl.className = "msg err";
     msgEl.textContent = err.message;
@@ -818,6 +825,16 @@ function renderOverrideCard(n) {
       <div class="ov-buttons" data-role="dump">${dumpRoomButtons(n.id)}</div>
     </div>
 
+    <div class="ov-row">
+      <div class="ov-label">Thermostat sensor offset <span class="hint">— added to every reading to take out the board's self-heating; stored on the Thermostat</span></div>
+      <div class="ov-inline">
+        <input type="number" min="-10" max="10" step="0.1" class="ov-num" placeholder="${tempOffsetText(n.id)}">
+        <span class="ov-unit">°C</span>
+        <button type="button" class="ov-store" data-node="${n.id}" data-endpoint="RoomTempOffset">Store</button>
+        <span class="hint" data-role="offset">now ${tempOffsetText(n.id)}</span>
+      </div>
+    </div>
+
     <span class="msg" data-role="ov-msg"></span>
   </div>`;
 }
@@ -857,7 +874,12 @@ $("#override-cards").addEventListener("click", async (e) => {
   const msgEl = t.closest(".ov-card").querySelector('[data-role="ov-msg"]');
 
   if (t.classList.contains("ov-dump")) {
-    await sendDumpRoom(nodeId, parseInt(t.dataset.value, 10), msgEl);
+    await sendStoredSetting(nodeId, "DumpRoom", parseInt(t.dataset.value, 10), msgEl);
+  } else if (t.classList.contains("ov-store")) {
+    const input = t.closest(".ov-inline").querySelector(".ov-num");
+    if (input.value === "") return;
+    await sendStoredSetting(nodeId, t.dataset.endpoint, parseFloat(input.value), msgEl);
+    input.value = "";
   } else if (t.classList.contains("ov-opt")) {
     await sendOverride(nodeId, t.dataset.endpoint, parseFloat(t.dataset.value), msgEl);
   } else if (t.classList.contains("ov-set")) {

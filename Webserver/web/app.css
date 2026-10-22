@@ -270,7 +270,7 @@ td .warn, td.warn { color: var(--warn); font-weight: 600; }
 .ov-inline { display: flex; align-items: center; gap: 0.4rem; }
 .ov-inline .ov-num { width: 5.5rem; padding: 0.35rem 0.5rem; }
 .ov-unit { color: var(--muted); font-size: 0.85rem; }
-.ov-set { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+.ov-set, .ov-store { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
 .ov-held {
   font-size: 0.8rem;
   color: var(--warn);

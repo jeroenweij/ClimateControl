@@ -44,11 +44,12 @@ const (
 	EndpointSupplyTempOffset Endpoint = 0x3B // RW, persisted on the TemperatureNode
 	EndpointReturnTempOffset Endpoint = 0x3C // RW, persisted on the TemperatureNode
 
-	EndpointRoomSetpoint Endpoint = 0x40
-	EndpointRoomTemp     Endpoint = 0x41
-	EndpointRoomHumidity Endpoint = 0x42
-	EndpointRoomMode     Endpoint = 0x43
-	EndpointRoomLink     Endpoint = 0x44
+	EndpointRoomSetpoint   Endpoint = 0x40
+	EndpointRoomTemp       Endpoint = 0x41
+	EndpointRoomHumidity   Endpoint = 0x42
+	EndpointRoomMode       Endpoint = 0x43
+	EndpointRoomLink       Endpoint = 0x44
+	EndpointRoomTempOffset Endpoint = 0x45 // RW, persisted on the Thermostat, relayed by its ControllerNode
 
 	EndpointDiagRxCounters Endpoint = 0x50
 	EndpointDiagTxCounters Endpoint = 0x51
@@ -92,6 +93,7 @@ var endpointNames = map[Endpoint]string{
 	EndpointRoomHumidity:       "RoomHumidity",
 	EndpointRoomMode:           "RoomMode",
 	EndpointRoomLink:           "RoomLink",
+	EndpointRoomTempOffset:     "RoomTempOffset",
 	EndpointDiagRxCounters:     "DiagRxCounters",
 	EndpointDiagTxCounters:     "DiagTxCounters",
 	EndpointDiagLastError:      "DiagLastError",

@@ -709,3 +709,24 @@ CC_TEST(ThermostatLink, AFreshAppAnnounceGetsTheUnchangedDisplayValuesAgain)
     w.link.Loop();
     CC_CHECK(damperPushed());
 }
+
+CC_TEST(ThermostatLink, PushTempOffsetSendsRoomTempOffsetToThePeer)
+{
+    ResetWorld();
+    World w;
+    AnnouncePeer(false);
+    w.link.Loop();
+
+    w.thermostatLink.PushTempOffset(-120);
+    FakeClock::Advance(250);
+    Flush(w.link);
+
+    Message   tx[4];
+    const int n   = bus::DecodeTx(tx, 4);
+    int       idx = -1;
+    CC_CHECK(FindMessage(tx, n, Endpoint::RoomTempOffset, Operation::Set, &idx));
+    if (idx >= 0)
+    {
+        CC_CHECK_EQ(static_cast<int16_t>(tx[idx].data[0] | (tx[idx].data[1] << 8)), -120);
+    }
+}

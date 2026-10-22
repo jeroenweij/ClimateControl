@@ -47,13 +47,14 @@ func main() {
 }
 
 type simNode struct {
-	id     int
-	module nodelib.Module
-	temp   float64
-	setpt  float64
-	supOff float64 // SupplyTempOffset, °C
-	retOff float64 // ReturnTempOffset, °C
-	dump   bool    // DumpRoom
+	id      int
+	module  nodelib.Module
+	temp    float64
+	setpt   float64
+	supOff  float64 // SupplyTempOffset, °C
+	retOff  float64 // ReturnTempOffset, °C
+	dump    bool    // DumpRoom
+	roomOff float64 // the Thermostat's RoomTempOffset, °C
 }
 
 func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fwMajor, fwMinor uint16) error {
@@ -67,7 +68,7 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 	var nodes []simNode
 	id := 1
 	for i := 0; i < nCtrl; i++ {
-		nodes = append(nodes, simNode{id: id, module: nodelib.ModuleControllerNode, temp: 20 + rand.Float64()*2, setpt: 21})
+		nodes = append(nodes, simNode{id: id, module: nodelib.ModuleControllerNode, temp: 20 + rand.Float64()*2, setpt: 21, roomOff: -0.9})
 		id++
 	}
 	for i := 0; i < nTemp; i++ {
@@ -218,6 +219,13 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 							log.Printf("node %d DumpRoom -> %v", f.Node, nodes[i].dump)
 							emit(write, nodes[i].id, nodelib.EndpointDumpRoom, f.Data[:1])
 						}
+						// Thermostat sensor offset: stored and echoed back, like the
+						// Thermostat's Report relayed by its ControllerNode.
+						if nodes[i].id == int(f.Node) && f.Endpoint == nodelib.EndpointRoomTempOffset && len(f.Data) >= 2 {
+							nodes[i].roomOff = float64(int16(uint16(f.Data[0])|uint16(f.Data[1])<<8)) / 100
+							log.Printf("node %d RoomTempOffset -> %.2f", f.Node, nodes[i].roomOff)
+							emit(write, nodes[i].id, f.Endpoint, f.Data[:2])
+						}
 						// Probe calibration: stored and echoed back as a Report, like the real node.
 						if nodes[i].id == int(f.Node) && len(f.Data) >= 2 &&
 							(f.Endpoint == nodelib.EndpointSupplyTempOffset || f.Endpoint == nodelib.EndpointReturnTempOffset) {
@@ -260,6 +268,7 @@ func run(addr string, token [16]byte, nCtrl, nTemp int, period time.Duration, fw
 						dump = 1
 					}
 					emit(write, n.id, nodelib.EndpointDumpRoom, []byte{dump})
+					emit(write, n.id, nodelib.EndpointRoomTempOffset, i16(n.roomOff*100))
 					emit(write, n.id, nodelib.EndpointDamperBudget, []byte{byte(clamp(damper+20, 0, 100)), 0})
 				} else {
 					supply := n.temp + 18

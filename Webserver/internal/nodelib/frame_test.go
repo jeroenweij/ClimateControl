@@ -89,13 +89,22 @@ func TestEncodeValueOffsetRoundsToTheNearestCentiDegree(t *testing.T) {
 		in   float64
 		want int16
 	}{{-1.3, -130}, {0.29, 29}, {-0.9, -90}, {1000, math.MaxInt16}} {
-		d, ok := EncodeValue(EndpointReturnTempOffset, tc.in)
-		if !ok || len(d) != 2 {
-			t.Fatalf("EncodeValue(%v) = %x ok=%v", tc.in, d, ok)
+		for _, ep := range []Endpoint{EndpointReturnTempOffset, EndpointRoomTempOffset} {
+			d, ok := EncodeValue(ep, tc.in)
+			if !ok || len(d) != 2 {
+				t.Fatalf("EncodeValue(%v, %v) = %x ok=%v", ep, tc.in, d, ok)
+			}
+			if got := int16(binary.LittleEndian.Uint16(d)); got != tc.want {
+				t.Errorf("EncodeValue(%v, %v) = %d, want %d", ep, tc.in, got, tc.want)
+			}
 		}
-		if got := int16(binary.LittleEndian.Uint16(d)); got != tc.want {
-			t.Errorf("EncodeValue(%v) = %d, want %d", tc.in, got, tc.want)
-		}
+	}
+}
+
+func TestRoomTempOffsetDecodesAsDegrees(t *testing.T) {
+	v := DecodeValue(EndpointRoomTempOffset, []byte{0xA6, 0xFF}) // -90
+	if v.Kind != "number" || v.Num != -0.9 || v.Unit != "°C" {
+		t.Fatalf("DecodeValue(RoomTempOffset) = %+v", v)
 	}
 }
 

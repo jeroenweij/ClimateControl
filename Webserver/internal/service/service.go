@@ -361,7 +361,7 @@ func (s *Service) keepDamperOverridesConsistent(ctx context.Context, node int, e
 // stores in its own flash, rather than state the server has to hold.
 func persistedOnNode(ep nodelib.Endpoint) bool {
 	return ep == nodelib.EndpointSupplyTempOffset || ep == nodelib.EndpointReturnTempOffset ||
-		ep == nodelib.EndpointDumpRoom
+		ep == nodelib.EndpointDumpRoom || ep == nodelib.EndpointRoomTempOffset
 }
 
 // DamperMode wire value for Manual (Node-Message-Model-Spec.md §3).

@@ -7,6 +7,7 @@
 #include "EEndpoint.h"
 #include "EFirmware.h"
 #include "EOperation.h"
+#include "RoomDemand.h"
 #include "SettingsPage.h"
 
 #include "ControllerHandler.h"
@@ -71,6 +72,7 @@ ControllerHandler::ControllerHandler(NodeLib::Node& node, Damper& damper, Thermo
     node.AddPublished(Endpoint::RoomHumidity, 2, NodeLib::HumidityMinChange);
     node.AddPublished(Endpoint::RoomMode, 1);
     node.AddPublished(Endpoint::RoomLink, 1);
+    node.AddPublished(Endpoint::RoomTempOffset, 2);
 }
 
 void ControllerHandler::Init()
@@ -228,6 +230,19 @@ void ControllerHandler::HandleRoom(const Message& m)
             thermostatLink.PushSetpoint(static_cast<int16_t>(ReadU16(m.data)));
             return;
         }
+        if (m.id.endpoint == Endpoint::RoomTempOffset && m.len >= 2)
+        {
+            // Range-checked here too: the Thermostat's own Nack doesn't come
+            // back up the link, so a bad value is refused while it can be.
+            const int16_t offset = static_cast<int16_t>(ReadU16(m.data));
+            if (offset > NodeLib::RoomTempOffsetLimit || offset < -NodeLib::RoomTempOffsetLimit)
+            {
+                Nack(m, NackBadRequest);
+                return;
+            }
+            thermostatLink.PushTempOffset(offset); // confirmed by the Thermostat's Report, relayed by Publish()
+            return;
+        }
         Nack(m, NackReadOnly);
         return;
     }
@@ -237,8 +252,10 @@ void ControllerHandler::HandleRoom(const Message& m)
         return;
     }
 
-    const bool isReading = m.id.endpoint == Endpoint::RoomTemp || m.id.endpoint == Endpoint::RoomHumidity;
-    if ((isReading && !room.tempValid) || (!isReading && m.id.endpoint != Endpoint::RoomLink && !room.setpointValid))
+    const bool isReading  = m.id.endpoint == Endpoint::RoomTemp || m.id.endpoint == Endpoint::RoomHumidity;
+    const bool isOffset   = m.id.endpoint == Endpoint::RoomTempOffset;
+    const bool isSetpoint = !isReading && !isOffset && m.id.endpoint != Endpoint::RoomLink;
+    if ((isReading && !room.tempValid) || (isOffset && !room.tempOffsetValid) || (isSetpoint && !room.setpointValid))
     {
         Nack(m, NackUnavailable); // nothing real to report
         return;
@@ -266,6 +283,10 @@ void ControllerHandler::HandleRoom(const Message& m)
         case Endpoint::RoomLink:
             payload[0] = thermostatLink.LinkUp() ? 1 : 0;
             Report(Endpoint::RoomLink, payload, 1);
+            break;
+        case Endpoint::RoomTempOffset:
+            PackU16(payload, static_cast<uint16_t>(room.tempOffset));
+            Report(Endpoint::RoomTempOffset, payload, 2);
             break;
         default:
             break;
@@ -349,6 +370,14 @@ void ControllerHandler::Publish()
     {
         node.ClearPublished(Endpoint::RoomSetpoint);
         node.ClearPublished(Endpoint::RoomMode);
+    }
+    if (room.tempOffsetValid)
+    {
+        node.PublishIfChanged(Endpoint::RoomTempOffset, room.tempOffset);
+    }
+    else
+    {
+        node.ClearPublished(Endpoint::RoomTempOffset);
     }
     if (room.tempValid)
     {

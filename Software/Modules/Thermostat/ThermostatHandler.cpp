@@ -9,6 +9,7 @@
 #include "EEndpoint.h"
 #include "EOperation.h"
 #include "RoomDemand.h"
+#include "SettingsPage.h"
 
 #include "ThermostatHandler.h"
 
@@ -21,7 +22,12 @@ namespace
 {
     constexpr uint8_t NackReadOnly    = 0x01;
     constexpr uint8_t NackBadRequest  = 0x02;
+    constexpr uint8_t NackWriteFailed = 0x04;
     constexpr uint8_t NackUnavailable = 0x05; // no valid sensor reading
+
+    // This node's runtime settings record (NodeLib::SettingsPage): payload
+    // bytes 0-1 = RoomTempOffset, int16 LE centi-degC.
+    constexpr uint32_t SettingsMagic = 0x54534854; // 'THST'
 
     // Failed samples in a row (one per sampleIntervalMs) before the room
     // reading is dropped: rides out a glitch, but a dead sensor stops being
@@ -146,6 +152,7 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     roomTemp(0),
     humidity(0),
     roomMode(2), // Auto
+    tempOffset(DefaultRoomTempOffsetCentiDegC),
     roomValid(false),
     sensorFailures(0),
     damperActual(0),
@@ -167,10 +174,18 @@ ThermostatHandler::ThermostatHandler(NodeLib::Node& node) :
     node.AddPublished(Endpoint::RoomTemp, 2, NodeLib::TempMinChange);
     node.AddPublished(Endpoint::RoomHumidity, 2, NodeLib::HumidityMinChange);
     node.AddPublished(Endpoint::RoomMode, 1);
+    node.AddPublished(Endpoint::RoomTempOffset, 2);
 }
 
 void ThermostatHandler::Init()
 {
+    uint8_t settings[2];
+    if (NodeLib::SettingsPage::Load(SettingsMagic, settings, sizeof(settings)))
+    {
+        tempOffset = static_cast<int16_t>(ReadU16(settings));
+    }
+    LOG_INFO("Room temperature offset " << tempOffset << " centi-degC");
+
     // OLED VBAT is behind an MCU-gated load switch, Hi-Z (off) by default at
     // reset (ControllerNode-Thermostat-Link-Spec.md §4.1) -- power it, then
     // pulse RES# per the datasheet's reset circuit (hold low >= 3us).
@@ -209,7 +224,7 @@ void ThermostatHandler::SampleRoom()
     uint16_t centiHumidity;
     if (sensor.Measure(centiDegC, centiHumidity))
     {
-        roomTemp       = static_cast<int16_t>(centiDegC + RoomTempOffsetCentiDegC);
+        roomTemp       = static_cast<int16_t>(centiDegC + tempOffset);
         humidity       = centiHumidity;
         roomValid      = true;
         sensorFailures = 0;
@@ -396,6 +411,7 @@ void ThermostatHandler::PublishRoom()
 {
     node.PublishIfChanged(Endpoint::RoomSetpoint, setpoint);
     node.PublishIfChanged(Endpoint::RoomMode, roomMode);
+    node.PublishIfChanged(Endpoint::RoomTempOffset, tempOffset);
     if (roomValid)
     {
         node.PublishIfChanged(Endpoint::RoomTemp, roomTemp);
@@ -467,6 +483,23 @@ void ThermostatHandler::ReceivedMessage(const Message& m)
             }
             break;
 
+        case Endpoint::RoomTempOffset:
+            if (m.id.operation == Operation::Get)
+            {
+                uint8_t p[2];
+                PackU16(p, static_cast<uint16_t>(tempOffset));
+                node.QueueMessage(Id(node.GetId(), Endpoint::RoomTempOffset, Operation::Report), p, 2);
+            }
+            else if (m.id.operation == Operation::Set && m.len >= 2)
+            {
+                SetTempOffset(m);
+            }
+            else
+            {
+                node.QueueMessage(Id(node.GetId(), m.id.endpoint, Operation::Nack), NackBadRequest);
+            }
+            break;
+
         case Endpoint::RoomTemp:
         case Endpoint::RoomHumidity:
         case Endpoint::RoomMode:
@@ -502,6 +535,34 @@ void ThermostatHandler::ReceivedMessage(const Message& m)
         default:
             break;
     }
+}
+
+void ThermostatHandler::SetTempOffset(const Message& m)
+{
+    const int16_t offset = static_cast<int16_t>(ReadU16(m.data));
+    if (offset > NodeLib::RoomTempOffsetLimit || offset < -NodeLib::RoomTempOffsetLimit)
+    {
+        node.QueueMessage(Id(node.GetId(), Endpoint::RoomTempOffset, Operation::Nack), NackBadRequest);
+        return;
+    }
+    if (offset != tempOffset) // a re-sent identical Set costs no flash cycle
+    {
+        uint8_t settings[2];
+        PackU16(settings, static_cast<uint16_t>(offset));
+        if (!NodeLib::SettingsPage::Save(SettingsMagic, settings, sizeof(settings)))
+        {
+            LOG_ERROR("RoomTempOffset write failed");
+            node.QueueMessage(Id(node.GetId(), Endpoint::RoomTempOffset, Operation::Nack), NackWriteFailed);
+            return;
+        }
+        // Shift the current reading too, rather than waiting for the next sample.
+        roomTemp   = static_cast<int16_t>(roomTemp - tempOffset + offset);
+        tempOffset = offset;
+        LOG_INFO("Room temperature offset " << tempOffset << " centi-degC");
+    }
+    uint8_t p[2];
+    PackU16(p, static_cast<uint16_t>(tempOffset));
+    node.QueueMessage(Id(node.GetId(), Endpoint::RoomTempOffset, Operation::Report), p, 2);
 }
 
 void ThermostatHandler::ConnectionLost()

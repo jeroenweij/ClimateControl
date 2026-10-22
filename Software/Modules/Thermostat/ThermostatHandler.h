@@ -25,9 +25,11 @@ class ThermostatHandler : public NodeLib::INodeHandler
     explicit ThermostatHandler(NodeLib::Node& node);
 
     // Added to every CHT40 reading: the board's own heat (MCU, regulators,
-    // OLED) warms the sensor above the room air (spec §4.3). Measured on the
-    // first boards at ~2 degC high.
-    static constexpr int16_t RoomTempOffsetCentiDegC = -200;
+    // OLED) warms the sensor above the room air (spec §4.3). Calibrated per
+    // unit through Endpoint::RoomTempOffset and kept in the settings page;
+    // this is the value until one is stored -- the first boards' steady-state
+    // self-heating, display off.
+    static constexpr int16_t DefaultRoomTempOffsetCentiDegC = -90;
 
     void Init();
     void Loop();
@@ -39,6 +41,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
 
   private:
     void SampleRoom();
+    void SetTempOffset(const NodeLib::Message& m);
     void ServiceButtons(); // panel off: a press only wakes it; on: +0.5/-0.5 setpoint step, clamped 19.00-23.00 degC
 
     // What the panel shows, quantized the way it is drawn -- a change the
@@ -78,6 +81,7 @@ class ThermostatHandler : public NodeLib::INodeHandler
     int16_t  roomTemp; // centi-degC, meaningful only while roomValid
     uint16_t humidity; // centi-%RH, meaningful only while roomValid
     uint8_t  roomMode; // DamperMode coding
+    int16_t  tempOffset; // centi-degC, added to every sensor reading (RoomTempOffset)
 
     // A real sensor reading exists and the sensor still answers: false until
     // the first good Measure(), and again after sensorFailLimit failures in a

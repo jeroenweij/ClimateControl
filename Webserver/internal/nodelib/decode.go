@@ -38,7 +38,7 @@ func DecodeValue(e Endpoint, data []byte) Value {
 
 	switch e {
 	case EndpointSupplyTemp, EndpointReturnTemp, EndpointRoomTemp, EndpointRoomSetpoint,
-		EndpointSupplyTempOffset, EndpointReturnTempOffset:
+		EndpointSupplyTempOffset, EndpointReturnTempOffset, EndpointRoomTempOffset:
 		if len(data) < 2 {
 			return raw
 		}
@@ -174,7 +174,7 @@ func EncodeValue(e Endpoint, num float64) (data []byte, ok bool) {
 	case EndpointRoomSetpoint, EndpointRoomTemp, EndpointSupplyTemp, EndpointReturnTemp:
 		v := int16(num * 100)
 		return binary.LittleEndian.AppendUint16(nil, uint16(v)), true
-	case EndpointSupplyTempOffset, EndpointReturnTempOffset:
+	case EndpointSupplyTempOffset, EndpointReturnTempOffset, EndpointRoomTempOffset:
 		// Rounded, not truncated: -1.3 must go out as -130, not -129. Out-of-
 		// range values are left for the node to Nack (±10.00 °C there); only
 		// clamp so the int16 can't wrap.

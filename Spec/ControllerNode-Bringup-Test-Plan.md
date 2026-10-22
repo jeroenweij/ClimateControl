@@ -81,8 +81,9 @@ Everything below is implemented in firmware and covered by host unit tests, but 
 | 8.1 | Flash a Thermostat with `make -C Software flash-full MODULE=thermostat` only (no provisioning) | Link comes up; `RoomLink` = 1 on the ControllerNode | Check link wiring, bias (R20/R21 on the CN side only) and termination |
 | 8.2 | Swap in a second, never-paired Thermostat | Works without any provisioning step (fixed link id) | — |
 | 8.3 | Thermostat OTA via the server (`ThermostatFirmware`) | Completes; Thermostat returns on the new version | — |
-| 8.4 | Scope I²C on the Thermostat | tLOW ≥ 4.7 µs, tHIGH ≥ 4.0 µs, rise time within Standard-mode limits | Adjust the `TIMINGR` constants in `Lib/HAL/I2c.cpp` |
+| 8.4 | Scope I²C on the Thermostat (it runs at 16 MHz; `TIMINGR`'s prescaler follows `SystemCoreClock`) | tLOW ≥ 4.7 µs, tHIGH ≥ 4.0 µs, rise time within Standard-mode limits | Adjust the `TIMINGR` constants in `Lib/HAL/I2c.cpp` |
 | 8.5 | Check the OLED's IREF source. `Ssd1306::Init()` never sends the SSD1315-only `0xAD` (IREF select) command, so it relies on the chip's reset default of external IREF. | Panel lights at normal, even brightness, and current flows through the 620 kΩ `IREF` resistor (there is voltage across it) | Add an explicit `0xAD` external-IREF select (value per the SSD1315 datasheet) to `initCommands` in `Modules/Thermostat/Ssd1306.cpp` |
+| 8.6 | Calibrate `RoomTempOffset`: Thermostat untouched in place ≥ 1.5 h, display off, reference thermometer beside it; store the difference from the server's room card | Reading matches the reference within ±0.2 °C, and still does after another hour | If it keeps drifting, look for another heat source near the sensor (link spec §4.3) |
 
 ## 9. Room-loop tuning (observation, not pass/fail)
 

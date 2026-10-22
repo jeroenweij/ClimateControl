@@ -148,10 +148,10 @@ namespace
     }
 
     // The sensor reads the room plus the board's self-heating, which the
-    // handler's RoomTempOffsetCentiDegC takes back out.
+    // handler's default offset takes back out.
     void SetSensorRoom()
     {
-        SimI2c::SetRoom(static_cast<int16_t>(roomCentiDegC - ThermostatHandler::RoomTempOffsetCentiDegC), roomCentiRH);
+        SimI2c::SetRoom(static_cast<int16_t>(roomCentiDegC - ThermostatHandler::DefaultRoomTempOffsetCentiDegC), roomCentiRH);
     }
 
     void ReleaseDueButtons()

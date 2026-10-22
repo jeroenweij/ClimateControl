@@ -56,7 +56,7 @@ namespace
 ThermostatLink::ThermostatLink(NodeLib::LinkMaster& link, Damper& damper) :
     link(link),
     damper(damper),
-    room{0, 0, 0, 0, false, false, false},
+    room{0, 0, 0, 0, 0, false, false, false, false},
     thermostatFw(0),
     otaState(OtaState::Idle),
     lastError(FirmwareError::None),
@@ -232,6 +232,13 @@ void ThermostatLink::ReceivedMessage(const Message& m)
                     room.mode = m.data[0];
                 }
                 break;
+            case Endpoint::RoomTempOffset:
+                if (m.len >= 2)
+                {
+                    room.tempOffset      = static_cast<int16_t>(ReadU16(m.data));
+                    room.tempOffsetValid = true;
+                }
+                break;
             case Endpoint::SystemInfo:
                 // module(1) hwRev(1) fwMajor(2) fwMinor(2)
                 if (m.len >= 6)
@@ -350,9 +357,10 @@ void ThermostatLink::QueryFirmwareVersion()
 void ThermostatLink::ConnectionLost()
 {
     LOG_WARN("Thermostat link down");
-    room.valid         = false;
-    room.tempValid     = false;
-    room.setpointValid = false;
+    room.valid           = false;
+    room.tempValid       = false;
+    room.setpointValid   = false;
+    room.tempOffsetValid = false;
     roomTempTimer.Stop();
     fwKnown = false; // whatever comes back may be a different build
     // ...and may have rebooted, losing its display cache: send it all again.
@@ -370,6 +378,15 @@ void ThermostatLink::PushSetpoint(const int16_t centiDegC)
         static_cast<uint8_t>(static_cast<uint16_t>(centiDegC) >> 8),
     };
     link.SendToPeer(Endpoint::RoomSetpoint, Operation::Set, payload, sizeof(payload));
+}
+
+void ThermostatLink::PushTempOffset(const int16_t centiDegC)
+{
+    const uint8_t payload[2] = {
+        static_cast<uint8_t>(centiDegC),
+        static_cast<uint8_t>(static_cast<uint16_t>(centiDegC) >> 8),
+    };
+    link.SendToPeer(Endpoint::RoomTempOffset, Operation::Set, payload, sizeof(payload));
 }
 
 const ThermostatLink::RoomState& ThermostatLink::Room() const

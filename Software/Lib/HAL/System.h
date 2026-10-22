@@ -16,13 +16,18 @@ namespace Hal
         // Switches SYSCLK (and HCLK/PCLK) to 64 MHz: HSI16 through the PLL
         // (x8 / 2), 2 flash wait states. SystemCoreClock and the 1 ms SysTick
         // follow, so everything that derives its timing from them (UART baud,
-        // Tick, Pwm) adapts; I2c's TIMINGR is written for 64 MHz. Accuracy is
+        // Tick, Pwm, I2c's TIMINGR) adapts. Accuracy is
         // the HSI16's own -- the PLL doesn't improve it. Call right after
         // Init(), before any peripheral is brought up. Applications only: the
         // bootloaders stay at 16 MHz, and JumpToApplication() / a reset both
         // return to it. False if the PLL didn't lock -- the clock is then left
         // at 16 MHz, which everything still works at.
         bool ClockTo64MHz();
+
+        // Sleep mode (WFI) until the next interrupt -- the 1 ms SysTick at the
+        // latest, or a UART byte. Peripherals and their interrupts keep
+        // running; call once per main-loop pass to stop the core spinning.
+        void Sleep();
 
         // Point the vector table at 'flashBase' (SCB->VTOR). An application
         // image linked above the bootloader must call this first thing in main()

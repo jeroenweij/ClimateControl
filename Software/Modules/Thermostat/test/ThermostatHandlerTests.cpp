@@ -12,6 +12,7 @@
 #include "FakeBus.h"
 #include "FakeClock.h"
 #include "FakeConfigStore.h"
+#include "FakeFlash.h"
 #include "FakeI2c.h"
 #include "Test.h"
 
@@ -55,6 +56,7 @@ namespace
         FakeConfig::SetValid(true);
         FakeConfig::SetNodeId(nodeId);
         FakeConfig::SetModule(ModuleType::Thermostat);
+        FakeFlash::Reset(); // blank settings page: the default offset
         FakeI2c::ResetAll();
         ReleaseBothButtons();
     }
@@ -320,7 +322,7 @@ namespace
             // 2349, not 2350 -- QueueSensorReading()'s encode and Cht40::Measure()'s
             // decode each truncate independently, same as the real 16-bit ADC ticks
             // would; not an exact round trip. Then the self-heating offset.
-            CC_CHECK_EQ(ReadI16(tx[idx].data), 2349 + ThermostatHandler::RoomTempOffsetCentiDegC);
+            CC_CHECK_EQ(ReadI16(tx[idx].data), 2349 + ThermostatHandler::DefaultRoomTempOffsetCentiDegC);
         }
         CC_CHECK(FindMessage(tx, n, Endpoint::RoomHumidity, Operation::Report, nullptr));
     }
@@ -525,5 +527,83 @@ namespace
         FakeClock::Advance(200); // past the 200 ms minimum
         w.handler.Loop();
         CC_CHECK(DisplayWrites() > 1000); // the pending change is drawn
+    }
+
+    // Sends a RoomTempOffset Set and returns the Thermostat's answer (Report
+    // or Nack) -- tx[idx] on success, idx -1 if it sent neither.
+    int SetTempOffset(World& w, const int16_t centiDegC, Message* const tx, const int max, const Operation answer)
+    {
+        const uint8_t payload[2] = {static_cast<uint8_t>(centiDegC), static_cast<uint8_t>(static_cast<uint16_t>(centiDegC) >> 8)};
+        FakeBus::Reset();
+        bus::InjectFrame(MakeMessage(Id(nodeId, Endpoint::RoomTempOffset, Operation::Set), payload, 2));
+        w.FlushToPeer();
+        int idx = -1;
+        FindMessage(tx, bus::DecodeTx(tx, max), Endpoint::RoomTempOffset, answer, &idx);
+        return idx;
+    }
+
+    int16_t GetTempOffset(World& w)
+    {
+        FakeBus::Reset();
+        bus::InjectFrame(Message(Id(nodeId, Endpoint::RoomTempOffset, Operation::Get)));
+        w.FlushToPeer();
+        Message tx[8];
+        int     idx = -1;
+        CC_CHECK(FindMessage(tx, bus::DecodeTx(tx, 8), Endpoint::RoomTempOffset, Operation::Report, &idx));
+        return idx >= 0 ? ReadI16(tx[idx].data) : 0;
+    }
+
+    CC_TEST(ThermostatHandler, WithoutAStoredOffsetTheDefaultIsAppliedAndReported)
+    {
+        ResetWorld();
+        World w;
+        CC_CHECK_EQ(GetTempOffset(w), ThermostatHandler::DefaultRoomTempOffsetCentiDegC);
+    }
+
+    CC_TEST(ThermostatHandler, ASetOffsetIsAppliedStoredAndSurvivesARestart)
+    {
+        ResetWorld();
+        {
+            World     w;
+            Message   tx[8];
+            const int idx = SetTempOffset(w, -150, tx, 8, Operation::Report);
+            CC_CHECK(idx >= 0);
+            if (idx >= 0)
+            {
+                CC_CHECK_EQ(ReadI16(tx[idx].data), -150);
+            }
+
+            QueueSensorReading(2350, 5000);
+            FakeClock::Advance(3000); // past sampleIntervalMs
+            w.handler.Loop();
+            FakeBus::Reset();
+            bus::InjectFrame(Message(Id(nodeId, Endpoint::RoomTemp, Operation::Get)));
+            w.FlushToPeer();
+            int t = -1;
+            CC_CHECK(FindMessage(tx, bus::DecodeTx(tx, 8), Endpoint::RoomTemp, Operation::Report, &t));
+            if (t >= 0)
+            {
+                CC_CHECK_EQ(ReadI16(tx[t].data), 2349 - 150); // see SampleRoomUpdates... for the 2349
+            }
+
+            const int erases = FakeFlash::EraseCount();
+            SetTempOffset(w, -150, tx, 8, Operation::Report); // same value again
+            CC_CHECK_EQ(FakeFlash::EraseCount(), erases); // no flash cycle
+        }
+
+        // Reboot -- settings page kept.
+        FakeBus::Reset();
+        FakeI2c::ResetAll();
+        World w2;
+        CC_CHECK_EQ(GetTempOffset(w2), -150);
+    }
+
+    CC_TEST(ThermostatHandler, AnOutOfRangeOffsetIsRefused)
+    {
+        ResetWorld();
+        World   w;
+        Message tx[8];
+        CC_CHECK(SetTempOffset(w, 1500, tx, 8, Operation::Nack) >= 0); // > 10.00 degC
+        CC_CHECK_EQ(GetTempOffset(w), ThermostatHandler::DefaultRoomTempOffsetCentiDegC);
     }
 } // namespace

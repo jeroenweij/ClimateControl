@@ -503,3 +503,46 @@ CC_TEST(ControllerHandler, ADumpRoomValueOtherThanZeroOrOneIsNacked)
     const int n = bus::DecodeTx(tx, 8);
     CC_CHECK(AnyNack(tx, n, Endpoint::DumpRoom));
 }
+
+CC_TEST(ControllerHandler, TheThermostatsTempOffsetIsRelayedUpOnceItReportsIt)
+{
+    ResetWorld();
+    World w;
+    Connect(w);
+
+    bus::InjectFrame(Message(Id(kNodeId, Endpoint::RoomTempOffset, Operation::Get)));
+    Flush(w.node);
+    Message tx[16];
+    CC_CHECK(AnyNack(tx, bus::DecodeTx(tx, 16), Endpoint::RoomTempOffset)); // nothing reported yet
+    FakeBus::TruncateTx(0);
+
+    Message fromThermostat(Id(NodeLib::THERMOSTAT_NODE_ID, Endpoint::RoomTempOffset, Operation::Report));
+    PackI16(fromThermostat.data, -90);
+    fromThermostat.len = 2;
+    w.thermostatLink.ReceivedMessage(fromThermostat);
+    Publish(w);
+
+    uint8_t value[2];
+    CC_CHECK(FindReport(tx, bus::DecodeTx(tx, 16), Endpoint::RoomTempOffset, value, 2));
+    CC_CHECK_EQ(static_cast<int16_t>(value[0] | (value[1] << 8)), -90);
+}
+
+CC_TEST(ControllerHandler, AnOutOfRangeTempOffsetIsNackedInsteadOfRelayed)
+{
+    ResetWorld();
+    World w;
+
+    Message set(Id(kNodeId, Endpoint::RoomTempOffset, Operation::Set));
+    PackI16(set.data, -1500); // beyond +-10.00 degC
+    set.len = 2;
+    bus::InjectFrame(set);
+    Flush(w.node);
+    Message tx[8];
+    CC_CHECK(AnyNack(tx, bus::DecodeTx(tx, 8), Endpoint::RoomTempOffset));
+
+    FakeBus::TruncateTx(0);
+    PackI16(set.data, -120);
+    bus::InjectFrame(set);
+    Flush(w.node);
+    CC_CHECK(!AnyNack(tx, bus::DecodeTx(tx, 8), Endpoint::RoomTempOffset)); // relayed, confirmed later by the Thermostat
+}

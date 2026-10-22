@@ -19,6 +19,12 @@ namespace NodeLib
     // its last reading, so silence is what a dead sensor looks like.
     constexpr uint32_t RoomTempStaleMs = 3 * 60 * 1000;
 
+    // Endpoint::RoomTempOffset's accepted range, centi-degC: +-10.00 degC is
+    // far beyond any self-heating worth correcting, so anything larger is a
+    // typo rather than a calibration. Checked by the Thermostat that stores
+    // it and by the ControllerNode before relaying a Set.
+    constexpr int16_t RoomTempOffsetLimit = 1000;
+
     // True if supply air at supplyCentiC would move a room at roomTempCentiC
     // toward setpointCentiC -- evaluated per room, not against a house-wide
     // heating/cooling label. A room too warm needs supply colder than itself;

@@ -17,6 +17,10 @@ namespace Hal
             return true;
         }
 
+        void Sleep()
+        {
+        }
+
         void SetVectorTable(const uint32_t)
         {
         }

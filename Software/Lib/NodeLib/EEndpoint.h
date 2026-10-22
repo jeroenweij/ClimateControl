@@ -45,11 +45,12 @@ namespace NodeLib
         ReturnTempOffset = 0x3C, // RW  int16 centi-degC, same for the return probe
 
         // 0x4_  room -- relayed from the paired Thermostat (ControllerNode only)
-        RoomSetpoint = 0x40, // RO / RW*  int16 centi-degC
-        RoomTemp     = 0x41, // RO  int16 centi-degC
-        RoomHumidity = 0x42, // RO  uint16 centi-%RH
-        RoomMode     = 0x43, // RO  enum (same coding as DamperMode)
-        RoomLink     = 0x44, // RO  0 down / 1 up
+        RoomSetpoint   = 0x40, // RO / RW*  int16 centi-degC
+        RoomTemp       = 0x41, // RO  int16 centi-degC
+        RoomHumidity   = 0x42, // RO  uint16 centi-%RH
+        RoomMode       = 0x43, // RO  enum (same coding as DamperMode)
+        RoomLink       = 0x44, // RO  0 down / 1 up
+        RoomTempOffset = 0x45, // RW  int16 centi-degC, added to the raw room sensor reading; persisted on the Thermostat
 
         // 0x5_  diagnostics -- every node; NodeLib-owned
         DiagRxCounters = 0x50, // RO  rxFrames(4) crcErrors(4) resyncs(4) interByteTimeouts(4)
@@ -140,6 +141,9 @@ namespace NodeLib
                 break;
             case Endpoint::RoomLink:
                 oStrStream << "RoomLink";
+                break;
+            case Endpoint::RoomTempOffset:
+                oStrStream << "RoomTempOffset";
                 break;
             case Endpoint::DiagRxCounters:
                 oStrStream << "DiagRxCounters";

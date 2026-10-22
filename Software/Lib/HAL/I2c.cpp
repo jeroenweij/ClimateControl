@@ -18,27 +18,31 @@ namespace
     // (missing/dead) should fail fast rather than hang the caller's main loop.
     constexpr uint32_t timeoutMs = 5;
 
-    // TIMINGR for Standard Mode (100 kHz) at a 64 MHz I2C kernel clock
-    // (I2C1 defaults to PCLK1, which is SYSCLK on this project's un-prescaled
-    // bus, Software-Architecture-Spec.md's 64 MHz Cortex-M0+ clock), derived
-    // by hand from RM0444 Sec32.4.9 rather than copied from an unrelated
-    // family/clock's CubeMX output:
-    //   PRESC=15  -> tPRESC = 16 / 64MHz     = 250 ns
+    // TIMINGR for Standard Mode (100 kHz). I2C1's kernel clock defaults to
+    // PCLK1, which is SYSCLK on this project's un-prescaled bus -- 64 MHz
+    // after System::ClockTo64MHz(), 16 MHz without it (the Thermostat). PRESC
+    // is picked from SystemCoreClock so tPRESC is 250 ns at either, and the
+    // rest is derived by hand from RM0444 Sec32.4.9 rather than copied from
+    // an unrelated family/clock's CubeMX output:
+    //   PRESC     -> tPRESC = (PRESC+1) / f    = 250 ns (15 at 64 MHz, 3 at 16 MHz)
     //   SCLL=21   -> tLOW   = 22 * tPRESC    = 5500 ns (>= 4700 ns spec min)
     //   SCLH=18   -> tHIGH  = 19 * tPRESC    = 4750 ns (>= 4000 ns spec min)
     //   -> tSCL ~= 10250 ns -> ~97.6 kHz, safely under the 100 kHz Sm cap.
     //   SCLDEL=4, SDADEL=2 -- conservative setup/hold margins, same ballpark
     //   as ST's own published Sm timing examples.
-    // TEMP: not yet verified on a scope against real silicon -- no Thermostat
-    // board on the bench yet (OTA-Debugging-TODO.md's bench notes are
-    // TemperatureNode-only). Re-check tLOW/tHIGH/rise-time once one exists.
-    constexpr uint32_t Presc  = 15;
-    constexpr uint32_t SclDel = 4;
-    constexpr uint32_t SdaDel = 2;
-    constexpr uint32_t SclH   = 18;
-    constexpr uint32_t SclL   = 21;
-    constexpr uint32_t TimingRValue =
-        (Presc << 28) | (SclDel << 20) | (SdaDel << 16) | (SclH << 8) | SclL;
+    // TEMP: not yet verified on a scope against real silicon (bring-up test
+    // plan 8.4). Re-check tLOW/tHIGH/rise-time on a Thermostat board.
+    constexpr uint32_t PrescTickHz = 4000000; // 1 / 250 ns
+    constexpr uint32_t SclDel      = 4;
+    constexpr uint32_t SdaDel      = 2;
+    constexpr uint32_t SclH        = 18;
+    constexpr uint32_t SclL        = 21;
+
+    uint32_t TimingRValue()
+    {
+        const uint32_t presc = SystemCoreClock / PrescTickHz - 1;
+        return (presc << 28) | (SclDel << 20) | (SdaDel << 16) | (SclH << 8) | SclL;
+    }
 
     void ConfigureAfPin(const Hal::Pin pin, const uint8_t alternateFunction)
     {
@@ -86,7 +90,7 @@ void I2c::Init()
     __HAL_RCC_I2C1_CLK_ENABLE();
 
     I2C1->CR1     = 0; // PE=0 while (re)configuring, per RM0444 Sec32.4.6
-    I2C1->TIMINGR = TimingRValue;
+    I2C1->TIMINGR = TimingRValue();
     I2C1->CR1     = I2C_CR1_PE;
 }
 
