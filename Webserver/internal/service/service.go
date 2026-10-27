@@ -56,6 +56,10 @@ type Service struct {
 	// every single one while we wait for the (once-per-boot) answer.
 	fwRequested map[int]bool
 
+	// Node ids in the roster stream being received; OnRosterEnd marks every
+	// other node offline.
+	rosterIDs map[int]bool
+
 	// Operator toggle (default off, not persisted -- resets to off on every
 	// restart): lets EnqueueUpdate/EnqueueUpdateAll re-push a same-or-older
 	// version image, for bench-testing the OTA path itself without bumping
@@ -82,6 +86,7 @@ func New(st *store.Store, hb *hub.Hub, log *slog.Logger) *Service {
 	return &Service{
 		st: st, hb: hb, log: log,
 		fwRequested: make(map[int]bool),
+		rosterIDs:   make(map[int]bool),
 		diagLog:     make(map[int]chan nodelib.Frame),
 		modules:     make(map[int]nodelib.Module),
 		faults:      make(map[int]*NodeFaults),
@@ -184,6 +189,7 @@ func (s *Service) OnConnect(h nodelib.UplinkHello) {
 func (s *Service) OnDisconnect() {
 	s.mu.Lock()
 	s.mcBootloader = false
+	s.rosterIDs = make(map[int]bool) // a roster cut off mid-stream is no snapshot
 	s.mu.Unlock()
 	s.hb.SetUplink(false, false)
 }
@@ -250,6 +256,9 @@ func (s *Service) OnNodeFrame(f nodelib.Frame) {
 // OnRosterEntry records one node from a roster stream.
 func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	ctx := context.Background()
+	s.mu.Lock()
+	s.rosterIDs[int(e.NodeID)] = true
+	s.mu.Unlock()
 	_ = s.st.UpsertNode(ctx, int(e.NodeID), e.Module, true)
 	_ = s.st.SetNodeState(ctx, int(e.NodeID), int(e.State))
 	s.setModule(int(e.NodeID), e.Module)
@@ -264,6 +273,36 @@ func (s *Service) OnRosterEntry(e nodelib.RosterEntry) {
 	// report on change, have nothing new to say. Ask for whatever is missing.
 	if e.State == 0 {
 		s.refillState(int(e.NodeID), e.Module, true)
+	}
+}
+
+// OnRosterEnd closes a roster stream. The MainController lists only the
+// nodes active right now, and dumping a roster re-seeds its own presence
+// tracking, so a node that dropped while the uplink was down (or before a
+// MainController reboot) never gets a NodePresence down -- any node still
+// flagged online but missing from this roster has gone.
+func (s *Service) OnRosterEnd() {
+	ctx := context.Background()
+	s.mu.Lock()
+	listed := s.rosterIDs
+	s.rosterIDs = make(map[int]bool)
+	modules := make(map[int]nodelib.Module, len(s.modules))
+	for id, m := range s.modules {
+		modules[id] = m
+	}
+	s.mu.Unlock()
+
+	nodes, err := s.st.Nodes(ctx)
+	if err != nil {
+		s.log.Warn("roster end: list nodes", "err", err)
+		return
+	}
+	for _, n := range nodes {
+		if !n.Online || listed[n.ID] {
+			continue
+		}
+		_ = s.st.SetNodeOffline(ctx, n.ID)
+		s.hb.PublishPresence(n.ID, modules[n.ID], false)
 	}
 }
 

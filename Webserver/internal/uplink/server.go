@@ -26,6 +26,9 @@ type Handler interface {
 	// OnNodeFrame is a relayed frame from the bus (endpoint 0x10-0x5F).
 	OnNodeFrame(f nodelib.Frame)
 	OnRosterEntry(e nodelib.RosterEntry)
+	// OnRosterEnd is the roster stream's terminator (nodeId 0xFF): the
+	// entries since the previous one are every node active on the bus.
+	OnRosterEnd()
 	OnPresence(p nodelib.NodePresence)
 	OnMainStatus(s nodelib.MainStatus)
 	OnThermostatStatus(t nodelib.ThermostatStatus)
@@ -246,7 +249,9 @@ func (c *conn) dispatch(f nodelib.Frame, h Handler) {
 		h.OnNodeFrame(f)
 
 	case f.Endpoint == nodelib.EndpointRoster && f.Operation == nodelib.OpReport:
-		if e, ok := nodelib.ParseRosterEntry(f.Data); ok && e.NodeID != nodelib.NodeBroadcast {
+		if len(f.Data) >= 1 && f.Data[0] == nodelib.NodeBroadcast {
+			h.OnRosterEnd()
+		} else if e, ok := nodelib.ParseRosterEntry(f.Data); ok {
 			h.OnRosterEntry(e)
 		}
 	case f.Endpoint == nodelib.EndpointNodePresence && f.Operation == nodelib.OpReport:

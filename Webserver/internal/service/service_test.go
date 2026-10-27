@@ -35,6 +35,31 @@ func TestOnPresenceCreatesARowForANeverBeforeSeenNode(t *testing.T) {
 	}
 }
 
+// A Roster lists only the nodes active right now, and no NodePresence down
+// follows for one that dropped while the uplink was down -- its end must
+// mark every node it left out offline.
+func TestRosterEndMarksUnlistedNodesOffline(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	for _, id := range []int{1, 5, 6} {
+		svc.OnPresence(nodelib.NodePresence{NodeID: uint8(id), Module: nodelib.ModuleTemperatureNode, Up: true})
+	}
+	svc.OnRosterEntry(nodelib.RosterEntry{NodeID: 5, Module: nodelib.ModuleTemperatureNode})
+	svc.OnRosterEnd()
+
+	nodes, err := svc.Store().Nodes(ctx)
+	if err != nil {
+		t.Fatalf("nodes: %v", err)
+	}
+	want := map[int]bool{1: false, 5: true, 6: false}
+	for _, n := range nodes {
+		if w, ok := want[n.ID]; ok && n.Online != w {
+			t.Errorf("node %d online = %v, want %v", n.ID, n.Online, w)
+		}
+	}
+}
+
 func TestOnPresenceRecordsBootloaderState(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

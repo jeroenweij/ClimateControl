@@ -14,11 +14,12 @@ import (
 
 // recorder is a Handler that just remembers what it was given.
 type recorder struct {
-	mu       sync.Mutex
-	roster   []nodelib.RosterEntry
-	presence []nodelib.NodePresence
-	connects int
-	mainLog  []string
+	mu         sync.Mutex
+	roster     []nodelib.RosterEntry
+	presence   []nodelib.NodePresence
+	connects   int
+	rosterEnds int
+	mainLog    []string
 }
 
 func (r *recorder) OnConnect(nodelib.UplinkHello) { r.mu.Lock(); r.connects++; r.mu.Unlock() }
@@ -28,6 +29,12 @@ func (r *recorder) OnRosterEntry(e nodelib.RosterEntry) {
 	r.mu.Lock()
 	r.roster = append(r.roster, e)
 	r.mu.Unlock()
+}
+func (r *recorder) OnRosterEnd() { r.mu.Lock(); r.rosterEnds++; r.mu.Unlock() }
+func (r *recorder) rosterEndsSeen() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rosterEnds
 }
 func (r *recorder) OnPresence(p nodelib.NodePresence) {
 	r.mu.Lock()
@@ -107,7 +114,7 @@ func TestFramesSentWithTheHelloAreNotLost(t *testing.T) {
 	for _, e := range []nodelib.Frame{
 		{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport, Data: []byte{1, 2, 1, 0x02, 0x26, 0, 0}},
 		{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport, Data: []byte{2, 1, 1, 0x01, 0x26, 0, 0}},
-		{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport, Data: []byte{0xFF, 0, 0, 0, 0, 0, 0}},
+		{Node: 0, Endpoint: nodelib.EndpointRoster, Operation: nodelib.OpReport, Data: []byte{0xFF}}, // terminator, as UplinkHandler::SendRoster sends it
 	} {
 		burst = append(burst, encode(t, e)...)
 	}
@@ -116,11 +123,14 @@ func TestFramesSentWithTheHelloAreNotLost(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(3 * time.Second)
-	for rec.rosterLen() < 2 && time.Now().Before(deadline) {
+	for rec.rosterEndsSeen() < 1 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
+	if rec.rosterEnds != 1 {
+		t.Errorf("roster ends = %d, want 1", rec.rosterEnds)
+	}
 	if len(rec.roster) != 2 {
 		t.Fatalf("roster entries received = %d, want 2 (frames sent with the hello were dropped)", len(rec.roster))
 	}

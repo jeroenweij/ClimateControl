@@ -99,6 +99,12 @@ func (s *Store) UpsertNode(ctx context.Context, id int, module nodelib.Module, o
 	return err
 }
 
+// SetNodeOffline clears a node's online flag, keeping the rest of its row.
+func (s *Store) SetNodeOffline(ctx context.Context, id int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE nodes SET online = 0 WHERE id = ?`, id)
+	return err
+}
+
 // SetNodeFirmware records a node's running firmware version (major<<8 | minor),
 // as learned from a SystemInfo report. A zero version is ignored.
 func (s *Store) SetNodeFirmware(ctx context.Context, id, version int) error {
