@@ -7,7 +7,7 @@
 
 ## 1. Topology overview
 
-- 1 master + up to 20 slave nodes on a single half-duplex RS485 bus.
+- 1 master + up to 22 slave nodes (`NodeLib::MAX_NODES`) on a single half-duplex RS485 bus: 21 ControllerNodes and 1 TemperatureNode.
 - Physical medium: standard 8-conductor Ethernet patch cable, daisy-chained node-to-node (each node has an "in" and "out" RJ45).
 - One cable carries **power, RS485 data, and two control lines** simultaneously — no separate power harness for the common case.
 - RS485 data pair runs as one continuous bus end-to-end. **Power is injected at multiple points along the chain, not solely from the master end** — see §4.
@@ -19,7 +19,7 @@
 The shared power rail runs at 48V DC, stepped down locally at each node to 5V (servo) and 3.3V (MCU).
 
 **Why 48V over 12V/24V:**
-- Cable/connector current scales as `I = P / V`. At a fixed servo power draw, 48V draws **1/4 the current of 12V** and **1/2 the current of 24V** for the same delivered power — this is what makes the RJ45 connector current budget (§4) workable at all with 20 nodes on one chain.
+- Cable/connector current scales as `I = P / V`. At a fixed servo power draw, 48V draws **1/4 the current of 12V** and **1/2 the current of 24V** for the same delivered power — this is what makes the RJ45 connector current budget (§4) workable at all with 21 servo nodes on one chain.
 - Directly comparable to established PoE practice (802.3af/at/bt operate in this voltage class for exactly this reason).
 
 **Consequence — hot-plug inrush:** higher rail voltage means more energy dumped into each node's input bulk capacitor on connection. Addressed by keeping that bulk cap small (47µF) rather than adding an NTC or soft-start MOSFET — see `Node-Bus-Power-Path-Spec.md` §2/§3.
@@ -70,16 +70,16 @@ The shared power rail runs at 48V DC, stepped down locally at each node to 5V (s
 
 **At 48V, converted from 5V-side servo current** (`I_bus = P_load / (V_bus × η)`, η ≈ 0.85–0.90 for a synchronous buck):
 
-| Scenario | 5V-side total (20 nodes) | Actual 48V bus current |
+| Scenario | 5V-side total (21 ControllerNodes) | Actual 48V bus current |
 |---|---|---|
-| All servos running normally | ~12 A | **~1.4 A** |
-| All 20 servos stalled simultaneously (worst case) | 20 × 2.7A ≈ 54 A | **`(54A × 5V)/(48V × 0.875) ≈ 6.4A`** |
+| All servos running normally | ~12.6 A | **~1.5 A** |
+| All 21 servos stalled simultaneously (worst case) | 21 × 2.7A ≈ 56.7 A | **`(56.7A × 5V)/(48V × 0.875) ≈ 6.75A`** |
 
-Split across the both-ends power injection (mitigation below) that's **~3.2A at each injection point** — at or just past the top of the "~2–3A safe headroom per hop" a bonded-pair connector gives.
+Split across the both-ends power injection (mitigation below) that's **~3.4A at each injection point** — at or just past the top of the "~2–3A safe headroom per hop" a bonded-pair connector gives.
 
 **Decision:**
-- Normal operation (~1.4A) is comfortably within a bonded-pair connector's safe range — no special handling needed for the typical case. The servo is per-node power-gated (`Node-Bus-Power-Path-Spec.md` §3.1), so both rows above are *transients* bounded by how many dampers move at once; the resting bus current is ~20 × (MCU + transceiver) ≈ tens of mA. The both-ends feed below is headroom for a coordinated multi-damper move.
-- Worst-case simultaneous full-stall (~6.4A) can exceed the ~2–3A single-hop connector budget.
+- Normal operation (~1.5A) is comfortably within a bonded-pair connector's safe range — no special handling needed for the typical case. The servo is per-node power-gated (`Node-Bus-Power-Path-Spec.md` §3.1), so both rows above are *transients* bounded by how many dampers move at once; the resting bus current is ~22 × (MCU + transceiver) ≈ tens of mA. The both-ends feed below is headroom for a coordinated multi-damper move.
+- Worst-case simultaneous full-stall (~6.75A) can exceed the ~2–3A single-hop connector budget.
 - **Mitigation: power injection at both ends of the chain**, not multi-point injection every 4–5 nodes. With the bus length ~100m, feeding both ends splits each node's return current toward whichever end is electrically closer, cutting the worst-case IR drop to roughly 1/4 of the single-end-fed case — see §6 for the RS485 common-mode margin this resolves. Requires an actual physical power connection at the far end of the run (a second supply there, or a dedicated feed cable back to the master). RS485 stays a single continuous bus end-to-end regardless — only the power pairs need the second feed point.
 - **Regardless of the above, every node gets a fuse or PTC on its 48V input** — cheap insurance against a single node fault pulling down the shared rail, and it caps that node's worst-case contribution to bus current.
 
@@ -196,7 +196,7 @@ Per-node A/B passives, fit only where noted, DNP elsewhere:
 
 **Termination:** no on-board footprint, no per-node DNP/jumper. 120 Ω A–B termination is provided by a **plug-in RJ45 terminator** (120 Ω across pins 4/5) inserted into the spare "out" jack of whichever node is physically last on the chain. Every node's board is identical here — moving/extending the bus end just means moving the terminator plug, not reworking a board.
 
-**Common-mode range:** THVD2410 receivers operate over ±25V common-mode. Same shared-GND-return exposure as ENABLE. The both-ends power feed (§4) cuts worst-case IR drop to ~1/4 of a single-end-fed estimate, landing around ~0.86V normal / ~2.9V worst-case stall — far inside the window.
+**Common-mode range:** THVD2410 receivers operate over ±25V common-mode. Same shared-GND-return exposure as ENABLE. The both-ends power feed (§4) cuts worst-case IR drop to ~1/4 of a single-end-fed estimate, landing around ~0.9V normal / ~3.0V worst-case stall — far inside the window.
 
 ### 6.4 Status LEDs & buttons
 
@@ -237,4 +237,4 @@ Node IDs are **factory-provisioned in flash** (`Node-Flash-Layout-and-Bootloader
 
 ## 7. Open items
 
-1. **Whether simultaneous full-stall across all 20 nodes is a realistic scenario** for this application (e.g. synchronized power-on homing) or a non-issue because servos move independently. Relevant for fuse/PTC and connector-current sizing (§4).
+1. **Whether simultaneous full-stall across all 21 ControllerNodes is a realistic scenario** for this application (e.g. synchronized power-on homing) or a non-issue because servos move independently. Relevant for fuse/PTC and connector-current sizing (§4).

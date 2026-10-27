@@ -238,7 +238,7 @@ void BudgetAllocator::Recompute()
     // Water-fill anything over 100% into the still-open nodes, proportional to
     // weight. Bounded to onlineCount passes -- each pass clamps at least one
     // more node, so this always terminates well inside that bound (at most
-    // MAX_NODES = 21 iterations, not an unbounded loop).
+    // MAX_NODES iterations, not an unbounded loop).
     for (uint8_t pass = 0; pass < onlineCount; pass++)
     {
         uint32_t overflow   = 0;

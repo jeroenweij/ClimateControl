@@ -21,7 +21,7 @@ Message:  node (1B)     endpoint (1B)          operation (1B)       data[0..LEN-
 
 Header size and layout match `RS485-Node-Protocol-Spec-STM32G030.md` §3.
 
-- **`node`** — physical bus address. `0` = master (reserved). `1 .. MAX_NODES-1` = slaves. `0xFF` = broadcast, valid only with `operation = Set` — a fire-and-forget command to every node, no reply (so no bus contention). Used for emergency safe-state (`Set DamperMode`) and time sync; `Discover` also carries `node = 0xFF`. A broadcast `Get` is invalid — nodes ignore it. Each node's dispatch accepts a frame when `node == ownId || node == 0xFF`.
+- **`node`** — physical bus address. `0` = master (reserved). `1 .. MAX_NODES` = slaves. `0xFF` = broadcast, valid only with `operation = Set` — a fire-and-forget command to every node, no reply (so no bus contention). Used for emergency safe-state (`Set DamperMode`) and time sync; `Discover` also carries `node = 0xFF`. A broadcast `Get` is invalid — nodes ignore it. Each node's dispatch accepts a frame when `node == ownId || node == 0xFF`.
 - **`endpoint`** — the addressable thing (§3). Meaning of the application-block endpoints (`0x3_`) depends on the node's module type — a `ControllerNode` and a `TemperatureNode` use different endpoints in that block, no overlap.
 - **`operation`** — a small flat verb enum (§4): `Get / Set / Report / Ack / Nack` for the RPC endpoints, plus `Discover / Announce / Poll / Done` for the `Transport` endpoint.
 - **`data`** — value bytes, interpreted per `endpoint` (+ `operation`). `Get` usually carries no payload; `Set`/`Report` carry the value. The `Firmware` endpoint uses `data[0]` as its own sub-opcode (`FirmwareOp`).
@@ -189,5 +189,5 @@ This resolves which endpoint values apply on the link: the named-endpoint ones (
 
 ## 8. Open items
 
-1. **Keepalive interval and per-endpoint deadbands** — 60 s and the §6.1 values are defaults; confirm them once real sensors and dampers are on a bench (bus load at 20 ControllerNodes is ~3 keepalive Reports/s).
+1. **Keepalive interval and per-endpoint deadbands** — 60 s and the §6.1 values are defaults; confirm them once real sensors and dampers are on a bench (bus load at 21 ControllerNodes is ~3 keepalive Reports/s).
 2. **Uptime seconds wrap after 49.7 days, and not at a power of two** — every `uptimeSec` (`SystemStatus`, `DiagLog`, and `UplinkHello` / `MainLog` in `MainController-Server-Link-Spec.md` §5) is `Hal::Tick::Millis() / 1000`, so it follows the 32-bit millisecond tick: it counts to 4,294,967 s and drops back to 0. Control timing is unaffected (`DelayTimer` and the other tick comparisons subtract unsigned and are wrap-safe), but the reported uptime reads as a fresh boot after 49.7 days, and the server's 24-bit log-line age arithmetic (`(now − at) & 0xFFFFFF`) assumes a wrap at 2²⁴, so a `DiagLog` / `MainLog` line logged just before the drop and read just after it shows an age of ~144 days until the ring turns over. To decide: leave it (cosmetic), or give `Hal::Tick` a monotonic 32-bit seconds counter (the ms tick plus a count of its wraps, good for 136 years) that all uptime fields use.

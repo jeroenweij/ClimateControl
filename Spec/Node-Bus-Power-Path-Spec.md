@@ -77,7 +77,7 @@ The servo is not wired straight to the 5V rail — it sits behind a **high-side 
 
 **Current path layout.** The servo current path (`+5V` → `Q1` → header `H2` → `R22` → `GND`) carries up to the ~2.8A stall current, so it is routed at ≥1mm on 1oz outer copper (~10°C rise at stall by IPC-2221; a net-class track rule on `+5V SERVO` and `SERVO_GND` lets DRC enforce it, the short `+5V` and `GND` sections at either end are checked by eye), with ≥3–4 vias wherever it changes layer. The INA180's sense inputs are Kelvin-connected to `R22`'s own pads, not to the high-current copper.
 
-**Power-budget effect:** with the servo gated per node, the "all servos running" row in `Node-Bus-Hardware-Design-Spec.md` §4 (~12A at 5V / ~1.4A at 48V) is a **transient** bounded by how many dampers move at once, not a steady-state load. Resting bus current is ~20 × (MCU + transceiver) ≈ a few tens of mA total.
+**Power-budget effect:** with the servo gated per node, the "all servos running" row in `Node-Bus-Hardware-Design-Spec.md` §4 (~12.6A at 5V / ~1.5A at 48V) is a **transient** bounded by how many dampers move at once, not a steady-state load. Resting bus current is ~22 × (MCU + transceiver) ≈ a few tens of mA total.
 
 #### 3.1.1 Stall detection — servo current sense
 

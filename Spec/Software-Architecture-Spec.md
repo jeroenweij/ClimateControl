@@ -84,4 +84,4 @@ Same C++ style as `~/git/rollercoaster`, whose `Software/.clang-format` (copied 
 
 ## 5. Open items
 
-- `Node-Bus-Hardware-Design-Spec.md` §7: whether simultaneous full-stall across all 20 servos is a realistic scenario to design fuse/connector sizing around.
+- `Node-Bus-Hardware-Design-Spec.md` §7: whether simultaneous full-stall across all 21 servos is a realistic scenario to design fuse/connector sizing around.

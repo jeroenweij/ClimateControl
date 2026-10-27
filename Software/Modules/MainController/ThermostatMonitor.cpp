@@ -54,7 +54,7 @@ ThermostatMonitor::ThermostatMonitor(NodeMaster& master) :
 
 bool ThermostatMonitor::IsControllerNode(const uint8_t nodeId) const
 {
-    return nodeId >= 1 && nodeId < MAX_NODES && master.NodeModule(nodeId) == ModuleType::ControllerNode;
+    return nodeId >= 1 && nodeId <= MAX_NODES && master.NodeModule(nodeId) == ModuleType::ControllerNode;
 }
 
 void ThermostatMonitor::Observe(const Message& m)
@@ -95,7 +95,7 @@ void ThermostatMonitor::Loop()
     if (keepaliveTimer.Finished())
     {
         keepaliveTimer.Start(keepaliveMs);
-        for (uint8_t nodeId = 1; nodeId < MAX_NODES; nodeId++)
+        for (uint8_t nodeId = 1; nodeId <= MAX_NODES; nodeId++)
         {
             SThermostat& t = thermostats[nodeId - 1];
             if (!master.NodeActive(nodeId))
@@ -112,9 +112,9 @@ void ThermostatMonitor::Loop()
 
 void ThermostatMonitor::PollNext()
 {
-    for (uint8_t step = 0; step < MAX_NODES - 1; step++)
+    for (uint8_t step = 0; step < MAX_NODES; step++)
     {
-        pollCursor = static_cast<uint8_t>(pollCursor % (MAX_NODES - 1) + 1); // 1..MAX_NODES-1, wrapping
+        pollCursor = static_cast<uint8_t>(pollCursor % MAX_NODES + 1); // 1..MAX_NODES, wrapping
         if (!master.NodeActive(pollCursor) || !IsControllerNode(pollCursor))
         {
             continue;
@@ -140,7 +140,7 @@ void ThermostatMonitor::ResendAll()
 
 bool ThermostatMonitor::NextStatus(Message& out)
 {
-    for (uint8_t nodeId = 1; nodeId < MAX_NODES; nodeId++)
+    for (uint8_t nodeId = 1; nodeId <= MAX_NODES; nodeId++)
     {
         SThermostat& t = thermostats[nodeId - 1];
         if (!t.due || !t.Known())

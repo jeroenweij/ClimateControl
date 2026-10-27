@@ -47,7 +47,7 @@ STM32G0's USART1 has `DEM`/`DEP` + `DEAT`/`DDAT` — an assertion/de-assertion t
 |---|---|---|
 | `SYNC` | 2 bytes | `0xEE 0x42`. Only scanned for while the receiver is *not* mid-frame. |
 | `LEN` | 1 byte | Length of `DATA` only (0–255). Header (`NODE_ID`/`ENDPOINT`/`OPERATION`) is fixed size and not counted. Firmware caps this at `MAX_DATA` (§7). |
-| `NODE_ID` | 1 byte | Target/source node address. `0` = master (reserved); `1..MAX_NODES-1` = slaves; `0xFF` = broadcast (`Set`-only, no reply) — see `Node-Message-Model-Spec.md` §2. |
+| `NODE_ID` | 1 byte | Target/source node address. `0` = master (reserved); `1..MAX_NODES` = slaves; `0xFF` = broadcast (`Set`-only, no reply) — see `Node-Message-Model-Spec.md` §2. |
 | `ENDPOINT` | 1 byte | The addressable thing on the node — `NodeLib::Endpoint` enum, `Node-Message-Model-Spec.md` §3. |
 | `OPERATION` | 1 byte | `NodeLib::Operation` — `Get`/`Set`/`Report`/`Ack`/`Nack` for endpoint access, plus the transport verbs `Discover`/`Announce`/`Poll`/`Done`. Full table in `Node-Message-Model-Spec.md` §4. |
 | `DATA` | `LEN` bytes | Payload — interpreted per `ENDPOINT` (+ `OPERATION`) convention per `Node-Message-Model-Spec.md` §5. |
@@ -84,7 +84,7 @@ Variable-length frames mean a corrupted `LEN` byte would otherwise make the rece
 | Item | Value |
 |---|---|
 | Master ID | `0`, reserved |
-| Node ID range | `1 .. MAX_NODES-1` (`NodeLib::MAX_NODES`, currently 21). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
+| Node ID range | `1 .. MAX_NODES` (`NodeLib::MAX_NODES`, the slave count — master not included — currently 22). Each node's ID is factory-provisioned in flash and read-only — `Node-Flash-Layout-and-Bootloader-Spec.md` §6.3. |
 | Broadcast | `NODE_ID = 0xFF`, valid with `Operation::Set` only (fire-and-forget, no reply) — `Node-Message-Model-Spec.md` §2 |
 | Discovery | Master broadcasts `Discover`; slaves reply with a staggered `Announce` (`(nodeId-1) * nodeSpacing` ms), carrying module type + 96-bit UID for the master's roster. |
 | Poll cycle | Master → `Poll` → node dumps its queued `Report`s (on-change + keepalive, `Node-Message-Model-Spec.md` §6.1) → `Done` → master polls next active node. |

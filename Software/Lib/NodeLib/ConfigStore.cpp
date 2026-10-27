@@ -76,7 +76,7 @@ bool ConfigStore::Valid()
         return false;
     }
 
-    return record.nodeId >= 1 && record.nodeId < NodeLib::MAX_NODES;
+    return record.nodeId >= 1 && record.nodeId <= NodeLib::MAX_NODES;
 }
 
 uint8_t ConfigStore::NodeId()

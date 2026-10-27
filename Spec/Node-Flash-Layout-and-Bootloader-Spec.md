@@ -208,7 +208,7 @@ struct __attribute__((packed)) ConfigRecord  // 32 bytes, single instance at 0x0
 {
     uint32_t magic;         // 0x4E4F4443  ('NODC')
     uint16_t schemaVersion; // 1
-    uint8_t  nodeId;        // 1 .. NodeLib::MAX_NODES-1 — the node's permanent bus address
+    uint8_t  nodeId;        // 1 .. NodeLib::MAX_NODES — the node's permanent bus address
     uint8_t  module;        // 1=ControllerNode 2=TemperatureNode 3=MainController 4=Thermostat
     uint8_t  settings[16];  // per-node factory config: servo end-stop trim, room id, sensor offset, ...
     uint8_t  reserved[4];
@@ -222,7 +222,7 @@ The record CRC is a small table-less software CRC-32 (zlib flavour — poly `0xE
 class ConfigStore
 {
   public:
-    static bool           Valid();      // magic + crc32, and 1 <= NodeId < MAX_NODES, on the record at 0x0800_F000
+    static bool           Valid();      // magic + crc32, and 1 <= NodeId <= MAX_NODES, on the record at 0x0800_F000
     static uint8_t        NodeId();     // only meaningful when Valid()
     static ModuleType     GetModule();  // NodeLib::ModuleType (EModuleType.h): Unknown, ControllerNode, TemperatureNode, MainController, Thermostat
     static const uint8_t* Settings();   // 16 bytes, caller interprets per GetModule()
