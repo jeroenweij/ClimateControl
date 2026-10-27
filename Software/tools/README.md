@@ -25,6 +25,15 @@ make -C Software flash-full MODULE=temperatureNode
 Software/tools/provision.py --node-id 7 --module temperature
 ```
 
+Leave out `--node-id` and/or `--module` and `provision.py` asks for them
+(device menu: ControllerNode / TemperatureNode, then the node id).
+
+To do step 1 in the same run, add `--flash-full`: once the config page is
+written it runs `make flash-full` for that module (`--build-type Debug` for a
+debug unit). `--no-flash-full` skips it, and with neither flag an interactive
+run asks (default no). Step 1 coming after step 2 is fine: `flash-full` only
+loads the bootloader + app sectors and leaves the config page alone.
+
 `flash-full` builds into `Software/build/release/` (or `build/debug/` with
 `BUILD_TYPE=Debug`) and merges bootloader + app before flashing -- see
 `make -C Software help` for the equivalent `flash` (app only, no bootloader

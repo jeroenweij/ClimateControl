@@ -6,7 +6,7 @@ Spec/Node-Flash-Layout-and-Bootloader-Spec.md Sec6.3:
 
     uint32  magic          0x4E4F4443  ('NODC')
     uint16  schemaVersion  1
-    uint8   nodeId         1 .. MAX_NODES-1  (permanent bus address)
+    uint8   nodeId         1 .. MAX_NODES  (permanent bus address)
     uint8   module         1=ControllerNode 2=TemperatureNode
                            3=MainController 4=Thermostat
     uint8   settings[16]   per-node factory config (servo trim, room id, ...)
@@ -28,7 +28,7 @@ MAGIC = 0x4E4F4443  # 'NODC'
 SCHEMA_VERSION = 1
 CONFIG_ADDR = 0x0800F000
 RECORD_SIZE = 32
-MAX_NODES = 21  # keep in sync with NodeLib::MAX_NODES (Lib/NodeLib/Id.h)
+MAX_NODES = 22  # keep in sync with NodeLib::MAX_NODES (Lib/NodeLib/Id.h)
 
 # Accepted --module names -> ConfigStore::Module value.
 MODULES = {
@@ -43,7 +43,7 @@ MODULES = {
 }
 
 # Only these are real bus nodes with a per-unit provisioned identity
-# (ConfigStore::Valid rejects nodeId outside 1..MAX_NODES-1, and the master is
+# (ConfigStore::Valid rejects nodeId outside 1..MAX_NODES, and the master is
 # not on the polled bus with an id).
 PROVISIONABLE = {1, 2}
 
@@ -56,8 +56,8 @@ THERMOSTAT = 4
 def build_record(node_id, module, settings=b"", reserved=b"\xff\xff\xff\xff",
                  schema=SCHEMA_VERSION):
     """Return the 32 raw bytes of a CRC-correct ConfigRecord."""
-    if not 1 <= node_id < MAX_NODES:
-        raise ValueError(f"node-id {node_id} out of range 1..{MAX_NODES - 1}")
+    if not 1 <= node_id <= MAX_NODES:
+        raise ValueError(f"node-id {node_id} out of range 1..{MAX_NODES}")
     if not 0 <= module <= 0xFF:
         raise ValueError(f"module {module} out of range")
 
@@ -125,7 +125,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node-id", type=int, required=True,
-                    help=f"permanent bus address, 1..{MAX_NODES - 1}")
+                    help=f"permanent bus address, 1..{MAX_NODES}")
     ap.add_argument("--module", required=True, choices=sorted(MODULES),
                     help="node module type")
     ap.add_argument("--settings", type=_parse_settings, default=b"",
